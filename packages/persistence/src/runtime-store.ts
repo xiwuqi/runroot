@@ -331,11 +331,11 @@ export function createFileRuntimePersistence(
   options: FileRuntimePersistenceOptions,
 ): RuntimePersistence {
   const filePath = resolve(options.filePath);
-  let writeQueue = Promise.resolve();
+  let accessQueue = Promise.resolve();
 
   return {
     async commitTransition(transition) {
-      return enqueueWrite(async () =>
+      return enqueueAccess(async () =>
         withMutablePersistence(filePath, options, (persistence) =>
           persistence.commitTransition(transition),
         ),
@@ -344,39 +344,49 @@ export function createFileRuntimePersistence(
 
     approvals: {
       async get(approvalId) {
-        return withReadOnlyPersistence(filePath, options, (persistence) =>
-          persistence.approvals.get(approvalId),
+        return enqueueAccess(async () =>
+          withReadOnlyPersistence(filePath, options, (persistence) =>
+            persistence.approvals.get(approvalId),
+          ),
         );
       },
 
       async getPendingByRunId(runId) {
-        return withReadOnlyPersistence(filePath, options, (persistence) =>
-          persistence.approvals.getPendingByRunId(runId),
+        return enqueueAccess(async () =>
+          withReadOnlyPersistence(filePath, options, (persistence) =>
+            persistence.approvals.getPendingByRunId(runId),
+          ),
         );
       },
 
       async listByRunId(runId) {
-        return withReadOnlyPersistence(filePath, options, (persistence) =>
-          persistence.approvals.listByRunId(runId),
+        return enqueueAccess(async () =>
+          withReadOnlyPersistence(filePath, options, (persistence) =>
+            persistence.approvals.listByRunId(runId),
+          ),
         );
       },
     },
 
     checkpoints: {
       async getLatestByRunId(runId) {
-        return withReadOnlyPersistence(filePath, options, (persistence) =>
-          persistence.checkpoints.getLatestByRunId(runId),
+        return enqueueAccess(async () =>
+          withReadOnlyPersistence(filePath, options, (persistence) =>
+            persistence.checkpoints.getLatestByRunId(runId),
+          ),
         );
       },
 
       async listByRunId(runId) {
-        return withReadOnlyPersistence(filePath, options, (persistence) =>
-          persistence.checkpoints.listByRunId(runId),
+        return enqueueAccess(async () =>
+          withReadOnlyPersistence(filePath, options, (persistence) =>
+            persistence.checkpoints.listByRunId(runId),
+          ),
         );
       },
 
       async save(checkpoint) {
-        return enqueueWrite(async () =>
+        return enqueueAccess(async () =>
           withMutablePersistence(filePath, options, (persistence) =>
             persistence.checkpoints.save(checkpoint),
           ),
@@ -386,7 +396,7 @@ export function createFileRuntimePersistence(
 
     events: {
       async append(nextEvents) {
-        return enqueueWrite(async () =>
+        return enqueueAccess(async () =>
           withMutablePersistence(filePath, options, (persistence) =>
             persistence.events.append(nextEvents),
           ),
@@ -394,27 +404,33 @@ export function createFileRuntimePersistence(
       },
 
       async listByRunId(runId) {
-        return withReadOnlyPersistence(filePath, options, (persistence) =>
-          persistence.events.listByRunId(runId),
+        return enqueueAccess(async () =>
+          withReadOnlyPersistence(filePath, options, (persistence) =>
+            persistence.events.listByRunId(runId),
+          ),
         );
       },
     },
 
     runs: {
       async get(runId) {
-        return withReadOnlyPersistence(filePath, options, (persistence) =>
-          persistence.runs.get(runId),
+        return enqueueAccess(async () =>
+          withReadOnlyPersistence(filePath, options, (persistence) =>
+            persistence.runs.get(runId),
+          ),
         );
       },
 
       async list() {
-        return withReadOnlyPersistence(filePath, options, (persistence) =>
-          persistence.runs.list(),
+        return enqueueAccess(async () =>
+          withReadOnlyPersistence(filePath, options, (persistence) =>
+            persistence.runs.list(),
+          ),
         );
       },
 
       async put(run) {
-        return enqueueWrite(async () =>
+        return enqueueAccess(async () =>
           withMutablePersistence(filePath, options, (persistence) =>
             persistence.runs.put(run),
           ),
@@ -423,16 +439,16 @@ export function createFileRuntimePersistence(
     },
   };
 
-  async function enqueueWrite<TValue>(
-    writeOperation: () => Promise<TValue>,
+  async function enqueueAccess<TValue>(
+    accessOperation: () => Promise<TValue>,
   ): Promise<TValue> {
-    const pendingWrite = writeQueue.then(writeOperation, writeOperation);
-    writeQueue = pendingWrite.then(
+    const pendingAccess = accessQueue.then(accessOperation, accessOperation);
+    accessQueue = pendingAccess.then(
       () => undefined,
       () => undefined,
     );
 
-    return pendingWrite;
+    return pendingAccess;
   }
 }
 
@@ -556,12 +572,46 @@ async function writeRuntimePersistenceSnapshot(
   snapshot: RuntimePersistenceSnapshot,
 ): Promise<void> {
   const tempPath = `${filePath}.tmp`;
+  const backupPath = `${filePath}.bak`;
 
   await writeFile(tempPath, `${JSON.stringify(snapshot, null, 2)}\n`, "utf8");
-  await rm(filePath, {
+
+  try {
+    await rename(tempPath, filePath);
+
+    return;
+  } catch (error) {
+    if (!isExistingFileError(error)) {
+      throw error;
+    }
+  }
+
+  await rm(backupPath, {
     force: true,
   });
-  await rename(tempPath, filePath);
+
+  try {
+    await rename(filePath, backupPath);
+    await rename(tempPath, filePath);
+  } catch (error) {
+    await rm(tempPath, {
+      force: true,
+    });
+
+    try {
+      await rename(backupPath, filePath);
+    } catch (restoreError) {
+      if (!isMissingFileError(restoreError)) {
+        throw restoreError;
+      }
+    }
+
+    throw error;
+  }
+
+  await rm(backupPath, {
+    force: true,
+  });
 }
 
 async function withFileLock<TValue>(
