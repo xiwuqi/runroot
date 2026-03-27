@@ -3,13 +3,21 @@ import { approvalsPackageBoundary } from "@runroot/approvals";
 import { cliPackageBoundary } from "@runroot/cli";
 import { projectMetadata, requiredQualityCommands } from "@runroot/config";
 import { coreRuntimePackageBoundary } from "@runroot/core-runtime";
-import { domainPackageBoundary } from "@runroot/domain";
+import { domainPackageBoundary, type JsonValue } from "@runroot/domain";
 import { eventsPackageBoundary } from "@runroot/events";
 import { mcpPackageBoundary } from "@runroot/mcp";
 import { observabilityPackageBoundary } from "@runroot/observability";
 import { persistencePackageBoundary } from "@runroot/persistence";
 import { replayPackageBoundary } from "@runroot/replay";
-import { sdkPackageBoundary } from "@runroot/sdk";
+import {
+  createRunrootOperatorService,
+  OperatorConflictError,
+  OperatorError,
+  OperatorInputError,
+  OperatorNotFoundError,
+  type RunrootOperatorService,
+  sdkPackageBoundary,
+} from "@runroot/sdk";
 import { templatesPackageBoundary } from "@runroot/templates";
 import { toolsPackageBoundary } from "@runroot/tools";
 import Fastify from "fastify";
@@ -42,12 +50,25 @@ function findDuplicateBoundaryNames(names: readonly string[]): string[] {
     .sort();
 }
 
-export function buildServer() {
+export interface BuildServerOptions {
+  readonly operator?: RunrootOperatorService;
+}
+
+export function buildServer(options: BuildServerOptions = {}) {
   const app = Fastify({
     logger: {
       level: process.env.LOG_LEVEL ?? "info",
     },
   });
+  const operator =
+    options.operator ??
+    createRunrootOperatorService({
+      ...(process.env.RUNROOT_WORKSPACE_PATH
+        ? {
+            workspacePath: process.env.RUNROOT_WORKSPACE_PATH,
+          }
+        : {}),
+    });
 
   app.register(cors, {
     origin: true,
@@ -62,6 +83,7 @@ export function buildServer() {
   app.get("/manifest/project", async () => ({
     project: projectMetadata,
     commands: requiredQualityCommands,
+    workspacePath: operator.getWorkspacePath(),
   }));
 
   app.get("/manifest/packages", async () => ({
@@ -73,5 +95,186 @@ export function buildServer() {
     },
   }));
 
+  app.get("/templates", async (_request, reply) =>
+    handleOperatorResponse(reply, async () => ({
+      templates: operator.listTemplates(),
+    })),
+  );
+
+  app.get("/runs", async (_request, reply) =>
+    handleOperatorResponse(reply, async () => ({
+      runs: await operator.listRuns(),
+    })),
+  );
+
+  app.post("/runs", async (request, reply) =>
+    handleOperatorResponse(reply, async () => {
+      const body = request.body as {
+        readonly input?: unknown;
+        readonly metadata?: Readonly<Record<string, string>>;
+        readonly templateId?: string;
+      };
+
+      if (!body?.templateId) {
+        throw new OperatorInputError("templateId is required.");
+      }
+
+      if (body.input === undefined) {
+        throw new OperatorInputError("input is required.");
+      }
+
+      const run = await operator.startRun({
+        input: body.input as JsonValue,
+        ...(body.metadata ? { metadata: body.metadata } : {}),
+        templateId: body.templateId,
+      });
+
+      reply.code(201);
+
+      return {
+        run,
+      };
+    }),
+  );
+
+  app.get("/runs/:runId", async (request, reply) =>
+    handleOperatorResponse(reply, async () => {
+      const params = request.params as {
+        readonly runId: string;
+      };
+
+      return {
+        run: await operator.getRun(params.runId),
+      };
+    }),
+  );
+
+  app.get("/runs/:runId/approvals", async (request, reply) =>
+    handleOperatorResponse(reply, async () => {
+      const params = request.params as {
+        readonly runId: string;
+      };
+
+      return {
+        approvals: await operator.getApprovals(params.runId),
+      };
+    }),
+  );
+
+  app.post("/runs/:runId/resume", async (request, reply) =>
+    handleOperatorResponse(reply, async () => {
+      const params = request.params as {
+        readonly runId: string;
+      };
+
+      return {
+        run: await operator.resumeRun(params.runId),
+      };
+    }),
+  );
+
+  app.get("/runs/:runId/timeline", async (request, reply) =>
+    handleOperatorResponse(reply, async () => {
+      const params = request.params as {
+        readonly runId: string;
+      };
+
+      return {
+        timeline: await operator.getTimeline(params.runId),
+      };
+    }),
+  );
+
+  app.get("/approvals/pending", async (_request, reply) =>
+    handleOperatorResponse(reply, async () => ({
+      approvals: await operator.getPendingApprovals(),
+    })),
+  );
+
+  app.get("/approvals/:approvalId", async (request, reply) =>
+    handleOperatorResponse(reply, async () => {
+      const params = request.params as {
+        readonly approvalId: string;
+      };
+
+      return {
+        approval: await operator.getApproval(params.approvalId),
+      };
+    }),
+  );
+
+  app.post("/approvals/:approvalId/decision", async (request, reply) =>
+    handleOperatorResponse(reply, async () => {
+      const params = request.params as {
+        readonly approvalId: string;
+      };
+      const body = request.body as {
+        readonly actorDisplayName?: string;
+        readonly actorId?: string;
+        readonly decision?: "approved" | "cancelled" | "rejected";
+        readonly note?: string;
+      };
+
+      if (!body?.decision) {
+        throw new OperatorInputError("decision is required.");
+      }
+
+      const outcome = await operator.decideApproval(params.approvalId, {
+        ...(body.actorId
+          ? {
+              actor: {
+                ...(body.actorDisplayName
+                  ? { displayName: body.actorDisplayName }
+                  : {}),
+                id: body.actorId,
+              },
+            }
+          : {}),
+        decision: body.decision,
+        ...(body.note === undefined ? {} : { note: body.note }),
+      });
+
+      return outcome;
+    }),
+  );
+
   return app;
+}
+
+async function handleOperatorResponse<TValue>(
+  reply: {
+    code(statusCode: number): typeof reply;
+  },
+  task: () => Promise<TValue>,
+): Promise<TValue> {
+  try {
+    return await task();
+  } catch (error) {
+    throw mapOperatorError(reply, error);
+  }
+}
+
+function mapOperatorError(
+  reply: {
+    code(statusCode: number): typeof reply;
+  },
+  error: unknown,
+): Error {
+  if (error instanceof OperatorError) {
+    reply.code(error.statusCode);
+
+    return error;
+  }
+
+  if (
+    error instanceof OperatorConflictError ||
+    error instanceof OperatorInputError ||
+    error instanceof OperatorNotFoundError
+  ) {
+    reply.code(error.statusCode);
+
+    return error;
+  }
+
+  return error instanceof Error ? error : new Error(String(error));
 }

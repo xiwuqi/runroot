@@ -20,8 +20,8 @@ export const projectMetadata = {
   name: "Runroot",
   description:
     "MCP-native runtime and orchestration for durable developer and ops workflows.",
-  currentPhase: 1,
-  phaseName: "Scaffold / Foundations",
+  currentPhase: 5,
+  phaseName: "API / CLI / Templates",
 } as const;
 
 export const requiredQualityCommands = [

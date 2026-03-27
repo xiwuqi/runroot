@@ -1,5 +1,22 @@
 import type { PackageBoundary } from "@runroot/config";
 
+export {
+  OperatorConflictError,
+  OperatorError,
+  OperatorInputError,
+  OperatorNotFoundError,
+} from "./errors";
+export {
+  createRunrootOperatorService,
+  createRunTimelineService,
+  type DecideApprovalInput,
+  type PendingApprovalSummary,
+  type RunrootOperatorService,
+  type RunrootOperatorServiceOptions,
+  resolveWorkspacePath,
+  type StartTemplateRunInput,
+} from "./operator-service";
+
 export const sdkPackageBoundary = {
   name: "@runroot/sdk",
   kind: "package",

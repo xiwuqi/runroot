@@ -345,6 +345,10 @@ export class RuntimeEngine {
     return this.#persistence.runs.get(runId);
   }
 
+  async listRuns(): Promise<WorkflowRun[]> {
+    return this.#persistence.runs.list();
+  }
+
   async getRunEvents(runId: string) {
     return this.#persistence.events.listByRunId(runId);
   }
