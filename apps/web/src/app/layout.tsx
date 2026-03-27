@@ -1,12 +1,14 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
+import { TopNavigation } from "../components/console";
+
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Runroot",
+  title: "Runroot Console",
   description:
-    "MCP-native runtime and orchestration for durable developer and ops workflows.",
+    "Operator-facing web console for durable Runroot workflows, approvals, and replay.",
 };
 
 export default function RootLayout({
@@ -14,7 +16,10 @@ export default function RootLayout({
 }: Readonly<{ children: ReactNode }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <TopNavigation />
+        {children}
+      </body>
     </html>
   );
 }
