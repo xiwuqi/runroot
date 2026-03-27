@@ -42,6 +42,7 @@ The project is executed in phases. Only work on the current phase.
 - Phase 5: API, CLI, templates
 - Phase 6: web console and observability
 - Phase 7: Open-Source Polish and Release Readiness
+- Phase 8: Postgres-First Persistence and SQLite Development Fallback
 
 Do not pull work from later phases into the current phase unless it is required to unblock the current phase and the reason is documented.
 
