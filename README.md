@@ -16,7 +16,7 @@ Runroot focuses on:
 
 ## Current Status
 
-Phase 6 is complete. The repository now includes:
+Phase 7 is complete. The repository now includes:
 
 - the Phase 2 runtime core for runs, steps, checkpoints, and retries
 - the Phase 3 tool layer and minimal MCP adapter
@@ -25,6 +25,9 @@ Phase 6 is complete. The repository now includes:
 - the first real workflow templates for GitHub, Slack, and shell automation
 - a minimal web console for runs, approvals, and replay
 - observability adapter seams for logging and tracing
+- contributor onboarding guides and example guidance for open-source collaboration
+- issue and pull request templates for public contribution flow
+- a documented release-readiness workflow and release-note strategy
 
 Tool invocation hooks remain in-memory hooks inside `@runroot/tools`; they are not yet part of the shared replay source of truth.
 
@@ -91,11 +94,15 @@ Phase 6 adds a fourth rule: the web console stays a thin visualization layer ove
 ## Guides
 
 - [Quickstart](./docs/guides/quickstart.md)
+- [Contributor Onboarding](./docs/guides/contributor-onboarding.md)
+- [Good First Issues](./docs/guides/good-first-issues.md)
 - [API Usage](./docs/guides/api-usage.md)
 - [CLI Usage](./docs/guides/cli-usage.md)
 - [Templates](./docs/guides/templates.md)
 - [Web Console](./docs/guides/web-console.md)
 - [Observability](./docs/guides/observability.md)
+- [Release Readiness](./docs/guides/release-readiness.md)
+- [Examples](./examples/README.md)
 - [Web Console](./docs/architecture/web-console.md)
 - [Observability](./docs/architecture/observability.md)
 
@@ -106,3 +113,13 @@ The current roadmap is maintained in [docs/roadmap.md](./docs/roadmap.md). The a
 ## Contributing
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for environment setup, coding standards, test expectations, and documentation requirements.
+
+For the most useful contributor entrypoints, start with:
+
+- [Contributor Onboarding](./docs/guides/contributor-onboarding.md)
+- [Good First Issues](./docs/guides/good-first-issues.md)
+- [Examples](./examples/README.md)
+- [Templates Guide](./docs/guides/templates.md)
+- [Release Readiness](./docs/guides/release-readiness.md)
+- [Security Policy](./SECURITY.md)
+- [Code Of Conduct](./CODE_OF_CONDUCT.md)

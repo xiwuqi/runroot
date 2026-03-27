@@ -1,0 +1,75 @@
+name: Release Readiness
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".changeset/**"
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/pull_request_template.md"
+      - ".github/workflows/release-readiness.yml"
+      - "README.md"
+      - "CONTRIBUTING.md"
+      - "SECURITY.md"
+      - "CODE_OF_CONDUCT.md"
+      - "docs/**"
+      - "examples/**"
+
+jobs:
+  release-readiness:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.32.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.19.0
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Bootstrap
+        run: pnpm bootstrap
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Integration tests
+        run: pnpm test:integration
+
+      - name: Build
+        run: pnpm build
+
+      - name: Count changeset files
+        id: changesets
+        shell: bash
+        run: |
+          count="$(find .changeset -maxdepth 1 -type f -name '*.md' ! -name 'README.md' | wc -l | tr -d ' ')"
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+
+      - name: Release readiness summary
+        run: |
+          {
+            echo "## Release readiness summary"
+            echo
+            echo "- Changeset files: ${{ steps.changesets.outputs.count }}"
+            echo "- Strategy guide: docs/guides/release-readiness.md"
+            echo "- Changesets guide: .changeset/README.md"
+            echo
+            echo "This workflow validates the repository baseline and surfaces release-note inputs."
+            echo "It does not publish packages or replace manual release review."
+          } >> "$GITHUB_STEP_SUMMARY"

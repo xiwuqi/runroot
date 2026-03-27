@@ -6,6 +6,8 @@ If you discover a security issue, do not open a public issue with exploit detail
 
 Until that contact path exists, treat the repository as pre-release and coordinate directly with the current maintainers.
 
+For non-security bugs or docs gaps, use the public issue templates in `.github/ISSUE_TEMPLATE/` instead of this channel.
+
 ## Scope
 
 Security-sensitive areas for Runroot include:
@@ -17,3 +19,8 @@ Security-sensitive areas for Runroot include:
 - API surface and webhook handling
 
 Security reviews should favor least privilege, explicit allowlists, and auditable behavior.
+
+Contributor onboarding and public collaboration guidance live in:
+
+- [CONTRIBUTING.md](./CONTRIBUTING.md)
+- [Contributor Onboarding](./docs/guides/contributor-onboarding.md)

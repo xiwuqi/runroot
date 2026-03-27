@@ -1,0 +1,25 @@
+name: Documentation gap
+description: Report missing, outdated, or unclear contributor or workflow documentation.
+title: "[Docs]: "
+labels:
+  - documentation
+body:
+  - type: textarea
+    id: page
+    attributes:
+      label: Affected page or guide
+      description: Which file, guide, or README is incomplete or incorrect?
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is missing or confusing?
+      description: Describe the gap from the reader's point of view.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Suggested direction
+      description: If you know what should be linked, clarified, or updated, note it here.
