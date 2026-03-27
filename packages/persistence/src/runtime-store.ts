@@ -1,6 +1,18 @@
 import { randomUUID } from "node:crypto";
 
 import type {
+  ApprovalDecision,
+  ApprovalDecisionInput,
+  ApprovalId,
+  ApprovalRequest,
+  ApprovalRequestInput,
+} from "@runroot/approvals";
+import {
+  ApprovalNotFoundError,
+  createApprovalRequest,
+  decideApproval,
+} from "@runroot/approvals";
+import type {
   CheckpointId,
   CheckpointReason,
   JsonValue,
@@ -10,6 +22,12 @@ import type {
   WorkflowRun,
 } from "@runroot/domain";
 import type { RuntimeEvent, RuntimeEventInput } from "@runroot/events";
+
+export interface ApprovalRepository {
+  get(approvalId: ApprovalId): Promise<ApprovalRequest | undefined>;
+  getPendingByRunId(runId: RunId): Promise<ApprovalRequest | undefined>;
+  listByRunId(runId: RunId): Promise<ApprovalRequest[]>;
+}
 
 export interface CheckpointWrite {
   readonly attempt: number;
@@ -40,6 +58,7 @@ export interface RunRepository {
 }
 
 export interface RuntimePersistence {
+  readonly approvals: ApprovalRepository;
   readonly checkpoints: CheckpointRepository;
   commitTransition(
     transition: RuntimeTransitionCommit,
@@ -53,12 +72,16 @@ export interface InMemoryRuntimePersistenceOptions {
 }
 
 export interface RuntimeTransitionCommit {
+  readonly approvalDecision?: ApprovalDecisionInput;
+  readonly approvalRequest?: ApprovalRequestInput;
   readonly checkpoint?: CheckpointWrite;
   readonly events?: readonly RuntimeEventInput[];
   readonly run: WorkflowRun;
 }
 
 export interface RuntimeTransitionCommitResult {
+  readonly approval?: ApprovalRequest;
+  readonly approvalDecision?: ApprovalDecision;
   readonly checkpoint?: WorkflowCheckpoint;
   readonly events: readonly RuntimeEvent[];
   readonly run: WorkflowRun;
@@ -67,6 +90,8 @@ export interface RuntimeTransitionCommitResult {
 export function createInMemoryRuntimePersistence(
   options: InMemoryRuntimePersistenceOptions = {},
 ): RuntimePersistence {
+  const approvalsById = new Map<ApprovalId, ApprovalRequest>();
+  const approvalsByRunId = new Map<RunId, ApprovalId[]>();
   const runs = new Map<RunId, WorkflowRun>();
   const events = new Map<RunId, RuntimeEvent[]>();
   const checkpoints = new Map<RunId, WorkflowCheckpoint[]>();
@@ -77,11 +102,22 @@ export function createInMemoryRuntimePersistence(
 
   return {
     async commitTransition(transition) {
-      assertTransitionRunIds(transition);
+      const existingApproval = assertTransitionRunIds(
+        transition,
+        approvalsById,
+      );
 
       const nextEvents = transition.events ?? [];
       const existingRunEvents = events.get(transition.run.id) ?? [];
       const existingCheckpoints = checkpoints.get(transition.run.id) ?? [];
+      const approvalResult = transition.approvalDecision
+        ? decideExistingApproval(existingApproval, transition.approvalDecision)
+        : undefined;
+      const persistedApproval =
+        transition.approvalRequest !== undefined
+          ? createApprovalRequest(transition.approvalRequest)
+          : approvalResult?.approval;
+      const persistedApprovalDecision = approvalResult?.decision;
 
       const persistedCheckpoint = transition.checkpoint
         ? createPersistedCheckpoint(
@@ -123,7 +159,23 @@ export function createInMemoryRuntimePersistence(
         ]);
       }
 
+      if (transition.approvalRequest && persistedApproval) {
+        approvalsById.set(persistedApproval.id, clone(persistedApproval));
+        approvalsByRunId.set(transition.run.id, [
+          ...(approvalsByRunId.get(transition.run.id) ?? []),
+          persistedApproval.id,
+        ]);
+      }
+
+      if (transition.approvalDecision && persistedApproval) {
+        approvalsById.set(persistedApproval.id, clone(persistedApproval));
+      }
+
       return {
+        ...(persistedApproval ? { approval: clone(persistedApproval) } : {}),
+        ...(persistedApprovalDecision
+          ? { approvalDecision: clone(persistedApprovalDecision) }
+          : {}),
         ...(persistedCheckpoint
           ? { checkpoint: clone(persistedCheckpoint) }
           : {}),
@@ -132,6 +184,36 @@ export function createInMemoryRuntimePersistence(
         ),
         run: clone(transition.run),
       };
+    },
+
+    approvals: {
+      async get(approvalId) {
+        const approval = approvalsById.get(approvalId);
+
+        return approval ? clone(approval) : undefined;
+      },
+
+      async getPendingByRunId(runId) {
+        const runApprovals = (approvalsByRunId.get(runId) ?? [])
+          .map((approvalId) => approvalsById.get(approvalId))
+          .filter(
+            (approval): approval is ApprovalRequest => approval !== undefined,
+          );
+        const pendingApproval = runApprovals.find(
+          (approval) => approval.status === "pending",
+        );
+
+        return pendingApproval ? clone(pendingApproval) : undefined;
+      },
+
+      async listByRunId(runId) {
+        return (approvalsByRunId.get(runId) ?? [])
+          .map((approvalId) => approvalsById.get(approvalId))
+          .filter(
+            (approval): approval is ApprovalRequest => approval !== undefined,
+          )
+          .map((approval) => clone(approval));
+      },
     },
 
     checkpoints: {
@@ -221,7 +303,11 @@ function clone<TValue>(value: TValue): TValue {
   return structuredClone(value);
 }
 
-function assertTransitionRunIds(transition: RuntimeTransitionCommit): void {
+function assertTransitionRunIds(
+  transition: RuntimeTransitionCommit,
+  approvalsById: ReadonlyMap<ApprovalId, ApprovalRequest>,
+): ApprovalRequest | undefined {
+  assertTransitionShape(transition, approvalsById);
   const runId = transition.run.id;
 
   for (const event of transition.events ?? []) {
@@ -235,6 +321,53 @@ function assertTransitionRunIds(transition: RuntimeTransitionCommit): void {
   if (transition.checkpoint && transition.checkpoint.runId !== runId) {
     throw new Error(
       `Runtime transition commit received checkpoint for run "${transition.checkpoint.runId}" while committing run "${runId}".`,
+    );
+  }
+
+  if (
+    transition.approvalRequest &&
+    transition.approvalRequest.runId !== runId
+  ) {
+    throw new Error(
+      `Runtime transition commit received approval request for run "${transition.approvalRequest.runId}" while committing run "${runId}".`,
+    );
+  }
+
+  if (!transition.approvalDecision) {
+    return undefined;
+  }
+
+  const approval = approvalsById.get(transition.approvalDecision.approvalId);
+
+  if (!approval) {
+    throw new ApprovalNotFoundError(transition.approvalDecision.approvalId);
+  }
+
+  if (approval.runId !== runId) {
+    throw new Error(
+      `Runtime transition commit received approval decision for run "${approval.runId}" while committing run "${runId}".`,
+    );
+  }
+
+  return approval;
+}
+
+function assertTransitionShape(
+  transition: RuntimeTransitionCommit,
+  approvalsById: ReadonlyMap<ApprovalId, ApprovalRequest>,
+): void {
+  if (transition.approvalRequest && transition.approvalDecision) {
+    throw new Error(
+      "Runtime transition commits may include either approvalRequest or approvalDecision, but not both.",
+    );
+  }
+
+  if (
+    transition.approvalRequest &&
+    approvalsById.has(transition.approvalRequest.id)
+  ) {
+    throw new Error(
+      `Approval "${transition.approvalRequest.id}" already exists in persistence.`,
     );
   }
 }
@@ -254,6 +387,17 @@ function createCheckpointSavedEvent(
     runId: checkpoint.runId,
     ...(checkpoint.stepId ? { stepId: checkpoint.stepId } : {}),
   };
+}
+
+function decideExistingApproval(
+  approval: ApprovalRequest | undefined,
+  input: ApprovalDecisionInput,
+) {
+  if (!approval) {
+    throw new ApprovalNotFoundError(input.approvalId);
+  }
+
+  return decideApproval(approval, input);
 }
 
 function createPersistedCheckpoint(

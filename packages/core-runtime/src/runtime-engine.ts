@@ -1,5 +1,13 @@
 import { randomUUID } from "node:crypto";
 
+import type {
+  ApprovalActor,
+  ApprovalDecision,
+  ApprovalDecisionInput,
+  ApprovalDecisionValue,
+  ApprovalRequest,
+  ApprovalRequestInput,
+} from "@runroot/approvals";
 import {
   advanceRunCursor,
   calculateRetryDelayMs,
@@ -16,15 +24,22 @@ import {
   type WorkflowStep,
 } from "@runroot/domain";
 import type { RuntimeEventInput } from "@runroot/events";
-import type { CheckpointWrite, RuntimePersistence } from "@runroot/persistence";
+import type {
+  RuntimePersistence,
+  RuntimeTransitionCommit,
+  RuntimeTransitionCommitResult,
+} from "@runroot/persistence";
 import { createUnavailableToolInvoker, type ToolInvoker } from "@runroot/tools";
 
 import {
+  type AwaitingApprovalStepResult,
   completeStep,
   type RuntimeStepContext,
   type StepExecutionResult,
   type WorkflowDefinition,
 } from "./runtime-definition";
+
+const APPROVAL_PAUSE_REASON = "awaiting_approval";
 
 export class RuntimeExecutionError extends Error {
   constructor(message: string) {
@@ -38,7 +53,20 @@ export interface CreateRunOptions {
   readonly runId?: string;
 }
 
+export interface DecideApprovalOptions {
+  readonly actor?: ApprovalActor;
+  readonly decision: ApprovalDecisionValue;
+  readonly note?: string;
+}
+
+export interface ApprovalDecisionOutcome {
+  readonly approval: ApprovalRequest;
+  readonly decision: ApprovalDecision;
+  readonly run: WorkflowRun;
+}
+
 export interface RuntimeEngineOptions {
+  readonly approvalIdGenerator?: () => string;
   readonly idGenerator?: (prefix: "run" | "step") => string;
   readonly now?: () => string;
   readonly persistence: RuntimePersistence;
@@ -46,12 +74,15 @@ export interface RuntimeEngineOptions {
 }
 
 export class RuntimeEngine {
+  readonly #approvalIdGenerator: () => string;
   readonly #idGenerator: (prefix: "run" | "step") => string;
   readonly #now: () => string;
   readonly #persistence: RuntimePersistence;
   readonly #toolInvoker: ToolInvoker;
 
   constructor(options: RuntimeEngineOptions) {
+    this.#approvalIdGenerator =
+      options.approvalIdGenerator ?? (() => `approval_${randomUUID()}`);
     this.#idGenerator =
       options.idGenerator ??
       ((prefix: "run" | "step") => `${prefix}_${randomUUID()}`);
@@ -95,9 +126,15 @@ export class RuntimeEngine {
       steps,
     });
 
-    await this.#commitTransition(
-      run,
-      [
+    await this.#commitTransition({
+      checkpoint: {
+        attempt: 0,
+        createdAt,
+        nextStepIndex: 0,
+        reason: "run_created",
+        runId: run.id,
+      },
+      events: [
         {
           name: "run.created",
           occurredAt: createdAt,
@@ -122,16 +159,141 @@ export class RuntimeEngine {
             ]
           : []),
       ],
-      {
-        attempt: 0,
-        createdAt,
-        nextStepIndex: 0,
-        reason: "run_created",
-        runId: run.id,
-      },
-    );
+      run,
+    });
 
     return run;
+  }
+
+  async decideApproval(
+    approvalId: string,
+    options: DecideApprovalOptions,
+  ): Promise<ApprovalDecisionOutcome> {
+    const approval = await this.#persistence.approvals.get(approvalId);
+
+    if (!approval) {
+      throw new RuntimeExecutionError(
+        `Approval "${approvalId}" was not found.`,
+      );
+    }
+
+    const run = await this.#requireRun(approval.runId);
+
+    if (run.status !== "paused") {
+      throw new RuntimeExecutionError(
+        `Run "${run.id}" is not paused and cannot accept approval decisions.`,
+      );
+    }
+
+    const pendingApproval = await this.#persistence.approvals.getPendingByRunId(
+      run.id,
+    );
+
+    if (!pendingApproval) {
+      if (approval.status !== "pending") {
+        throw new RuntimeExecutionError(
+          `Approval "${approval.id}" is already in terminal status "${approval.status}".`,
+        );
+      }
+
+      throw new RuntimeExecutionError(
+        `Run "${run.id}" does not have a pending approval.`,
+      );
+    }
+
+    if (pendingApproval.id !== approval.id) {
+      throw new RuntimeExecutionError(
+        `Approval "${approval.id}" is not the active pending approval for run "${run.id}".`,
+      );
+    }
+
+    const decidedAt = this.#now();
+    const approvalDecision = createApprovalDecisionInput(
+      approvalId,
+      decidedAt,
+      options,
+    );
+
+    if (options.decision === "approved") {
+      const result = await this.#commitTransition({
+        approvalDecision,
+        events: [
+          createApprovalDecisionEvent(
+            approvalDecision,
+            run.id,
+            approval.stepId,
+          ),
+        ],
+        run,
+      });
+
+      if (!result.approval || !result.approvalDecision) {
+        throw new RuntimeExecutionError(
+          `Runtime approval transition for "${approval.id}" did not persist a decision result.`,
+        );
+      }
+
+      return {
+        approval: result.approval,
+        decision: result.approvalDecision,
+        run: result.run,
+      };
+    }
+
+    const cancelledRun = cancelRunFromApproval(run, decidedAt);
+    const cancelledStep = cancelledRun.steps[cancelledRun.currentStepIndex];
+    const cancellationReason =
+      approvalDecision.decision === "rejected"
+        ? "approval rejected"
+        : "approval cancelled";
+    const result = await this.#commitTransition({
+      approvalDecision,
+      events: [
+        createApprovalDecisionEvent(
+          approvalDecision,
+          cancelledRun.id,
+          approval.stepId,
+        ),
+        ...(cancelledStep
+          ? [
+              {
+                name: "step.cancelled",
+                occurredAt: decidedAt,
+                payload: {
+                  attempt: cancelledStep.attempts,
+                  reason: cancellationReason,
+                  status: cancelledStep.status,
+                },
+                runId: cancelledRun.id,
+                stepId: cancelledStep.id,
+              } satisfies RuntimeEventInput<"step.cancelled">,
+            ]
+          : []),
+        {
+          name: "run.cancelled",
+          occurredAt: decidedAt,
+          payload: {
+            approvalId: approval.id,
+            reason: cancellationReason,
+            status: cancelledRun.status,
+          },
+          runId: cancelledRun.id,
+        } satisfies RuntimeEventInput<"run.cancelled">,
+      ],
+      run: cancelledRun,
+    });
+
+    if (!result.approval || !result.approvalDecision) {
+      throw new RuntimeExecutionError(
+        `Runtime approval transition for "${approval.id}" did not persist a decision result.`,
+      );
+    }
+
+    return {
+      approval: result.approval,
+      decision: result.approvalDecision,
+      run: result.run,
+    };
   }
 
   async executeRun(
@@ -161,8 +323,22 @@ export class RuntimeEngine {
     return this.#runLoop(definition, run);
   }
 
+  async getApproval(approvalId: string): Promise<ApprovalRequest | undefined> {
+    return this.#persistence.approvals.get(approvalId);
+  }
+
+  async getApprovals(runId: string): Promise<ApprovalRequest[]> {
+    return this.#persistence.approvals.listByRunId(runId);
+  }
+
   async getCheckpoints(runId: string): Promise<WorkflowCheckpoint[]> {
     return this.#persistence.checkpoints.listByRunId(runId);
+  }
+
+  async getPendingApproval(
+    runId: string,
+  ): Promise<ApprovalRequest | undefined> {
+    return this.#persistence.approvals.getPendingByRunId(runId);
   }
 
   async getRun(runId: string): Promise<WorkflowRun | undefined> {
@@ -190,12 +366,18 @@ export class RuntimeEngine {
     const pausedRun = transitionRunStatus(run, "paused", pausedAt, {
       pauseReason: reason,
     });
-
     const pausedStepId = pausedRun.steps[pausedRun.currentStepIndex]?.id;
 
-    await this.#commitTransition(
-      pausedRun,
-      [
+    await this.#commitTransition({
+      checkpoint: {
+        attempt: pausedRun.steps[pausedRun.currentStepIndex]?.attempts ?? 0,
+        createdAt: pausedAt,
+        nextStepIndex: pausedRun.currentStepIndex,
+        reason: "run_paused",
+        runId: pausedRun.id,
+        ...(pausedStepId ? { stepId: pausedStepId } : {}),
+      },
+      events: [
         {
           name: "run.paused",
           occurredAt: pausedAt,
@@ -206,15 +388,8 @@ export class RuntimeEngine {
           runId: pausedRun.id,
         },
       ],
-      {
-        attempt: pausedRun.steps[pausedRun.currentStepIndex]?.attempts ?? 0,
-        createdAt: pausedAt,
-        nextStepIndex: pausedRun.currentStepIndex,
-        reason: "run_paused",
-        runId: pausedRun.id,
-        ...(pausedStepId ? { stepId: pausedStepId } : {}),
-      },
-    );
+      run: pausedRun,
+    });
 
     return pausedRun;
   }
@@ -230,6 +405,16 @@ export class RuntimeEngine {
     if (run.status !== "paused") {
       throw new RuntimeExecutionError(
         `Run "${run.id}" is not paused and cannot be resumed.`,
+      );
+    }
+
+    const pendingApproval = await this.#persistence.approvals.getPendingByRunId(
+      run.id,
+    );
+
+    if (pendingApproval) {
+      throw new RuntimeExecutionError(
+        `Run "${run.id}" is waiting on approval "${pendingApproval.id}" and cannot resume until the decision is recorded.`,
       );
     }
 
@@ -270,17 +455,9 @@ export class RuntimeEngine {
   }
 
   async #commitTransition(
-    run: WorkflowRun,
-    events: readonly RuntimeEventInput[],
-    checkpoint?: CheckpointWrite,
-  ): Promise<WorkflowRun> {
-    await this.#persistence.commitTransition({
-      ...(checkpoint ? { checkpoint } : {}),
-      events,
-      run,
-    });
-
-    return run;
+    transition: RuntimeTransitionCommit,
+  ): Promise<RuntimeTransitionCommitResult> {
+    return this.#persistence.commitTransition(transition);
   }
 
   async #prepareRunForExecution(
@@ -292,18 +469,22 @@ export class RuntimeEngine {
     if (mode === "execute" && nextRun.status === "pending") {
       const queuedAt = this.#now();
       const queuedRun = transitionRunStatus(nextRun, "queued", queuedAt);
-
-      nextRun = await this.#commitTransition(queuedRun, [
-        {
-          name: "run.queued",
-          occurredAt: queuedAt,
-          payload: {
-            fromStatus: nextRun.status,
-            toStatus: queuedRun.status,
+      const commitResult = await this.#commitTransition({
+        events: [
+          {
+            name: "run.queued",
+            occurredAt: queuedAt,
+            payload: {
+              fromStatus: nextRun.status,
+              toStatus: queuedRun.status,
+            },
+            runId: queuedRun.id,
           },
-          runId: queuedRun.id,
-        },
-      ]);
+        ],
+        run: queuedRun,
+      });
+
+      nextRun = commitResult.run;
     }
 
     if (mode === "resume") {
@@ -311,36 +492,46 @@ export class RuntimeEngine {
         await this.#persistence.checkpoints.getLatestByRunId(nextRun.id);
       const resumedAt = this.#now();
       const queuedRun = transitionRunStatus(nextRun, "queued", resumedAt);
-
-      nextRun = await this.#commitTransition(queuedRun, [
-        {
-          name: "run.resumed",
-          occurredAt: resumedAt,
-          payload: {
-            ...(latestCheckpoint ? { checkpointId: latestCheckpoint.id } : {}),
-            fromStatus: nextRun.status,
-            toStatus: queuedRun.status,
+      const commitResult = await this.#commitTransition({
+        events: [
+          {
+            name: "run.resumed",
+            occurredAt: resumedAt,
+            payload: {
+              ...(latestCheckpoint
+                ? { checkpointId: latestCheckpoint.id }
+                : {}),
+              fromStatus: nextRun.status,
+              toStatus: queuedRun.status,
+            },
+            runId: queuedRun.id,
           },
-          runId: queuedRun.id,
-        },
-      ]);
+        ],
+        run: queuedRun,
+      });
+
+      nextRun = commitResult.run;
     }
 
     if (nextRun.status === "queued") {
       const startedAt = this.#now();
       const runningRun = transitionRunStatus(nextRun, "running", startedAt);
-
-      nextRun = await this.#commitTransition(runningRun, [
-        {
-          name: "run.started",
-          occurredAt: startedAt,
-          payload: {
-            fromStatus: nextRun.status,
-            toStatus: runningRun.status,
+      const commitResult = await this.#commitTransition({
+        events: [
+          {
+            name: "run.started",
+            occurredAt: startedAt,
+            payload: {
+              fromStatus: nextRun.status,
+              toStatus: runningRun.status,
+            },
+            runId: runningRun.id,
           },
-          runId: runningRun.id,
-        },
-      ]);
+        ],
+        run: runningRun,
+      });
+
+      nextRun = commitResult.run;
     }
 
     return nextRun;
@@ -384,9 +575,8 @@ export class RuntimeEngine {
       ) {
         const readyAt = this.#now();
         readyStep = transitionStepStatus(step, "ready", readyAt);
-        run = await this.#commitTransition(
-          replaceStepInRun(run, readyStep, readyAt),
-          [
+        const commitResult = await this.#commitTransition({
+          events: [
             {
               name: "step.ready",
               occurredAt: readyAt,
@@ -398,25 +588,32 @@ export class RuntimeEngine {
               stepId: readyStep.id,
             },
           ],
-        );
+          run: replaceStepInRun(run, readyStep, readyAt),
+        });
+
+        run = commitResult.run;
       }
 
       const startedAt = this.#now();
       const runningStep = transitionStepStatus(readyStep, "running", startedAt);
       const runningRun = replaceStepInRun(run, runningStep, startedAt);
-
-      run = await this.#commitTransition(runningRun, [
-        {
-          name: "step.started",
-          occurredAt: startedAt,
-          payload: {
-            attempt: runningStep.attempts,
-            status: runningStep.status,
+      const runningResult = await this.#commitTransition({
+        events: [
+          {
+            name: "step.started",
+            occurredAt: startedAt,
+            payload: {
+              attempt: runningStep.attempts,
+              status: runningStep.status,
+            },
+            runId: runningRun.id,
+            stepId: runningStep.id,
           },
-          runId: runningRun.id,
-          stepId: runningStep.id,
-        },
-      ]);
+        ],
+        run: runningRun,
+      });
+
+      run = runningResult.run;
 
       const checkpointForStep =
         latestCheckpoint?.stepId === runningStep.id
@@ -436,6 +633,16 @@ export class RuntimeEngine {
             ),
           ),
         );
+
+        if (executionResult.kind === "awaiting_approval") {
+          run = await this.#awaitApprovalFromStep(
+            run,
+            runningStep,
+            executionResult,
+          );
+
+          return run;
+        }
 
         if (executionResult.kind === "paused") {
           run = await this.#pauseFromStep(run, runningStep, executionResult);
@@ -464,6 +671,83 @@ export class RuntimeEngine {
     return run.status === "succeeded" ? run : this.#succeedRun(run);
   }
 
+  async #awaitApprovalFromStep(
+    run: WorkflowRun,
+    step: WorkflowStep,
+    result: AwaitingApprovalStepResult,
+  ): Promise<WorkflowRun> {
+    const requestedAt = this.#now();
+    const pausedStep = transitionStepStatus(step, "paused", requestedAt);
+    const pausedRun = transitionRunStatus(
+      replaceStepInRun(run, pausedStep, requestedAt),
+      "paused",
+      requestedAt,
+      {
+        pauseReason: APPROVAL_PAUSE_REASON,
+      },
+    );
+    const approvalRequest = createApprovalRequestInput(
+      pausedRun,
+      pausedStep,
+      requestedAt,
+      result,
+      this.#approvalIdGenerator,
+    );
+
+    await this.#commitTransition({
+      approvalRequest,
+      checkpoint: {
+        attempt: pausedStep.attempts,
+        createdAt: requestedAt,
+        nextStepIndex: pausedRun.currentStepIndex,
+        ...(result.checkpointData === undefined
+          ? {}
+          : { payload: result.checkpointData }),
+        reason: "step_paused",
+        runId: pausedRun.id,
+        stepId: pausedStep.id,
+      },
+      events: [
+        {
+          name: "step.paused",
+          occurredAt: requestedAt,
+          payload: {
+            attempt: pausedStep.attempts,
+            reason: APPROVAL_PAUSE_REASON,
+            status: pausedStep.status,
+          },
+          runId: pausedRun.id,
+          stepId: pausedStep.id,
+        },
+        {
+          name: "run.paused",
+          occurredAt: requestedAt,
+          payload: {
+            reason: APPROVAL_PAUSE_REASON,
+            status: pausedRun.status,
+          },
+          runId: pausedRun.id,
+        },
+        {
+          name: "approval.requested",
+          occurredAt: requestedAt,
+          payload: {
+            approvalId: approvalRequest.id,
+            ...(approvalRequest.reviewer
+              ? { reviewerId: approvalRequest.reviewer.id }
+              : {}),
+            status: "pending",
+          },
+          runId: pausedRun.id,
+          stepId: pausedStep.id,
+        } satisfies RuntimeEventInput<"approval.requested">,
+      ],
+      run: pausedRun,
+    });
+
+    return pausedRun;
+  }
+
   async #completeStep(
     run: WorkflowRun,
     step: WorkflowStep,
@@ -480,9 +764,16 @@ export class RuntimeEngine {
       completedAt,
     );
 
-    await this.#commitTransition(
-      completedRun,
-      [
+    await this.#commitTransition({
+      checkpoint: {
+        attempt: completedStep.attempts,
+        createdAt: completedAt,
+        nextStepIndex,
+        reason: "step_completed",
+        runId: completedRun.id,
+        stepId: completedStep.id,
+      },
+      events: [
         {
           name: "step.completed",
           occurredAt: completedAt,
@@ -494,15 +785,8 @@ export class RuntimeEngine {
           stepId: completedStep.id,
         },
       ],
-      {
-        attempt: completedStep.attempts,
-        createdAt: completedAt,
-        nextStepIndex,
-        reason: "step_completed",
-        runId: completedRun.id,
-        stepId: completedStep.id,
-      },
-    );
+      run: completedRun,
+    });
 
     if (!completedRun.steps[nextStepIndex]) {
       return completedRun;
@@ -513,10 +797,8 @@ export class RuntimeEngine {
       "ready",
       completedAt,
     );
-
-    return this.#commitTransition(
-      replaceStepInRun(completedRun, nextStep, completedAt),
-      [
+    const readyResult = await this.#commitTransition({
+      events: [
         {
           name: "step.ready",
           occurredAt: completedAt,
@@ -528,7 +810,10 @@ export class RuntimeEngine {
           stepId: nextStep.id,
         },
       ],
-    );
+      run: replaceStepInRun(completedRun, nextStep, completedAt),
+    });
+
+    return readyResult.run;
   }
 
   async #handleStepFailure(
@@ -549,9 +834,16 @@ export class RuntimeEngine {
       : 0;
 
     if (retryable) {
-      await this.#commitTransition(
-        failedRun,
-        [
+      await this.#commitTransition({
+        checkpoint: {
+          attempt: failedStep.attempts,
+          createdAt: failedAt,
+          nextStepIndex: failedRun.currentStepIndex,
+          reason: "step_retry_scheduled",
+          runId: failedRun.id,
+          stepId: failedStep.id,
+        },
+        events: [
           {
             name: "step.failed",
             occurredAt: failedAt,
@@ -576,15 +868,8 @@ export class RuntimeEngine {
             stepId: failedStep.id,
           } satisfies RuntimeEventInput<"step.retry_scheduled">,
         ],
-        {
-          attempt: failedStep.attempts,
-          createdAt: failedAt,
-          nextStepIndex: failedRun.currentStepIndex,
-          reason: "step_retry_scheduled",
-          runId: failedRun.id,
-          stepId: failedStep.id,
-        },
-      );
+        run: failedRun,
+      });
 
       return failedRun;
     }
@@ -593,9 +878,16 @@ export class RuntimeEngine {
       failure,
     });
 
-    await this.#commitTransition(
-      terminalRun,
-      [
+    await this.#commitTransition({
+      checkpoint: {
+        attempt: failedStep.attempts,
+        createdAt: failedAt,
+        nextStepIndex: failedRun.currentStepIndex,
+        reason: "run_failed",
+        runId: failedRun.id,
+        stepId: failedStep.id,
+      },
+      events: [
         {
           name: "step.failed",
           occurredAt: failedAt,
@@ -617,15 +909,8 @@ export class RuntimeEngine {
           runId: terminalRun.id,
         },
       ],
-      {
-        attempt: failedStep.attempts,
-        createdAt: failedAt,
-        nextStepIndex: failedRun.currentStepIndex,
-        reason: "run_failed",
-        runId: failedRun.id,
-        stepId: failedStep.id,
-      },
-    );
+      run: terminalRun,
+    });
 
     return terminalRun;
   }
@@ -646,9 +931,19 @@ export class RuntimeEngine {
       },
     );
 
-    await this.#commitTransition(
-      pausedRun,
-      [
+    await this.#commitTransition({
+      checkpoint: {
+        attempt: pausedStep.attempts,
+        createdAt: pausedAt,
+        nextStepIndex: pausedRun.currentStepIndex,
+        ...(result.checkpointData === undefined
+          ? {}
+          : { payload: result.checkpointData }),
+        reason: "step_paused",
+        runId: pausedRun.id,
+        stepId: pausedStep.id,
+      },
+      events: [
         {
           name: "step.paused",
           occurredAt: pausedAt,
@@ -670,18 +965,8 @@ export class RuntimeEngine {
           runId: pausedRun.id,
         },
       ],
-      {
-        attempt: pausedStep.attempts,
-        createdAt: pausedAt,
-        nextStepIndex: pausedRun.currentStepIndex,
-        ...(result.checkpointData === undefined
-          ? {}
-          : { payload: result.checkpointData }),
-        reason: "step_paused",
-        runId: pausedRun.id,
-        stepId: pausedStep.id,
-      },
-    );
+      run: pausedRun,
+    });
 
     return pausedRun;
   }
@@ -693,12 +978,18 @@ export class RuntimeEngine {
 
     const succeededAt = this.#now();
     const succeededRun = transitionRunStatus(run, "succeeded", succeededAt);
-
     const succeededStepId = succeededRun.steps.at(-1)?.id;
 
-    await this.#commitTransition(
-      succeededRun,
-      [
+    await this.#commitTransition({
+      checkpoint: {
+        attempt: succeededRun.steps.at(-1)?.attempts ?? 0,
+        createdAt: succeededAt,
+        nextStepIndex: succeededRun.currentStepIndex,
+        reason: "run_succeeded",
+        runId: succeededRun.id,
+        ...(succeededStepId ? { stepId: succeededStepId } : {}),
+      },
+      events: [
         {
           name: "run.succeeded",
           occurredAt: succeededAt,
@@ -711,18 +1002,89 @@ export class RuntimeEngine {
           runId: succeededRun.id,
         },
       ],
-      {
-        attempt: succeededRun.steps.at(-1)?.attempts ?? 0,
-        createdAt: succeededAt,
-        nextStepIndex: succeededRun.currentStepIndex,
-        reason: "run_succeeded",
-        runId: succeededRun.id,
-        ...(succeededStepId ? { stepId: succeededStepId } : {}),
-      },
-    );
+      run: succeededRun,
+    });
 
     return succeededRun;
   }
+}
+
+function cancelRunFromApproval(
+  run: WorkflowRun,
+  cancelledAt: string,
+): WorkflowRun {
+  const currentStep = run.steps[run.currentStepIndex];
+
+  if (!currentStep) {
+    return transitionRunStatus(run, "cancelled", cancelledAt);
+  }
+
+  const cancelledStep = transitionStepStatus(
+    currentStep,
+    "cancelled",
+    cancelledAt,
+  );
+
+  return transitionRunStatus(
+    replaceStepInRun(run, cancelledStep, cancelledAt),
+    "cancelled",
+    cancelledAt,
+  );
+}
+
+function createApprovalDecisionEvent(
+  decision: ApprovalDecisionInput,
+  runId: string,
+  stepId?: string,
+): RuntimeEventInput<
+  "approval.approved" | "approval.cancelled" | "approval.rejected"
+> {
+  const eventName = approvalDecisionToEventName(decision.decision);
+
+  return {
+    name: eventName,
+    occurredAt: decision.decidedAt,
+    payload: {
+      approvalId: decision.approvalId,
+      ...(decision.actor ? { actorId: decision.actor.id } : {}),
+      decision: decision.decision,
+      status: decision.decision,
+    },
+    runId,
+    ...(stepId ? { stepId } : {}),
+  };
+}
+
+function createApprovalDecisionInput(
+  approvalId: string,
+  decidedAt: string,
+  options: DecideApprovalOptions,
+): ApprovalDecisionInput {
+  return {
+    approvalId,
+    decidedAt,
+    decision: options.decision,
+    ...(options.actor ? { actor: options.actor } : {}),
+    ...(options.note === undefined ? {} : { note: options.note }),
+  };
+}
+
+function createApprovalRequestInput(
+  run: WorkflowRun,
+  step: WorkflowStep,
+  requestedAt: string,
+  result: AwaitingApprovalStepResult,
+  generateApprovalId: () => string,
+): ApprovalRequestInput {
+  return {
+    id: generateApprovalId(),
+    ...(result.note === undefined ? {} : { note: result.note }),
+    requestedAt,
+    ...(result.requestedBy ? { requestedBy: result.requestedBy } : {}),
+    ...(result.reviewer ? { reviewer: result.reviewer } : {}),
+    runId: run.id,
+    stepId: step.id,
+  };
 }
 
 function createStepContext(
@@ -739,6 +1101,19 @@ function createStepContext(
     step,
     tools,
   };
+}
+
+function approvalDecisionToEventName(
+  decision: ApprovalDecisionValue,
+): "approval.approved" | "approval.cancelled" | "approval.rejected" {
+  switch (decision) {
+    case "approved":
+      return "approval.approved";
+    case "cancelled":
+      return "approval.cancelled";
+    case "rejected":
+      return "approval.rejected";
+  }
 }
 
 function isTerminalRunStatus(status: RunStatus): boolean {

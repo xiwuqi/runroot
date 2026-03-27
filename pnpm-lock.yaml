@@ -105,6 +105,9 @@ importers:
       '@runroot/config':
         specifier: workspace:*
         version: link:../config
+      '@runroot/domain':
+        specifier: workspace:*
+        version: link:../domain
 
   packages/cli:
     dependencies:
@@ -116,6 +119,9 @@ importers:
 
   packages/core-runtime:
     dependencies:
+      '@runroot/approvals':
+        specifier: workspace:*
+        version: link:../approvals
       '@runroot/config':
         specifier: workspace:*
         version: link:../config
@@ -140,6 +146,9 @@ importers:
 
   packages/events:
     dependencies:
+      '@runroot/approvals':
+        specifier: workspace:*
+        version: link:../approvals
       '@runroot/config':
         specifier: workspace:*
         version: link:../config
@@ -167,6 +176,9 @@ importers:
 
   packages/persistence:
     dependencies:
+      '@runroot/approvals':
+        specifier: workspace:*
+        version: link:../approvals
       '@runroot/config':
         specifier: workspace:*
         version: link:../config
@@ -182,6 +194,12 @@ importers:
       '@runroot/config':
         specifier: workspace:*
         version: link:../config
+      '@runroot/domain':
+        specifier: workspace:*
+        version: link:../domain
+      '@runroot/events':
+        specifier: workspace:*
+        version: link:../events
 
   packages/sdk:
     dependencies:

@@ -1,5 +1,17 @@
 import type { PackageBoundary } from "@runroot/config";
 
+export {
+  createRunTimelineQuery,
+  type RunTimelineQuery,
+  type RunTimelineReader,
+} from "./query";
+export {
+  projectRunTimeline,
+  type RunTimeline,
+  type RunTimelineEntry,
+  type RunTimelineEntryKind,
+} from "./timeline";
+
 export const replayPackageBoundary = {
   name: "@runroot/replay",
   kind: "package",

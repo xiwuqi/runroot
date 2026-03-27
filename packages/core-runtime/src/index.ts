@@ -1,6 +1,9 @@
 import type { PackageBoundary } from "@runroot/config";
 
 export {
+  type AwaitApprovalInput,
+  type AwaitingApprovalStepResult,
+  awaitApproval,
   type CompletedStepResult,
   completeStep,
   type PausedStepResult,
@@ -11,7 +14,9 @@ export {
   type WorkflowStepDefinition,
 } from "./runtime-definition";
 export {
+  type ApprovalDecisionOutcome,
   type CreateRunOptions,
+  type DecideApprovalOptions,
   RuntimeEngine,
   type RuntimeEngineOptions,
   RuntimeExecutionError,
@@ -25,6 +30,7 @@ export const coreRuntimePackageBoundary = {
     "Framework-independent runtime orchestration and state transition execution.",
   publicSurface: [
     "runtime engine",
+    "approval seam",
     "checkpoint coordination",
     "retry policy",
     "tool invoker seam",
