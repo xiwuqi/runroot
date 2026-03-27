@@ -53,5 +53,6 @@ Status: completed
 - publish contributor onboarding and good-first-issue guidance
 - execute against the formal handoff in
   [docs/architecture/phase-7-handoff.md](./architecture/phase-7-handoff.md)
+- keep Phase 7 implementation inside docs, examples, repository templates, and release-readiness assets
 
-Status: scope frozen, implementation not started
+Status: completed

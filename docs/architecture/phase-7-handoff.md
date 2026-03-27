@@ -1,6 +1,6 @@
 # Phase 7: Open-Source Polish and Release Readiness
 
-Status: scope frozen, execution not started
+Status: scope frozen, implementation completed
 
 This document freezes the Phase 7 execution contract for Runroot. It expands the
 high-level roadmap bullets already present in the repository into a minimal,
