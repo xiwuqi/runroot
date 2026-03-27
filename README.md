@@ -16,13 +16,15 @@ Runroot focuses on:
 
 ## Current Status
 
-Phase 5 is complete. The repository now includes:
+Phase 6 is complete. The repository now includes:
 
 - the Phase 2 runtime core for runs, steps, checkpoints, and retries
 - the Phase 3 tool layer and minimal MCP adapter
 - the Phase 4 approval and replay foundations
 - a thin operator API and CLI
 - the first real workflow templates for GitHub, Slack, and shell automation
+- a minimal web console for runs, approvals, and replay
+- observability adapter seams for logging and tracing
 
 Tool invocation hooks remain in-memory hooks inside `@runroot/tools`; they are not yet part of the shared replay source of truth.
 
@@ -40,7 +42,7 @@ Tool invocation hooks remain in-memory hooks inside `@runroot/tools`; they are n
 ```bash
 pnpm install
 pnpm bootstrap
-pnpm --filter @runroot/api dev
+pnpm dev
 ```
 
 Operator examples:
@@ -77,6 +79,8 @@ Phase 4 adds a second rule: approval facts enter the shared runtime event stream
 
 Phase 5 adds a third rule: API and CLI remain thin operator surfaces, while workflow templates are assembled in packages and reused through a shared operator service.
 
+Phase 6 adds a fourth rule: the web console stays a thin visualization layer over the API surface, and observability begins as logging and tracing adapters rather than a new runtime center.
+
 ## Example Use Cases
 
 - GitHub issue triage with optional human approval
@@ -90,6 +94,10 @@ Phase 5 adds a third rule: API and CLI remain thin operator surfaces, while work
 - [API Usage](./docs/guides/api-usage.md)
 - [CLI Usage](./docs/guides/cli-usage.md)
 - [Templates](./docs/guides/templates.md)
+- [Web Console](./docs/guides/web-console.md)
+- [Observability](./docs/guides/observability.md)
+- [Web Console](./docs/architecture/web-console.md)
+- [Observability](./docs/architecture/observability.md)
 
 ## Roadmap
 
