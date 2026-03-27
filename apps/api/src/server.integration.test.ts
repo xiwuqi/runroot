@@ -3,13 +3,25 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { createRunrootOperatorService } from "@runroot/sdk";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { buildServer } from "./server";
 
 let app = buildServer();
+let originalDatabaseUrl = process.env.DATABASE_URL;
+let originalPersistenceDriver = process.env.RUNROOT_PERSISTENCE_DRIVER;
+let originalSqlitePath = process.env.RUNROOT_SQLITE_PATH;
+
+beforeEach(() => {
+  originalDatabaseUrl = process.env.DATABASE_URL;
+  originalPersistenceDriver = process.env.RUNROOT_PERSISTENCE_DRIVER;
+  originalSqlitePath = process.env.RUNROOT_SQLITE_PATH;
+});
 
 afterEach(async () => {
+  process.env.DATABASE_URL = originalDatabaseUrl;
+  process.env.RUNROOT_PERSISTENCE_DRIVER = originalPersistenceDriver;
+  process.env.RUNROOT_SQLITE_PATH = originalSqlitePath;
   await app.close();
 });
 
@@ -129,5 +141,48 @@ describe("@runroot/api integration", () => {
     expect(
       timelinePayload.timeline.entries.map((entry) => entry.kind),
     ).toContain("run-resumed");
+  });
+
+  it("uses the configured SQLite fallback when the API boots without an injected operator", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "runroot-api-sqlite-"));
+    process.env.DATABASE_URL = undefined;
+    process.env.RUNROOT_PERSISTENCE_DRIVER = "sqlite";
+    process.env.RUNROOT_SQLITE_PATH = join(workspaceRoot, "runroot.sqlite");
+    app = buildServer();
+    const address = await app.listen({
+      host: "127.0.0.1",
+      port: 0,
+    });
+
+    const createResponse = await fetch(`${address}/runs`, {
+      body: JSON.stringify({
+        input: {
+          approvalRequired: false,
+          commandAlias: "print-ready",
+          runbookId: "node-health-check",
+        },
+        templateId: "shell-runbook-flow",
+      }),
+      headers: {
+        "content-type": "application/json",
+      },
+      method: "POST",
+    });
+    const createdRun = (await createResponse.json()) as {
+      run: {
+        id: string;
+        status: string;
+      };
+    };
+    const runResponse = await fetch(`${address}/runs/${createdRun.run.id}`);
+    const runPayload = (await runResponse.json()) as {
+      run: {
+        status: string;
+      };
+    };
+
+    expect(createResponse.status).toBe(201);
+    expect(createdRun.run.status).toBe("succeeded");
+    expect(runPayload.run.status).toBe("succeeded");
   });
 });

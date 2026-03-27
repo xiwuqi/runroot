@@ -2,6 +2,8 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { createPostgresRuntimePersistence } from "@runroot/persistence";
+import { newDb } from "pg-mem";
 import { describe, expect, it } from "vitest";
 
 import { createRunrootOperatorService } from "./operator-service";
@@ -147,5 +149,39 @@ describe("@runroot/sdk operator service integration", () => {
     expect(timeline.entries.map((entry) => entry.kind)).toContain(
       "step-completed",
     );
+  });
+
+  it("runs a shell workflow through the Postgres persistence seam", async () => {
+    const memoryDatabase = newDb({
+      noAstCoverageCheck: true,
+    });
+    const { Pool } = memoryDatabase.adapters.createPg();
+    const pool = new Pool();
+    const service = createRunrootOperatorService({
+      idGenerator: createIdGenerator(),
+      now: createClock(),
+      persistence: createPostgresRuntimePersistence({
+        pool,
+      }),
+    });
+
+    try {
+      const run = await service.startRun({
+        input: {
+          approvalRequired: false,
+          commandAlias: "print-ready",
+          runbookId: "node-health-check",
+        },
+        templateId: "shell-runbook-flow",
+      });
+      const timeline = await service.getTimeline(run.id);
+
+      expect(run.status).toBe("succeeded");
+      expect(timeline.entries.map((entry) => entry.kind)).toContain(
+        "run-succeeded",
+      );
+    } finally {
+      await pool.end();
+    }
   });
 });
