@@ -45,6 +45,8 @@ Status: completed
 - add run lists, run detail, approval queue, and timeline views
 - expose logging and tracing adapters
 
+Status: completed
+
 ## Phase 7: Open Source Polish
 
 - tighten docs, examples, issue templates, PR templates, and release workflows

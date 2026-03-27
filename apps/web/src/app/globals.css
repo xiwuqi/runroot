@@ -6,7 +6,14 @@
   --ink-soft: #5d5448;
   --line: rgba(38, 28, 17, 0.12);
   --accent: #9a4b25;
+  --accent-dark: #63311a;
   --accent-soft: rgba(154, 75, 37, 0.12);
+  --success: #165a35;
+  --success-soft: rgba(22, 90, 53, 0.14);
+  --danger: #9b2d1f;
+  --danger-soft: rgba(155, 45, 31, 0.14);
+  --warning: #7a5e0b;
+  --warning-soft: rgba(122, 94, 11, 0.16);
   --shadow: 0 20px 60px rgba(46, 31, 18, 0.12);
 }
 
@@ -34,23 +41,65 @@ body {
 
 a {
   color: inherit;
+  text-decoration: none;
 }
 
-.page {
+.top-nav {
+  align-items: center;
+  background: rgba(255, 253, 248, 0.82);
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  padding: 0.9rem 1.25rem;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  backdrop-filter: blur(18px);
+}
+
+.brand {
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.top-nav-links {
+  display: flex;
+  gap: 1rem;
+}
+
+.top-nav-links a {
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 0.4rem 0.75rem;
+}
+
+.top-nav-links a:hover {
+  background: var(--accent-soft);
+  border-color: var(--line);
+}
+
+.console-page {
   margin: 0 auto;
-  max-width: 72rem;
-  padding: 3rem 1.5rem 4rem;
+  max-width: 84rem;
+  padding: 2rem 1.5rem 4rem;
 }
 
-.hero {
+.console-hero {
+  align-items: end;
   background: rgba(255, 253, 248, 0.82);
   border: 1px solid var(--line);
   border-radius: 2rem;
   box-shadow: var(--shadow);
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr) auto;
   padding: 2rem;
 }
 
-.eyebrow {
+.console-eyebrow,
+.card-eyebrow {
   color: var(--accent);
   font-family: "Courier New", monospace;
   font-size: 0.8rem;
@@ -58,13 +107,13 @@ a {
   text-transform: uppercase;
 }
 
-.hero h1 {
+.console-hero h1 {
   font-size: clamp(2.5rem, 6vw, 4.75rem);
   line-height: 0.95;
   margin: 0.75rem 0 1rem;
 }
 
-.hero p {
+.console-hero p {
   color: var(--ink-soft);
   font-size: 1.05rem;
   line-height: 1.7;
@@ -72,13 +121,21 @@ a {
   max-width: 48rem;
 }
 
-.grid {
+.console-actions {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.grid,
+.list-grid,
+.detail-grid {
   display: grid;
   gap: 1rem;
   margin-top: 1.5rem;
 }
 
-.grid.two {
+.grid.two,
+.detail-grid {
   grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
 }
 
@@ -90,9 +147,10 @@ a {
   padding: 1.25rem;
 }
 
+.run-card h2,
 .card h2,
 .card h3 {
-  margin-top: 0;
+  margin: 0.25rem 0 0.75rem;
 }
 
 .card ul {
@@ -101,7 +159,9 @@ a {
   padding-left: 1.25rem;
 }
 
-.badge {
+.badge,
+.status-pill,
+.timeline-count {
   background: var(--accent-soft);
   border-radius: 999px;
   color: var(--accent);
@@ -112,14 +172,210 @@ a {
   padding: 0.35rem 0.65rem;
 }
 
+.status-pill.success {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.status-pill.danger {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.status-pill.warning {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.status-pill.neutral {
+  background: rgba(51, 44, 35, 0.08);
+  color: var(--ink);
+}
+
+.flash-banner {
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  margin-top: 1rem;
+  padding: 0.9rem 1rem;
+}
+
+.flash-banner.notice {
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+}
+
+.flash-banner.error {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.row {
+  align-items: center;
+  display: flex;
+  gap: 0.75rem;
+}
+
+.row.spread {
+  justify-content: space-between;
+}
+
+.data-grid {
+  display: grid;
+  gap: 0.35rem 1rem;
+  grid-template-columns: max-content 1fr;
+  margin: 0;
+}
+
+.data-grid dt {
+  color: var(--ink-soft);
+  font-size: 0.92rem;
+}
+
+.data-grid dd {
+  margin: 0;
+  word-break: break-word;
+}
+
+.link-button,
+.action-form button,
+.decision-actions button {
+  background: var(--accent);
+  border: 0;
+  border-radius: 999px;
+  color: #fff;
+  cursor: pointer;
+  display: inline-flex;
+  font-family: "Courier New", monospace;
+  font-size: 0.86rem;
+  padding: 0.7rem 1rem;
+  text-transform: uppercase;
+}
+
+.subtle-link {
+  color: var(--accent-dark);
+  font-size: 0.95rem;
+}
+
+.empty-state,
+.empty-copy {
+  color: var(--ink-soft);
+}
+
+.inline-note {
+  background: rgba(51, 44, 35, 0.05);
+  border-radius: 0.9rem;
+  color: var(--ink-soft);
+  margin-top: 1rem;
+  padding: 0.85rem 1rem;
+}
+
+.approval-history {
+  display: grid;
+  gap: 0.8rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.approval-history li {
+  border-top: 1px solid var(--line);
+  padding-top: 0.8rem;
+}
+
+.timeline-list {
+  display: grid;
+  gap: 0.9rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.timeline-entry {
+  background: rgba(255, 255, 255, 0.4);
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  padding: 0.9rem;
+}
+
+.timeline-meta {
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+  margin-top: 0.25rem;
+}
+
+.payload-preview {
+  background: rgba(31, 26, 20, 0.05);
+  border-radius: 0.8rem;
+  color: var(--ink-soft);
+  font-family: "Courier New", monospace;
+  font-size: 0.78rem;
+  margin: 0.75rem 0 0;
+  overflow: auto;
+  padding: 0.8rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.decision-form,
+.action-form {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.decision-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.decision-actions button[value="rejected"],
+.decision-actions button[value="cancelled"] {
+  background: #7d3e20;
+}
+
+.note-input {
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  color: var(--ink);
+  font: inherit;
+  min-height: 6rem;
+  padding: 0.8rem 0.9rem;
+  resize: vertical;
+}
+
+.loading-state {
+  color: var(--ink-soft);
+  padding: 2rem 1.5rem;
+}
+
 @media (max-width: 640px) {
-  .page {
+  .top-nav {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .top-nav-links {
+    flex-wrap: wrap;
+  }
+
+  .console-page {
     padding: 1.25rem 1rem 3rem;
   }
 
-  .hero,
+  .console-hero,
   .card {
     border-radius: 1.25rem;
     padding: 1.1rem;
+  }
+
+  .console-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .row.spread {
+    align-items: start;
+    flex-direction: column;
   }
 }

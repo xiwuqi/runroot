@@ -1,11 +1,12 @@
 # @runroot/web
 
-Minimal Next.js console for Runroot operators.
+Minimal Next.js operator console for Runroot.
 
-Phase 1 responsibilities:
+Phase 6 responsibilities:
 
-- communicate project positioning and current phase
-- visualize package boundaries at a high level
-- stay presentation-only
+- render runs list and run detail views
+- surface pending approvals and minimal operator actions
+- visualize replay timeline data from the API
+- stay thin by delegating all workflow logic to API/operator seams
 
-Runtime data, approvals, and replay views will arrive in later phases through the API.
+The web app must not access persistence directly or assemble a second workflow service layer.
