@@ -103,4 +103,49 @@ describe("@runroot/sdk operator service integration", () => {
       "run-succeeded",
     );
   });
+
+  it("runs a PR review workflow with MCP-backed review output and replay", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "runroot-sdk-pr-"));
+    const service = createRunrootOperatorService({
+      idGenerator: createIdGenerator(),
+      now: createClock(),
+      workspacePath: join(workspaceRoot, "workspace.json"),
+    });
+    const template = service
+      .listTemplates()
+      .find((descriptor) => descriptor.id === "pr-review-flow");
+
+    const run = await service.startRun({
+      input: {
+        pr: {
+          diffSummary:
+            "Adds auth middleware and a database migration for roles.",
+          number: 42,
+          title: "Improve RBAC role handling",
+        },
+        repository: "acme/platform",
+      },
+      templateId: "pr-review-flow",
+    });
+    const timeline = await service.getTimeline(run.id);
+
+    expect(template?.toolReferences).toContain("github.pr_review");
+    expect(run.status).toBe("succeeded");
+    expect(run.output?.["review-pr"]).toMatchObject({
+      recommendation: "request_changes",
+      summary: expect.stringContaining("risky changes"),
+    });
+    expect(run.output?.["publish-review"]).toMatchObject({
+      review: {
+        recommendation: "request_changes",
+        summary: expect.stringContaining("risky changes"),
+      },
+    });
+    expect(timeline.entries.map((entry) => entry.kind)).toContain(
+      "run-succeeded",
+    );
+    expect(timeline.entries.map((entry) => entry.kind)).toContain(
+      "step-completed",
+    );
+  });
 });
