@@ -47,7 +47,11 @@ Status: completed
 
 Status: completed
 
-## Phase 7: Open Source Polish
+## Phase 7: Open-Source Polish and Release Readiness
 
 - tighten docs, examples, issue templates, PR templates, and release workflows
 - publish contributor onboarding and good-first-issue guidance
+- execute against the formal handoff in
+  [docs/architecture/phase-7-handoff.md](./architecture/phase-7-handoff.md)
+
+Status: scope frozen, implementation not started

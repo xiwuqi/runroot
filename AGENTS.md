@@ -41,7 +41,7 @@ The project is executed in phases. Only work on the current phase.
 - Phase 4: approvals and replay
 - Phase 5: API, CLI, templates
 - Phase 6: web console and observability
-- Phase 7: open-source polish and release readiness
+- Phase 7: Open-Source Polish and Release Readiness
 
 Do not pull work from later phases into the current phase unless it is required to unblock the current phase and the reason is documented.
 

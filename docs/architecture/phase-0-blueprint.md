@@ -488,9 +488,10 @@ Must be deferred:
 
 - build web console and observability adapters
 
-### Phase 7
+### Phase 7: Open-Source Polish and Release Readiness
 
-- polish docs, examples, release workflow, issue templates, contributor onboarding
+- polish docs, examples, release workflow, issue templates, and contributor onboarding
+- freeze the final execution contract in a repository-owned handoff before implementation begins
 
 ## Phase 1 File Plan
 
