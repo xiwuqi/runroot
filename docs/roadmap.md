@@ -59,14 +59,15 @@ Status: completed
 
 ## Phase 8: Postgres-First Persistence and SQLite Development Fallback
 
-- suggested freeze version derived from ADR-0003, the Phase 0 blueprint, and
-  the current persistence docs
 - land Postgres as the primary persistence path for the existing runtime
   contracts
 - add SQLite as the local-development fallback where practical
+- document schema, migrations, and local infrastructure for the persistence
+  baseline
+- keep API, CLI, SDK, and web wired through the existing persistence seams
 - execute against the formal handoff in
   [docs/architecture/phase-8-handoff.md](./architecture/phase-8-handoff.md)
 - keep Phase 8 focused on persistence adapters, migrations, local infra, and
   thin wiring needed to use those adapters
 
-Status: scope frozen
+Status: completed
