@@ -1,0 +1,8 @@
+{
+  "repository": "acme/platform",
+  "pr": {
+    "number": 42,
+    "title": "Improve RBAC role handling",
+    "diffSummary": "Adds auth middleware and a database migration for roles."
+  }
+}

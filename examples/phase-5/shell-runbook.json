@@ -1,0 +1,5 @@
+{
+  "runbookId": "node-health-check",
+  "commandAlias": "print-ready",
+  "approvalRequired": false
+}

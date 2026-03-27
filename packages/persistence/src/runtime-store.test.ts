@@ -1,3 +1,7 @@
+import { mkdtemp, open, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import {
   createWorkflowRunSnapshot,
   createWorkflowStepSnapshot,
@@ -5,7 +9,11 @@ import {
 } from "@runroot/domain";
 import { describe, expect, it } from "vitest";
 
-import { createInMemoryRuntimePersistence } from "./runtime-store";
+import {
+  createFileRuntimePersistence,
+  createInMemoryRuntimePersistence,
+  type RuntimePersistence,
+} from "./runtime-store";
 
 function createRun(runId = "run_1") {
   const createdAt = "2026-03-27T00:00:00.000Z";
@@ -34,6 +42,26 @@ function createRun(runId = "run_1") {
     },
     retryPolicy,
     steps: [step],
+  });
+}
+
+async function commitRunCreatedEvent(
+  persistence: RuntimePersistence,
+  run: ReturnType<typeof createRun>,
+) {
+  await persistence.commitTransition({
+    events: [
+      {
+        name: "run.created",
+        occurredAt: run.createdAt,
+        payload: {
+          definitionId: run.definitionId,
+          status: run.status,
+        },
+        runId: run.id,
+      },
+    ],
+    run,
   });
 }
 
@@ -227,5 +255,115 @@ describe("@runroot/persistence in-memory store", () => {
     expect(await persistence.runs.get(run.id)).toBeUndefined();
     expect(await persistence.events.listByRunId(run.id)).toEqual([]);
     expect(await persistence.approvals.listByRunId(run.id)).toEqual([]);
+  });
+
+  it("persists runtime state to a JSON workspace file", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "runroot-persistence-"));
+    const filePath = join(workspaceRoot, "workspace.json");
+    const run = createRun("run_file");
+    const persistence = createFileRuntimePersistence({
+      filePath,
+      idGenerator: (prefix) => `${prefix}_fixed`,
+    });
+
+    await persistence.commitTransition({
+      checkpoint: {
+        attempt: 0,
+        createdAt: "2026-03-27T00:00:00.000Z",
+        nextStepIndex: 0,
+        reason: "run_created",
+        runId: run.id,
+      },
+      events: [
+        {
+          name: "run.created",
+          occurredAt: "2026-03-27T00:00:00.000Z",
+          payload: {
+            definitionId: run.definitionId,
+            status: run.status,
+          },
+          runId: run.id,
+        },
+      ],
+      run,
+    });
+
+    const reloadedPersistence = createFileRuntimePersistence({
+      filePath,
+      idGenerator: (prefix) => `${prefix}_fixed`,
+    });
+
+    expect(await reloadedPersistence.runs.get(run.id)).toEqual(run);
+    expect(
+      (await reloadedPersistence.events.listByRunId(run.id)).map(
+        (event) => event.name,
+      ),
+    ).toEqual(["run.created", "checkpoint.saved"]);
+  });
+
+  it("waits for in-process writes before reading a new workspace file", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "runroot-persistence-"));
+    const filePath = join(workspaceRoot, "workspace.json");
+    const lockPath = `${filePath}.lock`;
+    const run = createRun("run_file_pending");
+    const persistence = createFileRuntimePersistence({
+      filePath,
+      idGenerator: (prefix) => `${prefix}_fixed`,
+      lockRetryDelayMs: 10,
+      lockTimeoutMs: 1_000,
+    });
+    const lockHandle = await open(lockPath, "w");
+
+    const pendingWrite = commitRunCreatedEvent(persistence, run);
+    let readResolved = false;
+    const pendingRead = persistence.runs.list().then((runs) => {
+      readResolved = true;
+
+      return runs;
+    });
+
+    await new Promise((resolveDelay) => {
+      setTimeout(resolveDelay, 50);
+    });
+
+    expect(readResolved).toBe(false);
+
+    await lockHandle.close();
+    await rm(lockPath, {
+      force: true,
+    });
+
+    const [persistedRuns] = await Promise.all([pendingRead, pendingWrite]);
+
+    expect(persistedRuns.map((persistedRun) => persistedRun.id)).toEqual([
+      run.id,
+    ]);
+  });
+
+  it("shares persisted workspace state across file-backed persistence instances", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "runroot-persistence-"));
+    const filePath = join(workspaceRoot, "workspace.json");
+    const firstPersistence = createFileRuntimePersistence({
+      filePath,
+      idGenerator: (prefix) => `${prefix}_fixed`,
+    });
+    const secondPersistence = createFileRuntimePersistence({
+      filePath,
+      idGenerator: (prefix) => `${prefix}_fixed`,
+    });
+    const firstRun = createRun("run_file_first");
+    const secondRun = createRun("run_file_second");
+
+    await commitRunCreatedEvent(firstPersistence, firstRun);
+
+    expect(await secondPersistence.runs.get(firstRun.id)).toEqual(firstRun);
+
+    await commitRunCreatedEvent(secondPersistence, secondRun);
+
+    expect(
+      (await firstPersistence.runs.list()).map(
+        (persistedRun) => persistedRun.id,
+      ),
+    ).toEqual([firstRun.id, secondRun.id]);
   });
 });

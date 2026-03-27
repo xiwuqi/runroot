@@ -2,10 +2,20 @@
 
 Fastify-based operator API for Runroot.
 
-Phase 1 routes:
+Phase 5 routes:
 
-- `GET /healthz`: process health and current phase
-- `GET /manifest/project`: project metadata and required quality commands
-- `GET /manifest/packages`: package boundary manifest used to keep architecture visible
+- `GET /healthz`
+- `GET /manifest/project`
+- `GET /manifest/packages`
+- `GET /templates`
+- `GET /runs`
+- `POST /runs`
+- `GET /runs/:runId`
+- `GET /runs/:runId/approvals`
+- `POST /runs/:runId/resume`
+- `GET /runs/:runId/timeline`
+- `GET /approvals/pending`
+- `GET /approvals/:approvalId`
+- `POST /approvals/:approvalId/decision`
 
 This app is intentionally thin. It does not contain runtime state machine or persistence logic.

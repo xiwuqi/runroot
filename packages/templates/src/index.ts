@@ -1,5 +1,22 @@
 import type { PackageBoundary } from "@runroot/config";
 
+export {
+  createTemplateCatalog,
+  createTemplateRuntimeBundle,
+} from "./catalog";
+export type {
+  TemplateCatalog,
+  TemplateRuntimeBundle,
+  WorkflowTemplate,
+  WorkflowTemplateDescriptor,
+} from "./contracts";
+export { TemplateError, TemplateNotFoundError } from "./errors";
+export { createGithubIssueTriageTemplate } from "./github-issue-triage";
+export { createPullRequestReviewTemplate } from "./pr-review";
+export { createShellRunbookTemplate } from "./shell-runbook";
+export { createSlackApprovalTemplate } from "./slack-approval";
+export { createTemplateToolInvoker } from "./tools";
+
 export const templatesPackageBoundary = {
   name: "@runroot/templates",
   kind: "package",

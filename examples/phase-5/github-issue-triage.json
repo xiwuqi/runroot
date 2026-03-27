@@ -1,0 +1,8 @@
+{
+  "repository": "acme/platform",
+  "issue": {
+    "number": 418,
+    "title": "Production login outage",
+    "body": "Production outage affecting login for multiple customers."
+  }
+}

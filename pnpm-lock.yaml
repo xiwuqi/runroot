@@ -114,6 +114,9 @@ importers:
       '@runroot/config':
         specifier: workspace:*
         version: link:../config
+      '@runroot/sdk':
+        specifier: workspace:*
+        version: link:../sdk
 
   packages/config: {}
 
@@ -203,15 +206,48 @@ importers:
 
   packages/sdk:
     dependencies:
+      '@runroot/approvals':
+        specifier: workspace:*
+        version: link:../approvals
       '@runroot/config':
         specifier: workspace:*
         version: link:../config
+      '@runroot/core-runtime':
+        specifier: workspace:*
+        version: link:../core-runtime
+      '@runroot/domain':
+        specifier: workspace:*
+        version: link:../domain
+      '@runroot/persistence':
+        specifier: workspace:*
+        version: link:../persistence
+      '@runroot/replay':
+        specifier: workspace:*
+        version: link:../replay
+      '@runroot/templates':
+        specifier: workspace:*
+        version: link:../templates
+      '@runroot/tools':
+        specifier: workspace:*
+        version: link:../tools
 
   packages/templates:
     dependencies:
       '@runroot/config':
         specifier: workspace:*
         version: link:../config
+      '@runroot/core-runtime':
+        specifier: workspace:*
+        version: link:../core-runtime
+      '@runroot/domain':
+        specifier: workspace:*
+        version: link:../domain
+      '@runroot/mcp':
+        specifier: workspace:*
+        version: link:../mcp
+      '@runroot/tools':
+        specifier: workspace:*
+        version: link:../tools
 
   packages/test-utils:
     dependencies:

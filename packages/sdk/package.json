@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Future programmatic SDK surface for Runroot.",
+  "description": "Shared operator service and programmatic SDK helpers for Runroot.",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -18,7 +18,14 @@
     "dist"
   ],
   "dependencies": {
-    "@runroot/config": "workspace:*"
+    "@runroot/approvals": "workspace:*",
+    "@runroot/config": "workspace:*",
+    "@runroot/core-runtime": "workspace:*",
+    "@runroot/domain": "workspace:*",
+    "@runroot/persistence": "workspace:*",
+    "@runroot/replay": "workspace:*",
+    "@runroot/templates": "workspace:*",
+    "@runroot/tools": "workspace:*"
   },
   "scripts": {
     "build": "tsup src/index.ts --format esm,cjs --dts --out-dir dist --clean",

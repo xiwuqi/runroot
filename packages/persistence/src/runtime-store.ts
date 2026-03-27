@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { mkdir, open, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
 
 import type {
   ApprovalDecision,
@@ -69,6 +71,14 @@ export interface RuntimePersistence {
 
 export interface InMemoryRuntimePersistenceOptions {
   readonly idGenerator?: (prefix: "checkpoint" | "event") => string;
+  readonly snapshot?: RuntimePersistenceSnapshot;
+}
+
+export interface FileRuntimePersistenceOptions {
+  readonly filePath: string;
+  readonly idGenerator?: (prefix: "checkpoint" | "event") => string;
+  readonly lockRetryDelayMs?: number;
+  readonly lockTimeoutMs?: number;
 }
 
 export interface RuntimeTransitionCommit {
@@ -87,6 +97,13 @@ export interface RuntimeTransitionCommitResult {
   readonly run: WorkflowRun;
 }
 
+export interface RuntimePersistenceSnapshot {
+  readonly approvals: readonly ApprovalRequest[];
+  readonly checkpoints: readonly WorkflowCheckpoint[];
+  readonly events: readonly RuntimeEvent[];
+  readonly runs: readonly WorkflowRun[];
+}
+
 export function createInMemoryRuntimePersistence(
   options: InMemoryRuntimePersistenceOptions = {},
 ): RuntimePersistence {
@@ -99,6 +116,17 @@ export function createInMemoryRuntimePersistence(
   const generateId =
     options.idGenerator ??
     ((prefix: "checkpoint" | "event") => `${prefix}_${randomUUID()}`);
+
+  seedInMemoryState(
+    {
+      approvalsById,
+      approvalsByRunId,
+      checkpoints,
+      events,
+      runs,
+    },
+    options.snapshot,
+  );
 
   return {
     async commitTransition(transition) {
@@ -299,8 +327,387 @@ export function createInMemoryRuntimePersistence(
   };
 }
 
+export function createFileRuntimePersistence(
+  options: FileRuntimePersistenceOptions,
+): RuntimePersistence {
+  const filePath = resolve(options.filePath);
+  let accessQueue = Promise.resolve();
+
+  return {
+    async commitTransition(transition) {
+      return enqueueAccess(async () =>
+        withMutablePersistence(filePath, options, (persistence) =>
+          persistence.commitTransition(transition),
+        ),
+      );
+    },
+
+    approvals: {
+      async get(approvalId) {
+        return enqueueAccess(async () =>
+          withReadOnlyPersistence(filePath, options, (persistence) =>
+            persistence.approvals.get(approvalId),
+          ),
+        );
+      },
+
+      async getPendingByRunId(runId) {
+        return enqueueAccess(async () =>
+          withReadOnlyPersistence(filePath, options, (persistence) =>
+            persistence.approvals.getPendingByRunId(runId),
+          ),
+        );
+      },
+
+      async listByRunId(runId) {
+        return enqueueAccess(async () =>
+          withReadOnlyPersistence(filePath, options, (persistence) =>
+            persistence.approvals.listByRunId(runId),
+          ),
+        );
+      },
+    },
+
+    checkpoints: {
+      async getLatestByRunId(runId) {
+        return enqueueAccess(async () =>
+          withReadOnlyPersistence(filePath, options, (persistence) =>
+            persistence.checkpoints.getLatestByRunId(runId),
+          ),
+        );
+      },
+
+      async listByRunId(runId) {
+        return enqueueAccess(async () =>
+          withReadOnlyPersistence(filePath, options, (persistence) =>
+            persistence.checkpoints.listByRunId(runId),
+          ),
+        );
+      },
+
+      async save(checkpoint) {
+        return enqueueAccess(async () =>
+          withMutablePersistence(filePath, options, (persistence) =>
+            persistence.checkpoints.save(checkpoint),
+          ),
+        );
+      },
+    },
+
+    events: {
+      async append(nextEvents) {
+        return enqueueAccess(async () =>
+          withMutablePersistence(filePath, options, (persistence) =>
+            persistence.events.append(nextEvents),
+          ),
+        );
+      },
+
+      async listByRunId(runId) {
+        return enqueueAccess(async () =>
+          withReadOnlyPersistence(filePath, options, (persistence) =>
+            persistence.events.listByRunId(runId),
+          ),
+        );
+      },
+    },
+
+    runs: {
+      async get(runId) {
+        return enqueueAccess(async () =>
+          withReadOnlyPersistence(filePath, options, (persistence) =>
+            persistence.runs.get(runId),
+          ),
+        );
+      },
+
+      async list() {
+        return enqueueAccess(async () =>
+          withReadOnlyPersistence(filePath, options, (persistence) =>
+            persistence.runs.list(),
+          ),
+        );
+      },
+
+      async put(run) {
+        return enqueueAccess(async () =>
+          withMutablePersistence(filePath, options, (persistence) =>
+            persistence.runs.put(run),
+          ),
+        );
+      },
+    },
+  };
+
+  async function enqueueAccess<TValue>(
+    accessOperation: () => Promise<TValue>,
+  ): Promise<TValue> {
+    const pendingAccess = accessQueue.then(accessOperation, accessOperation);
+    accessQueue = pendingAccess.then(
+      () => undefined,
+      () => undefined,
+    );
+
+    return pendingAccess;
+  }
+}
+
+export async function createRuntimePersistenceSnapshot(
+  persistence: RuntimePersistence,
+): Promise<RuntimePersistenceSnapshot> {
+  const runs = await persistence.runs.list();
+  const approvals: ApprovalRequest[] = [];
+  const checkpoints: WorkflowCheckpoint[] = [];
+  const events: RuntimeEvent[] = [];
+
+  for (const run of runs) {
+    approvals.push(...(await persistence.approvals.listByRunId(run.id)));
+    checkpoints.push(...(await persistence.checkpoints.listByRunId(run.id)));
+    events.push(...(await persistence.events.listByRunId(run.id)));
+  }
+
+  return {
+    approvals: approvals.sort((left, right) =>
+      left.requestedAt.localeCompare(right.requestedAt),
+    ),
+    checkpoints: checkpoints.sort(
+      (left, right) => left.sequence - right.sequence,
+    ),
+    events: events.sort((left, right) => left.sequence - right.sequence),
+    runs: runs.sort((left, right) =>
+      left.createdAt.localeCompare(right.createdAt),
+    ),
+  };
+}
+
+async function withReadOnlyPersistence<TValue>(
+  filePath: string,
+  options: Pick<FileRuntimePersistenceOptions, "idGenerator">,
+  action: (persistence: RuntimePersistence) => Promise<TValue>,
+): Promise<TValue> {
+  const snapshot = await readRuntimePersistenceSnapshot(filePath);
+  const persistence = createInMemoryRuntimePersistence({
+    ...(options.idGenerator ? { idGenerator: options.idGenerator } : {}),
+    snapshot,
+  });
+
+  return action(persistence);
+}
+
+async function withMutablePersistence<TValue>(
+  filePath: string,
+  options: FileRuntimePersistenceOptions,
+  action: (persistence: RuntimePersistence) => Promise<TValue>,
+): Promise<TValue> {
+  await ensureParentDirectory(filePath);
+
+  return withFileLock(filePath, options, async () => {
+    const snapshot = await readRuntimePersistenceSnapshot(filePath);
+    const persistence = createInMemoryRuntimePersistence({
+      ...(options.idGenerator ? { idGenerator: options.idGenerator } : {}),
+      snapshot,
+    });
+    const result = await action(persistence);
+    const nextSnapshot = await createRuntimePersistenceSnapshot(persistence);
+
+    await writeRuntimePersistenceSnapshot(filePath, nextSnapshot);
+
+    return result;
+  });
+}
+
 function clone<TValue>(value: TValue): TValue {
   return structuredClone(value);
+}
+
+async function ensureParentDirectory(filePath: string): Promise<void> {
+  await mkdir(dirname(filePath), {
+    recursive: true,
+  });
+}
+
+async function readRuntimePersistenceSnapshot(
+  filePath: string,
+): Promise<RuntimePersistenceSnapshot> {
+  try {
+    const rawSnapshot = await readFile(filePath, "utf8");
+    const parsedSnapshot = JSON.parse(
+      rawSnapshot,
+    ) as RuntimePersistenceSnapshot;
+
+    return normalizeRuntimePersistenceSnapshot(parsedSnapshot);
+  } catch (error) {
+    if (isMissingFileError(error)) {
+      return createEmptyRuntimePersistenceSnapshot();
+    }
+
+    throw error;
+  }
+}
+
+function normalizeRuntimePersistenceSnapshot(
+  snapshot: RuntimePersistenceSnapshot,
+): RuntimePersistenceSnapshot {
+  return {
+    approvals: (snapshot.approvals ?? []).map((approval) => clone(approval)),
+    checkpoints: (snapshot.checkpoints ?? []).map((checkpoint) =>
+      clone(checkpoint),
+    ),
+    events: (snapshot.events ?? []).map((event) => clone(event)),
+    runs: (snapshot.runs ?? []).map((run) => clone(run)),
+  };
+}
+
+function createEmptyRuntimePersistenceSnapshot(): RuntimePersistenceSnapshot {
+  return {
+    approvals: [],
+    checkpoints: [],
+    events: [],
+    runs: [],
+  };
+}
+
+async function writeRuntimePersistenceSnapshot(
+  filePath: string,
+  snapshot: RuntimePersistenceSnapshot,
+): Promise<void> {
+  const tempPath = `${filePath}.tmp`;
+  const backupPath = `${filePath}.bak`;
+
+  await writeFile(tempPath, `${JSON.stringify(snapshot, null, 2)}\n`, "utf8");
+
+  try {
+    await rename(tempPath, filePath);
+
+    return;
+  } catch (error) {
+    if (!isExistingFileError(error)) {
+      throw error;
+    }
+  }
+
+  await rm(backupPath, {
+    force: true,
+  });
+
+  try {
+    await rename(filePath, backupPath);
+    await rename(tempPath, filePath);
+  } catch (error) {
+    await rm(tempPath, {
+      force: true,
+    });
+
+    try {
+      await rename(backupPath, filePath);
+    } catch (restoreError) {
+      if (!isMissingFileError(restoreError)) {
+        throw restoreError;
+      }
+    }
+
+    throw error;
+  }
+
+  await rm(backupPath, {
+    force: true,
+  });
+}
+
+async function withFileLock<TValue>(
+  filePath: string,
+  options: Pick<
+    FileRuntimePersistenceOptions,
+    "lockRetryDelayMs" | "lockTimeoutMs"
+  >,
+  action: () => Promise<TValue>,
+): Promise<TValue> {
+  const lockPath = `${filePath}.lock`;
+  const retryDelayMs = options.lockRetryDelayMs ?? 25;
+  const timeoutMs = options.lockTimeoutMs ?? 5_000;
+  const startedAt = Date.now();
+
+  while (true) {
+    try {
+      const lockHandle = await open(lockPath, "wx");
+
+      try {
+        return await action();
+      } finally {
+        await lockHandle.close();
+        await rm(lockPath, {
+          force: true,
+        });
+      }
+    } catch (error) {
+      if (!isExistingFileError(error)) {
+        throw error;
+      }
+
+      if (Date.now() - startedAt >= timeoutMs) {
+        throw new Error(
+          `Timed out waiting for runtime persistence lock at "${lockPath}".`,
+        );
+      }
+
+      await delay(retryDelayMs);
+    }
+  }
+}
+
+function delay(durationMs: number): Promise<void> {
+  return new Promise((resolveDelay) => {
+    setTimeout(resolveDelay, durationMs);
+  });
+}
+
+function isExistingFileError(error: unknown): boolean {
+  return error instanceof Error && "code" in error && error.code === "EEXIST";
+}
+
+function isMissingFileError(error: unknown): boolean {
+  return error instanceof Error && "code" in error && error.code === "ENOENT";
+}
+
+function seedInMemoryState(
+  state: {
+    readonly approvalsById: Map<ApprovalId, ApprovalRequest>;
+    readonly approvalsByRunId: Map<RunId, ApprovalId[]>;
+    readonly checkpoints: Map<RunId, WorkflowCheckpoint[]>;
+    readonly events: Map<RunId, RuntimeEvent[]>;
+    readonly runs: Map<RunId, WorkflowRun>;
+  },
+  snapshot?: RuntimePersistenceSnapshot,
+): void {
+  if (!snapshot) {
+    return;
+  }
+
+  for (const run of snapshot.runs) {
+    state.runs.set(run.id, clone(run));
+  }
+
+  for (const event of snapshot.events) {
+    state.events.set(event.runId, [
+      ...(state.events.get(event.runId) ?? []),
+      clone(event),
+    ]);
+  }
+
+  for (const checkpoint of snapshot.checkpoints) {
+    state.checkpoints.set(checkpoint.runId, [
+      ...(state.checkpoints.get(checkpoint.runId) ?? []),
+      clone(checkpoint),
+    ]);
+  }
+
+  for (const approval of snapshot.approvals) {
+    state.approvalsById.set(approval.id, clone(approval));
+    state.approvalsByRunId.set(approval.runId, [
+      ...(state.approvalsByRunId.get(approval.runId) ?? []),
+      approval.id,
+    ]);
+  }
 }
 
 function assertTransitionRunIds(

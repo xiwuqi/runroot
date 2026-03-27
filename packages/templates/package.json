@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Workflow template definitions for Runroot.",
+  "description": "Reusable workflow templates and template assembly helpers for Runroot.",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -18,7 +18,11 @@
     "dist"
   ],
   "dependencies": {
-    "@runroot/config": "workspace:*"
+    "@runroot/config": "workspace:*",
+    "@runroot/core-runtime": "workspace:*",
+    "@runroot/domain": "workspace:*",
+    "@runroot/mcp": "workspace:*",
+    "@runroot/tools": "workspace:*"
   },
   "scripts": {
     "build": "tsup src/index.ts --format esm,cjs --dts --out-dir dist --clean",
