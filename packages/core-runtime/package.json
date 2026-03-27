@@ -18,7 +18,10 @@
     "dist"
   ],
   "dependencies": {
-    "@runroot/config": "workspace:*"
+    "@runroot/config": "workspace:*",
+    "@runroot/domain": "workspace:*",
+    "@runroot/events": "workspace:*",
+    "@runroot/persistence": "workspace:*"
   },
   "scripts": {
     "build": "tsup src/index.ts --format esm,cjs --dts --out-dir dist --clean",

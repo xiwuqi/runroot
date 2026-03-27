@@ -16,7 +16,7 @@ Runroot focuses on:
 
 ## Current Status
 
-The repository is in Phase 1: scaffold and foundations. The goal of this phase is to create the monorepo, package boundaries, contributor docs, CI baseline, and quality gates without prematurely implementing runtime behavior.
+Phase 2 is complete. The repository now includes the first usable runtime core: run and step models, retry policy, checkpoint flow, event logging, and persistence contracts with a reference in-memory adapter. Runtime transitions persist `run + events + optional checkpoint` through one atomic boundary in the reference store. Tool execution, approvals, and replay views remain intentionally deferred to later phases.
 
 ## Planned Capabilities
 
@@ -66,8 +66,8 @@ The core rule is simple: runtime concerns stay in packages, and apps remain thin
 
 ## Roadmap
 
-The current roadmap is maintained in [docs/roadmap.md](D:/Runroot/docs/roadmap.md). The architecture baseline for this phase lives in [phase-0-blueprint.md](D:/Runroot/docs/architecture/phase-0-blueprint.md).
+The current roadmap is maintained in [docs/roadmap.md](./docs/roadmap.md). The architecture baseline for this phase lives in [phase-0-blueprint.md](./docs/architecture/phase-0-blueprint.md).
 
 ## Contributing
 
-See [CONTRIBUTING.md](D:/Runroot/CONTRIBUTING.md) for environment setup, coding standards, test expectations, and documentation requirements.
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for environment setup, coding standards, test expectations, and documentation requirements.

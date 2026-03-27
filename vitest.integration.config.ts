@@ -9,5 +9,6 @@ export default defineConfig({
   test: {
     environment: "node",
     include: [...integrationTestIncludes],
+    exclude: ["**/node_modules/**"],
   },
 });

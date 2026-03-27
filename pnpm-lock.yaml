@@ -71,9 +71,6 @@ importers:
       '@runroot/templates':
         specifier: workspace:*
         version: link:../../packages/templates
-      '@runroot/test-utils':
-        specifier: workspace:*
-        version: link:../../packages/test-utils
       '@runroot/tools':
         specifier: workspace:*
         version: link:../../packages/tools
@@ -122,6 +119,15 @@ importers:
       '@runroot/config':
         specifier: workspace:*
         version: link:../config
+      '@runroot/domain':
+        specifier: workspace:*
+        version: link:../domain
+      '@runroot/events':
+        specifier: workspace:*
+        version: link:../events
+      '@runroot/persistence':
+        specifier: workspace:*
+        version: link:../persistence
 
   packages/domain:
     dependencies:
@@ -134,6 +140,9 @@ importers:
       '@runroot/config':
         specifier: workspace:*
         version: link:../config
+      '@runroot/domain':
+        specifier: workspace:*
+        version: link:../domain
 
   packages/mcp:
     dependencies:
@@ -152,6 +161,12 @@ importers:
       '@runroot/config':
         specifier: workspace:*
         version: link:../config
+      '@runroot/domain':
+        specifier: workspace:*
+        version: link:../domain
+      '@runroot/events':
+        specifier: workspace:*
+        version: link:../events
 
   packages/replay:
     dependencies:
