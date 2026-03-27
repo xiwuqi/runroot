@@ -18,6 +18,7 @@
     "dist"
   ],
   "dependencies": {
+    "@runroot/approvals": "workspace:*",
     "@runroot/config": "workspace:*",
     "@runroot/domain": "workspace:*",
     "@runroot/events": "workspace:*"

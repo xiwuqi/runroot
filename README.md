@@ -16,7 +16,14 @@ Runroot focuses on:
 
 ## Current Status
 
-Phase 3 is complete. The repository now includes the Phase 2 runtime core plus a shared tool layer: tool contracts, registry, invocation boundary, allowlist-based permission gating, and a minimal MCP adapter that maps discovered MCP tools into the internal tool model. Runtime steps can invoke tools through a shared `ToolInvoker` seam without depending on concrete integrations. Approval flows and replay views remain intentionally deferred to later phases.
+Phase 4 is complete. The repository now includes the Phase 2 runtime core, the Phase 3 tool layer, and the first approval and replay foundations:
+
+- steps can request approval through a dedicated runtime seam
+- pending approvals are persisted together with paused run state and approval events
+- operator code can record approval decisions, query approval state, and resume approved runs
+- replay timelines are projected from persisted runtime events
+
+Tool invocation hooks remain in-memory hooks inside `@runroot/tools`; they are not yet part of the shared replay source of truth.
 
 ## Planned Capabilities
 
@@ -58,6 +65,8 @@ Runroot is organized as a TypeScript monorepo:
 The core rule is simple: runtime concerns stay in packages, and apps remain thin transport and presentation layers.
 
 Phase 3 adds one more rule: runtime can depend on the shared tool invocation contract, but concrete tool implementations and MCP translation stay outside `@runroot/core-runtime`.
+
+Phase 4 adds a second rule: approval facts enter the shared runtime event stream, while tool lifecycle hooks remain package-level hooks until a later phase proves they belong in persisted replay history.
 
 ## Example Use Cases
 

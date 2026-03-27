@@ -126,4 +126,106 @@ describe("@runroot/persistence in-memory store", () => {
     expect(await persistence.events.listByRunId(run.id)).toEqual([]);
     expect(await persistence.checkpoints.listByRunId(run.id)).toEqual([]);
   });
+
+  it("stores approval requests and decisions through the atomic transition boundary", async () => {
+    const run = createRun("run_approval");
+    const stepId = run.steps[0]?.id;
+    const persistence = createInMemoryRuntimePersistence({
+      idGenerator: (prefix) => `${prefix}_fixed`,
+    });
+
+    await persistence.commitTransition({
+      approvalRequest: {
+        id: "approval_1",
+        note: "Approve release",
+        requestedAt: "2026-03-27T00:00:05.000Z",
+        reviewer: {
+          id: "ops_1",
+        },
+        runId: run.id,
+        ...(stepId ? { stepId } : {}),
+      },
+      events: [
+        {
+          name: "approval.requested",
+          occurredAt: "2026-03-27T00:00:05.000Z",
+          payload: {
+            approvalId: "approval_1",
+            reviewerId: "ops_1",
+            status: "pending",
+          },
+          runId: run.id,
+          ...(stepId ? { stepId } : {}),
+        },
+      ],
+      run,
+    });
+
+    const decisionResult = await persistence.commitTransition({
+      approvalDecision: {
+        actor: {
+          id: "ops_1",
+        },
+        approvalId: "approval_1",
+        decidedAt: "2026-03-27T00:01:00.000Z",
+        decision: "approved",
+      },
+      events: [
+        {
+          name: "approval.approved",
+          occurredAt: "2026-03-27T00:01:00.000Z",
+          payload: {
+            actorId: "ops_1",
+            approvalId: "approval_1",
+            decision: "approved",
+            status: "approved",
+          },
+          runId: run.id,
+          ...(stepId ? { stepId } : {}),
+        },
+      ],
+      run,
+    });
+
+    expect(
+      (await persistence.approvals.getPendingByRunId(run.id)) ?? null,
+    ).toBe(null);
+    expect(await persistence.approvals.listByRunId(run.id)).toHaveLength(1);
+    expect(decisionResult.approval?.status).toBe("approved");
+    expect(
+      (await persistence.events.listByRunId(run.id)).map((event) => event.name),
+    ).toEqual(["approval.requested", "approval.approved"]);
+  });
+
+  it("does not persist partial state when approval decisions reference an unknown approval", async () => {
+    const run = createRun("run_missing_approval");
+    const persistence = createInMemoryRuntimePersistence();
+
+    await expect(
+      persistence.commitTransition({
+        approvalDecision: {
+          approvalId: "approval_missing",
+          decidedAt: "2026-03-27T00:01:00.000Z",
+          decision: "rejected",
+        },
+        events: [
+          {
+            name: "approval.rejected",
+            occurredAt: "2026-03-27T00:01:00.000Z",
+            payload: {
+              approvalId: "approval_missing",
+              decision: "rejected",
+              status: "rejected",
+            },
+            runId: run.id,
+          },
+        ],
+        run,
+      }),
+    ).rejects.toThrow('Approval "approval_missing" was not found.');
+
+    expect(await persistence.runs.get(run.id)).toBeUndefined();
+    expect(await persistence.events.listByRunId(run.id)).toEqual([]);
+    expect(await persistence.approvals.listByRunId(run.id)).toEqual([]);
+  });
 });

@@ -1,3 +1,4 @@
+import type { ApprovalDecisionValue, ApprovalStatus } from "@runroot/approvals";
 import type {
   CheckpointReason,
   FailureDetails,
@@ -9,14 +10,20 @@ import type {
 } from "@runroot/domain";
 
 export type RuntimeEventName =
+  | "approval.approved"
+  | "approval.cancelled"
+  | "approval.rejected"
+  | "approval.requested"
   | "checkpoint.saved"
   | "run.created"
+  | "run.cancelled"
   | "run.failed"
   | "run.paused"
   | "run.queued"
   | "run.resumed"
   | "run.started"
   | "run.succeeded"
+  | "step.cancelled"
   | "step.completed"
   | "step.failed"
   | "step.paused"
@@ -25,6 +32,29 @@ export type RuntimeEventName =
   | "step.started";
 
 export interface RuntimeEventPayloadMap {
+  "approval.approved": {
+    readonly actorId?: string;
+    readonly approvalId: string;
+    readonly decision: ApprovalDecisionValue;
+    readonly status: ApprovalStatus;
+  };
+  "approval.cancelled": {
+    readonly actorId?: string;
+    readonly approvalId: string;
+    readonly decision: ApprovalDecisionValue;
+    readonly status: ApprovalStatus;
+  };
+  "approval.rejected": {
+    readonly actorId?: string;
+    readonly approvalId: string;
+    readonly decision: ApprovalDecisionValue;
+    readonly status: ApprovalStatus;
+  };
+  "approval.requested": {
+    readonly approvalId: string;
+    readonly reviewerId?: string;
+    readonly status: ApprovalStatus;
+  };
   "checkpoint.saved": {
     readonly attempt: number;
     readonly checkpointId: string;
@@ -33,6 +63,11 @@ export interface RuntimeEventPayloadMap {
   };
   "run.created": {
     readonly definitionId: string;
+    readonly status: RunStatus;
+  };
+  "run.cancelled": {
+    readonly approvalId?: string;
+    readonly reason: string;
     readonly status: RunStatus;
   };
   "run.failed": {
@@ -59,6 +94,11 @@ export interface RuntimeEventPayloadMap {
   "run.succeeded": {
     readonly completedStepCount: number;
     readonly status: RunStatus;
+  };
+  "step.cancelled": {
+    readonly attempt: number;
+    readonly reason: string;
+    readonly status: StepStatus;
   };
   "step.completed": {
     readonly attempt: number;

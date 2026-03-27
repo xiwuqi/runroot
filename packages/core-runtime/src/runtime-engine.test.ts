@@ -221,4 +221,24 @@ describe("@runroot/core-runtime createRun", () => {
       `Run "${run.id}" is not paused and cannot be resumed.`,
     );
   });
+
+  it("rejects approval decisions for unknown approval ids", async () => {
+    const persistence = createInMemoryRuntimePersistence();
+    const runtime = new RuntimeEngine({
+      idGenerator: createIdGenerator(),
+      now: createClock(),
+      persistence,
+    });
+
+    await expect(
+      runtime.decideApproval("approval_missing", {
+        decision: "approved",
+      }),
+    ).rejects.toThrow(RuntimeExecutionError);
+    await expect(
+      runtime.decideApproval("approval_missing", {
+        decision: "approved",
+      }),
+    ).rejects.toThrow('Approval "approval_missing" was not found.');
+  });
 });

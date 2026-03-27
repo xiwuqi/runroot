@@ -7,6 +7,7 @@ import {
 import { describe, expect, it } from "vitest";
 
 import {
+  awaitApproval,
   completeStep,
   pauseStep,
   type RuntimeStepContext,
@@ -269,5 +270,147 @@ describe("@runroot/core-runtime integration", () => {
         tool: "echo",
       },
     });
+  });
+
+  it("waits for approval, records the decision, and resumes only after approval", async () => {
+    const persistence = createInMemoryRuntimePersistence();
+    const runtime = new RuntimeEngine({
+      approvalIdGenerator: () => "approval_1",
+      idGenerator: createIdGenerator(),
+      now: createClock(),
+      persistence,
+    });
+    let gateExecutions = 0;
+    const definition = {
+      id: "workflow.approval.approved",
+      name: "Approval workflow",
+      steps: [
+        {
+          execute: (context: RuntimeStepContext) => {
+            gateExecutions += 1;
+
+            if (!context.checkpoint?.payload) {
+              return awaitApproval({
+                checkpointData: {
+                  approved: true,
+                },
+                note: "Approve deployment",
+                reviewer: {
+                  id: "ops_1",
+                },
+              });
+            }
+
+            return completeStep({
+              gateExecutions,
+              resumed: true,
+            });
+          },
+          key: "gate",
+          name: "Gate",
+        },
+        {
+          execute: () =>
+            completeStep({
+              status: "done",
+            }),
+          key: "finalize",
+          name: "Finalize",
+        },
+      ],
+      version: "0.1.0",
+    };
+
+    const run = await runtime.createRun(definition, {
+      trigger: "approval-test",
+    });
+    const pausedRun = await runtime.executeRun(definition, run.id);
+    const pendingApproval = await runtime.getPendingApproval(run.id);
+
+    expect(pausedRun.status).toBe("paused");
+    expect(pausedRun.pauseReason).toBe("awaiting_approval");
+    expect(pendingApproval?.status).toBe("pending");
+    expect(await runtime.getApprovals(run.id)).toHaveLength(1);
+
+    await expect(runtime.resumeRun(definition, run.id)).rejects.toThrow(
+      `Run "${run.id}" is waiting on approval "approval_1"`,
+    );
+
+    const approvalDecision = await runtime.decideApproval("approval_1", {
+      actor: {
+        id: "ops_1",
+      },
+      decision: "approved",
+      note: "Looks good",
+    });
+
+    expect(approvalDecision.approval.status).toBe("approved");
+    expect((await runtime.getPendingApproval(run.id)) ?? null).toBe(null);
+
+    const resumedRun = await runtime.resumeRun(definition, run.id);
+    const events = await runtime.getRunEvents(run.id);
+
+    expect(resumedRun.status).toBe("succeeded");
+    expect(resumedRun.output).toEqual({
+      finalize: {
+        status: "done",
+      },
+      gate: {
+        gateExecutions: 2,
+        resumed: true,
+      },
+    });
+    expect(events.map((event) => event.name)).toContain("approval.requested");
+    expect(events.map((event) => event.name)).toContain("approval.approved");
+    expect(events.map((event) => event.name)).toContain("run.resumed");
+  });
+
+  it("cancels the run when an approval is rejected", async () => {
+    const persistence = createInMemoryRuntimePersistence();
+    const runtime = new RuntimeEngine({
+      approvalIdGenerator: () => "approval_reject",
+      idGenerator: createIdGenerator(),
+      now: createClock(),
+      persistence,
+    });
+    const definition = {
+      id: "workflow.approval.rejected",
+      name: "Rejected approval workflow",
+      steps: [
+        {
+          execute: () =>
+            awaitApproval({
+              note: "Approve release",
+            }),
+          key: "gate",
+          name: "Gate",
+        },
+      ],
+      version: "0.1.0",
+    };
+
+    const run = await runtime.createRun(definition, {
+      trigger: "approval-rejected",
+    });
+
+    await runtime.executeRun(definition, run.id);
+
+    const decision = await runtime.decideApproval("approval_reject", {
+      actor: {
+        id: "ops_2",
+      },
+      decision: "rejected",
+      note: "Not safe",
+    });
+    const events = await runtime.getRunEvents(run.id);
+
+    expect(decision.run.status).toBe("cancelled");
+    expect(decision.run.steps[0]?.status).toBe("cancelled");
+    expect(events.map((event) => event.name)).toContain("approval.rejected");
+    expect(events.map((event) => event.name)).toContain("run.cancelled");
+
+    await expect(runtime.resumeRun(definition, run.id)).rejects.toThrow(
+      `Run "${run.id}" is not paused and cannot be resumed.`,
+    );
   });
 });

@@ -76,7 +76,9 @@ export function transitionRunStatus(
       ? { startedAt: transitionedAt }
       : {}),
     ...(nextStatus === "paused" ? { pausedAt: transitionedAt } : {}),
-    ...(nextStatus === "succeeded" || nextStatus === "failed"
+    ...(nextStatus === "cancelled" ||
+    nextStatus === "succeeded" ||
+    nextStatus === "failed"
       ? { completedAt: transitionedAt }
       : {}),
     ...(nextStatus === "failed" && options.failure

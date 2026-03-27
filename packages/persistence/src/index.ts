@@ -1,6 +1,7 @@
 import type { PackageBoundary } from "@runroot/config";
 
 export {
+  type ApprovalRepository,
   type CheckpointRepository,
   type CheckpointWrite,
   createInMemoryRuntimePersistence,

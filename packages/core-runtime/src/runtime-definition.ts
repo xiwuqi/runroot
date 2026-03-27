@@ -1,3 +1,4 @@
+import type { ApprovalActor } from "@runroot/approvals";
 import type {
   JsonValue,
   RetryPolicyInput,
@@ -18,7 +19,21 @@ export interface PausedStepResult {
   readonly reason: string;
 }
 
-export type StepExecutionResult = CompletedStepResult | PausedStepResult;
+export interface AwaitApprovalInput {
+  readonly checkpointData?: JsonValue;
+  readonly note?: string;
+  readonly requestedBy?: ApprovalActor;
+  readonly reviewer?: ApprovalActor;
+}
+
+export interface AwaitingApprovalStepResult extends AwaitApprovalInput {
+  readonly kind: "awaiting_approval";
+}
+
+export type StepExecutionResult =
+  | AwaitingApprovalStepResult
+  | CompletedStepResult
+  | PausedStepResult;
 
 export interface RuntimeStepContext {
   readonly attempt: number;
@@ -63,5 +78,21 @@ export function pauseStep(
     ...(checkpointData === undefined ? {} : { checkpointData }),
     kind: "paused",
     reason,
+  };
+}
+
+export function awaitApproval(
+  input: AwaitApprovalInput = {},
+): AwaitingApprovalStepResult {
+  return {
+    ...(input.checkpointData === undefined
+      ? {}
+      : { checkpointData: input.checkpointData }),
+    kind: "awaiting_approval",
+    ...(input.note === undefined ? {} : { note: input.note }),
+    ...(input.requestedBy === undefined
+      ? {}
+      : { requestedBy: input.requestedBy }),
+    ...(input.reviewer === undefined ? {} : { reviewer: input.reviewer }),
   };
 }
