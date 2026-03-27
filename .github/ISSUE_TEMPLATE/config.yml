@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Contributor onboarding
+    url: https://github.com/xiwuqi/runroot/blob/main/docs/guides/contributor-onboarding.md
+    about: Start here if you are new to the repository and need the docs map, workflow, and boundaries.
+  - name: Good first issues
+    url: https://github.com/xiwuqi/runroot/blob/main/docs/guides/good-first-issues.md
+    about: Read this before picking a first contribution or labeling work for new contributors.
+  - name: Security policy
+    url: https://github.com/xiwuqi/runroot/blob/main/SECURITY.md
+    about: Report sensitive security issues privately instead of opening a public issue.
