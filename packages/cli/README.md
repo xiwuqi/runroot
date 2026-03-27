@@ -1,5 +1,20 @@
 # @runroot/cli
 
-Reserved for the operator-facing command line interface.
+Operator-facing command line interface for local Runroot workflows.
 
-Phase 1 only reserves the package name and documents its responsibility. Usable CLI commands arrive in Phase 5.
+Phase 5 ships:
+
+- `templates list`
+- `runs start`
+- `runs show`
+- `runs resume`
+- `runs timeline`
+- `approvals pending`
+- `approvals show`
+- `approvals decide`
+
+Example:
+
+```bash
+pnpm --filter @runroot/cli dev runs start shell-runbook-flow --input-file examples/phase-5/shell-runbook.json
+```

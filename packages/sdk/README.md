@@ -1,5 +1,11 @@
 # @runroot/sdk
 
-Reserved for a future programmatic SDK surface once runtime and API contracts stabilize.
+Programmatic operator service surface for Runroot.
 
-Phase 1 only establishes the package boundary to avoid later naming churn.
+Phase 5 uses this package to keep API and CLI thin. The shared service:
+
+- loads the template catalog
+- validates template input
+- starts and resumes workflow runs
+- exposes approval and replay queries
+- persists local operator state through the runtime persistence seam

@@ -16,12 +16,13 @@ Runroot focuses on:
 
 ## Current Status
 
-Phase 4 is complete. The repository now includes the Phase 2 runtime core, the Phase 3 tool layer, and the first approval and replay foundations:
+Phase 5 is complete. The repository now includes:
 
-- steps can request approval through a dedicated runtime seam
-- pending approvals are persisted together with paused run state and approval events
-- operator code can record approval decisions, query approval state, and resume approved runs
-- replay timelines are projected from persisted runtime events
+- the Phase 2 runtime core for runs, steps, checkpoints, and retries
+- the Phase 3 tool layer and minimal MCP adapter
+- the Phase 4 approval and replay foundations
+- a thin operator API and CLI
+- the first real workflow templates for GitHub, Slack, and shell automation
 
 Tool invocation hooks remain in-memory hooks inside `@runroot/tools`; they are not yet part of the shared replay source of truth.
 
@@ -39,8 +40,14 @@ Tool invocation hooks remain in-memory hooks inside `@runroot/tools`; they are n
 ```bash
 pnpm install
 pnpm bootstrap
-pnpm infra:up
-pnpm dev
+pnpm --filter @runroot/api dev
+```
+
+Operator examples:
+
+```bash
+pnpm --filter @runroot/cli dev templates list
+pnpm --filter @runroot/cli dev runs start shell-runbook-flow --input-file examples/phase-5/shell-runbook.json
 ```
 
 Quality commands:
@@ -68,12 +75,21 @@ Phase 3 adds one more rule: runtime can depend on the shared tool invocation con
 
 Phase 4 adds a second rule: approval facts enter the shared runtime event stream, while tool lifecycle hooks remain package-level hooks until a later phase proves they belong in persisted replay history.
 
+Phase 5 adds a third rule: API and CLI remain thin operator surfaces, while workflow templates are assembled in packages and reused through a shared operator service.
+
 ## Example Use Cases
 
 - GitHub issue triage with optional human approval
 - Pull request review workflows with durable checkpoints
 - Slack approval and resume for sensitive operations
 - Shell-driven runbooks with audit trails
+
+## Guides
+
+- [Quickstart](./docs/guides/quickstart.md)
+- [API Usage](./docs/guides/api-usage.md)
+- [CLI Usage](./docs/guides/cli-usage.md)
+- [Templates](./docs/guides/templates.md)
 
 ## Roadmap
 

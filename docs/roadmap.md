@@ -38,6 +38,8 @@ Status: completed
 - expose operator APIs and a usable CLI
 - add end-to-end workflow templates for GitHub, Slack, and shell scenarios
 
+Status: completed
+
 ## Phase 6: Web Console And Observability
 
 - add run lists, run detail, approval queue, and timeline views
