@@ -21,7 +21,6 @@
     "@runroot/replay": "workspace:*",
     "@runroot/sdk": "workspace:*",
     "@runroot/templates": "workspace:*",
-    "@runroot/test-utils": "workspace:*",
     "@runroot/tools": "workspace:*",
     "fastify": "^5.8.4",
     "pino": "^10.3.1"

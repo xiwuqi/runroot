@@ -7,11 +7,15 @@
 - provide a minimal Fastify API and Next.js web shell
 - make install, bootstrap, lint, typecheck, test, integration test, and build reproducible
 
+Status: completed
+
 ## Phase 2: Runtime Core
 
 - implement run and step models
 - add state transitions, retry policy, checkpoints, and event logging
 - introduce persistence contracts and local adapters
+
+Status: completed
 
 ## Phase 3: Tool Layer And MCP
 

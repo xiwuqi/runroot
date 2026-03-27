@@ -11,7 +11,6 @@ import { persistencePackageBoundary } from "@runroot/persistence";
 import { replayPackageBoundary } from "@runroot/replay";
 import { sdkPackageBoundary } from "@runroot/sdk";
 import { templatesPackageBoundary } from "@runroot/templates";
-import { findDuplicateBoundaryNames } from "@runroot/test-utils";
 import { toolsPackageBoundary } from "@runroot/tools";
 import Fastify from "fastify";
 
@@ -29,6 +28,19 @@ export const packageBoundaries = [
   cliPackageBoundary,
   templatesPackageBoundary,
 ] as const;
+
+function findDuplicateBoundaryNames(names: readonly string[]): string[] {
+  const counts = new Map<string, number>();
+
+  for (const name of names) {
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+
+  return [...counts.entries()]
+    .filter(([, count]) => count > 1)
+    .map(([name]) => name)
+    .sort();
+}
 
 export function buildServer() {
   const app = Fastify({
@@ -55,7 +67,9 @@ export function buildServer() {
   app.get("/manifest/packages", async () => ({
     packages: packageBoundaries,
     integrity: {
-      duplicateNames: findDuplicateBoundaryNames(packageBoundaries),
+      duplicateNames: findDuplicateBoundaryNames(
+        packageBoundaries.map((boundary) => boundary.name),
+      ),
     },
   }));
 

@@ -1,5 +1,22 @@
 import type { PackageBoundary } from "@runroot/config";
 
+export {
+  type CompletedStepResult,
+  completeStep,
+  type PausedStepResult,
+  pauseStep,
+  type RuntimeStepContext,
+  type StepExecutionResult,
+  type WorkflowDefinition,
+  type WorkflowStepDefinition,
+} from "./runtime-definition";
+export {
+  type CreateRunOptions,
+  RuntimeEngine,
+  type RuntimeEngineOptions,
+  RuntimeExecutionError,
+} from "./runtime-engine";
+
 export const coreRuntimePackageBoundary = {
   name: "@runroot/core-runtime",
   kind: "package",

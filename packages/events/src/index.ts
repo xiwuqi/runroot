@@ -1,5 +1,13 @@
 import type { PackageBoundary } from "@runroot/config";
 
+export type {
+  CheckpointPayload,
+  RuntimeEvent,
+  RuntimeEventInput,
+  RuntimeEventName,
+  RuntimeEventPayloadMap,
+} from "./runtime-events";
+
 export const eventsPackageBoundary = {
   name: "@runroot/events",
   kind: "package",
