@@ -23,5 +23,10 @@ export const coreRuntimePackageBoundary = {
   phaseOwned: 2,
   responsibility:
     "Framework-independent runtime orchestration and state transition execution.",
-  publicSurface: ["runtime engine", "checkpoint coordination", "retry policy"],
+  publicSurface: [
+    "runtime engine",
+    "checkpoint coordination",
+    "retry policy",
+    "tool invoker seam",
+  ],
 } as const satisfies PackageBoundary;

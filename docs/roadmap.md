@@ -23,6 +23,8 @@ Status: completed
 - integrate MCP client adapters
 - ship local and MCP-backed tool examples
 
+Status: completed
+
 ## Phase 4: Human Approval And Replay
 
 - add approval request and decision flows

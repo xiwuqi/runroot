@@ -5,6 +5,7 @@ import type {
   WorkflowRun,
   WorkflowStep,
 } from "@runroot/domain";
+import type { ToolInvoker } from "@runroot/tools";
 
 export interface CompletedStepResult {
   readonly kind: "completed";
@@ -25,6 +26,7 @@ export interface RuntimeStepContext {
   readonly input: JsonValue;
   readonly run: WorkflowRun;
   readonly step: WorkflowStep;
+  readonly tools: ToolInvoker;
 }
 
 export interface WorkflowStepDefinition {

@@ -1,7 +1,16 @@
 import { createInMemoryRuntimePersistence } from "@runroot/persistence";
+import {
+  createEchoTool,
+  createRegistryToolInvoker,
+  createToolRegistry,
+} from "@runroot/tools";
 import { describe, expect, it } from "vitest";
 
-import { pauseStep } from "./runtime-definition";
+import {
+  completeStep,
+  pauseStep,
+  type RuntimeStepContext,
+} from "./runtime-definition";
 import { RuntimeEngine } from "./runtime-engine";
 
 function createClock() {
@@ -202,5 +211,63 @@ describe("@runroot/core-runtime integration", () => {
     expect(failedRun.status).toBe("failed");
     expect(failedRun.steps[0]?.attempts).toBe(2);
     expect(events.some((event) => event.name === "run.failed")).toBe(true);
+  });
+
+  it("invokes tools through the shared tool invoker seam", async () => {
+    const persistence = createInMemoryRuntimePersistence();
+    const registry = createToolRegistry([createEchoTool()]);
+    const runtime = new RuntimeEngine({
+      idGenerator: createIdGenerator(),
+      now: createClock(),
+      persistence,
+      toolInvoker: createRegistryToolInvoker({
+        registry,
+      }),
+    });
+    const definition = {
+      id: "workflow.tools.echo",
+      name: "Tool workflow",
+      steps: [
+        {
+          execute: async (context: RuntimeStepContext) => {
+            const result = await context.tools.invoke(
+              {
+                input: {
+                  message: "ready",
+                  prefix: "tool:",
+                },
+                tool: {
+                  kind: "name",
+                  value: "echo",
+                },
+              },
+              {
+                runId: context.run.id,
+                source: "runtime",
+                stepId: context.step.id,
+              },
+            );
+
+            return completeStep(result.output);
+          },
+          key: "prepare",
+          name: "Prepare",
+        },
+      ],
+      version: "0.1.0",
+    };
+
+    const run = await runtime.createRun(definition, {
+      trigger: "tool-test",
+    });
+    const completedRun = await runtime.executeRun(definition, run.id);
+
+    expect(completedRun.status).toBe("succeeded");
+    expect(completedRun.output).toEqual({
+      prepare: {
+        echoed: "tool:ready",
+        tool: "echo",
+      },
+    });
   });
 });

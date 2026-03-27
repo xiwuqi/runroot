@@ -14,4 +14,13 @@ Apps can depend on packages. Packages must not depend on apps.
 
 ## Current Phase
 
-In Phase 1, only the transport skeleton, workspace layout, and documentation baseline exist. Runtime behavior, storage, tool execution, and replay logic are intentionally deferred to later phases.
+Phase 3 extends the repository from a runtime-only baseline to a runtime plus tool layer baseline.
+
+Current repository shape:
+
+- `@runroot/domain`, `@runroot/events`, `@runroot/persistence`, and `@runroot/core-runtime` provide workflow execution primitives
+- `@runroot/tools` adds the shared tool contract, registry, invocation, and permission seam
+- `@runroot/mcp` adapts minimal MCP tool discovery and invocation into the shared tool contract
+- `apps/*` remain thin shells and still do not own runtime or tool implementation details
+
+Approval workflows, replay views, and operator-facing tool management remain deferred to later phases.
