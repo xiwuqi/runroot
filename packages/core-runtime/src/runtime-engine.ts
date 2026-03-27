@@ -17,6 +17,7 @@ import {
 } from "@runroot/domain";
 import type { RuntimeEventInput } from "@runroot/events";
 import type { CheckpointWrite, RuntimePersistence } from "@runroot/persistence";
+import { createUnavailableToolInvoker, type ToolInvoker } from "@runroot/tools";
 
 import {
   completeStep,
@@ -41,12 +42,14 @@ export interface RuntimeEngineOptions {
   readonly idGenerator?: (prefix: "run" | "step") => string;
   readonly now?: () => string;
   readonly persistence: RuntimePersistence;
+  readonly toolInvoker?: ToolInvoker;
 }
 
 export class RuntimeEngine {
   readonly #idGenerator: (prefix: "run" | "step") => string;
   readonly #now: () => string;
   readonly #persistence: RuntimePersistence;
+  readonly #toolInvoker: ToolInvoker;
 
   constructor(options: RuntimeEngineOptions) {
     this.#idGenerator =
@@ -54,6 +57,7 @@ export class RuntimeEngine {
       ((prefix: "run" | "step") => `${prefix}_${randomUUID()}`);
     this.#now = options.now ?? (() => new Date().toISOString());
     this.#persistence = options.persistence;
+    this.#toolInvoker = options.toolInvoker ?? createUnavailableToolInvoker();
   }
 
   async createRun(
@@ -424,7 +428,12 @@ export class RuntimeEngine {
       try {
         const executionResult = normalizeExecutionResult(
           await stepDefinition.execute(
-            createStepContext(run, runningStep, checkpointForStep),
+            createStepContext(
+              run,
+              runningStep,
+              this.#toolInvoker,
+              checkpointForStep,
+            ),
           ),
         );
 
@@ -719,6 +728,7 @@ export class RuntimeEngine {
 function createStepContext(
   run: WorkflowRun,
   step: WorkflowStep,
+  tools: ToolInvoker,
   checkpoint?: WorkflowCheckpoint,
 ): RuntimeStepContext {
   return {
@@ -727,6 +737,7 @@ function createStepContext(
     input: run.input,
     run,
     step,
+    tools,
   };
 }
 
