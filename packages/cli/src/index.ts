@@ -48,13 +48,14 @@ export async function runCli(
     return 0;
   }
 
-  const workspacePath = resolveWorkspacePath(
-    getStringFlag(flags, "workspace") ??
-      options.env?.RUNROOT_WORKSPACE_PATH ??
-      (options.cwd ? `${options.cwd}/.runroot/workspace.json` : undefined),
-  );
+  const explicitWorkspacePath =
+    getStringFlag(flags, "workspace") ?? options.env?.RUNROOT_WORKSPACE_PATH;
+  const workspacePath = explicitWorkspacePath
+    ? resolveWorkspacePath(explicitWorkspacePath, options.env)
+    : undefined;
   const service = createRunrootOperatorService({
-    workspacePath,
+    ...(options.env ? { env: options.env } : {}),
+    ...(workspacePath ? { workspacePath } : {}),
   });
 
   try {
@@ -64,7 +65,7 @@ export async function runCli(
       case "templates:list":
         return writeJson(io.stdout.write, {
           templates: service.listTemplates(),
-          workspacePath,
+          workspacePath: service.getWorkspacePath(),
         });
       case "runs:start":
         if (!subject) {
@@ -76,7 +77,7 @@ export async function runCli(
             input: await resolveCommandInput(flags),
             templateId: subject,
           }),
-          workspacePath,
+          workspacePath: service.getWorkspacePath(),
         });
       case "runs:show":
         if (!subject) {

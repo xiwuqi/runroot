@@ -1,6 +1,18 @@
 import type { PackageBoundary } from "@runroot/config";
 
 export {
+  type ConfiguredRuntimePersistenceOptions,
+  createConfiguredRuntimePersistence,
+  createPostgresRuntimePersistence,
+  createSqliteRuntimePersistence,
+  type MigrationResult,
+  migratePostgresPersistence,
+  migrateSqlitePersistence,
+  type PostgresRuntimePersistenceOptions,
+  type SqliteRuntimePersistenceOptions,
+} from "./database-store";
+export type { PersistenceDialect } from "./migrations";
+export {
   type ApprovalRepository,
   type CheckpointRepository,
   type CheckpointWrite,

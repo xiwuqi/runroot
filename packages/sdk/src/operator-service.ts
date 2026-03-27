@@ -1,6 +1,9 @@
-import { resolve } from "node:path";
-
 import type { ApprovalActor, ApprovalRequest } from "@runroot/approvals";
+import {
+  type PersistenceDriver,
+  resolvePersistenceConfig,
+  resolveWorkspacePath,
+} from "@runroot/config";
 import {
   type ApprovalDecisionOutcome,
   RuntimeEngine,
@@ -8,7 +11,7 @@ import {
 } from "@runroot/core-runtime";
 import type { JsonValue, WorkflowRun } from "@runroot/domain";
 import {
-  createFileRuntimePersistence,
+  createConfiguredRuntimePersistence,
   type RuntimePersistence,
 } from "@runroot/persistence";
 import {
@@ -67,9 +70,13 @@ export interface RunrootOperatorService {
 
 export interface RunrootOperatorServiceOptions {
   readonly approvalIdGenerator?: () => string;
+  readonly databaseUrl?: string;
+  readonly env?: Readonly<Record<string, string | undefined>>;
   readonly idGenerator?: (prefix: "run" | "step") => string;
   readonly now?: () => string;
   readonly persistence?: RuntimePersistence;
+  readonly persistenceDriver?: PersistenceDriver;
+  readonly sqlitePath?: string;
   readonly templates?: TemplateCatalog;
   readonly workspacePath?: string;
 }
@@ -79,10 +86,25 @@ export function createRunrootOperatorService(
 ): RunrootOperatorService {
   const templateRuntime = createTemplateRuntimeBundle();
   const templates = options.templates ?? templateRuntime.templates;
+  const persistenceConfig = resolvePersistenceConfig({
+    ...(options.databaseUrl ? { databaseUrl: options.databaseUrl } : {}),
+    ...(options.env ? { env: options.env } : {}),
+    ...(options.persistenceDriver ? { driver: options.persistenceDriver } : {}),
+    ...(options.sqlitePath ? { sqlitePath: options.sqlitePath } : {}),
+    ...(options.workspacePath ? { workspacePath: options.workspacePath } : {}),
+  });
   const persistence =
     options.persistence ??
-    createFileRuntimePersistence({
-      filePath: resolveWorkspacePath(options.workspacePath),
+    createConfiguredRuntimePersistence({
+      ...(options.databaseUrl ? { databaseUrl: options.databaseUrl } : {}),
+      ...(options.env ? { env: options.env } : {}),
+      ...(options.persistenceDriver
+        ? { driver: options.persistenceDriver }
+        : {}),
+      ...(options.sqlitePath ? { sqlitePath: options.sqlitePath } : {}),
+      ...(options.workspacePath
+        ? { workspacePath: options.workspacePath }
+        : {}),
     });
   const runtime = new RuntimeEngine({
     ...(options.approvalIdGenerator
@@ -96,7 +118,7 @@ export function createRunrootOperatorService(
   const replay = createRunTimelineQuery({
     listByRunId: (runId) => runtime.getRunEvents(runId),
   });
-  const workspacePath = resolveWorkspacePath(options.workspacePath);
+  const persistenceLocation = persistenceConfig.location;
 
   return {
     async decideApproval(approvalId, input) {
@@ -158,7 +180,7 @@ export function createRunrootOperatorService(
     },
 
     getWorkspacePath() {
-      return workspacePath;
+      return persistenceLocation;
     },
 
     async listRuns() {
@@ -207,14 +229,6 @@ export function createRunTimelineService(
       return reader.getTimeline(runId);
     },
   };
-}
-
-export function resolveWorkspacePath(workspacePath?: string): string {
-  return resolve(
-    workspacePath ??
-      process.env.RUNROOT_WORKSPACE_PATH ??
-      ".runroot/workspace.json",
-  );
 }
 
 function requireTemplate(
@@ -276,3 +290,5 @@ function normalizeOperatorError(error: unknown): Error {
 
   return error instanceof Error ? error : new Error(String(error));
 }
+
+export { resolveWorkspacePath };

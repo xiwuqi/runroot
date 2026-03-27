@@ -27,6 +27,9 @@
     "@runroot/templates": "workspace:*",
     "@runroot/tools": "workspace:*"
   },
+  "devDependencies": {
+    "pg-mem": "^3.0.14"
+  },
   "scripts": {
     "build": "tsup src/index.ts --format esm,cjs --dts --out-dir dist --clean",
     "typecheck": "tsc --noEmit -p tsconfig.json"
