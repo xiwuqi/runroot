@@ -1,0 +1,24 @@
+{
+  "name": "@runroot/config",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared metadata and boundary types for Runroot packages and apps.",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm,cjs --dts --out-dir dist --clean",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  }
+}

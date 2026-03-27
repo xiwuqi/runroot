@@ -1,0 +1,35 @@
+{
+  "name": "runroot",
+  "version": "0.0.0",
+  "private": true,
+  "description": "MCP-native runtime and orchestration for durable developer and ops workflows.",
+  "license": "Apache-2.0",
+  "packageManager": "pnpm@10.32.1",
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "scripts": {
+    "bootstrap": "node ./scripts/bootstrap.mjs",
+    "dev": "pnpm --parallel --filter @runroot/api --filter @runroot/web dev",
+    "infra:up": "docker compose up -d postgres",
+    "infra:down": "docker compose down --remove-orphans",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "typecheck": "pnpm --recursive --filter @runroot/* typecheck",
+    "test": "vitest run --config vitest.unit.config.ts",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "build": "pnpm --recursive --filter @runroot/* build",
+    "ci": "pnpm lint && pnpm typecheck && pnpm test && pnpm test:integration && pnpm build",
+    "changeset": "changeset",
+    "version-packages": "changeset version"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.9",
+    "@changesets/cli": "^2.30.0",
+    "@types/node": "^25.5.0",
+    "tsup": "^8.5.1",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.2"
+  }
+}

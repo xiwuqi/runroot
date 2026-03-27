@@ -1,0 +1,35 @@
+{
+  "name": "@runroot/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Fastify-based control plane API for Runroot.",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "dependencies": {
+    "@fastify/cors": "^11.2.0",
+    "@runroot/approvals": "workspace:*",
+    "@runroot/cli": "workspace:*",
+    "@runroot/config": "workspace:*",
+    "@runroot/core-runtime": "workspace:*",
+    "@runroot/domain": "workspace:*",
+    "@runroot/events": "workspace:*",
+    "@runroot/mcp": "workspace:*",
+    "@runroot/observability": "workspace:*",
+    "@runroot/persistence": "workspace:*",
+    "@runroot/replay": "workspace:*",
+    "@runroot/sdk": "workspace:*",
+    "@runroot/templates": "workspace:*",
+    "@runroot/test-utils": "workspace:*",
+    "@runroot/tools": "workspace:*",
+    "fastify": "^5.8.4",
+    "pino": "^10.3.1"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsup src/index.ts src/server.ts --format esm,cjs --dts --out-dir dist --clean",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "start": "node dist/index.js"
+  }
+}

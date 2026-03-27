@@ -1,0 +1,55 @@
+# Contributing
+
+## Development Environment
+
+Required baseline:
+
+- Node.js 20.19 or newer
+- pnpm 10.32.1
+- Docker and Docker Compose for local Postgres
+
+Recommended setup:
+
+1. `pnpm install`
+2. `pnpm bootstrap`
+3. `pnpm infra:up`
+4. `pnpm dev`
+
+## Development Workflow
+
+1. Read `AGENTS.md` and relevant architecture docs before changing structure.
+2. Document major architectural changes in an ADR before implementation.
+3. Keep work inside the active phase. Do not pull later-phase runtime features into foundation changes.
+4. Update user-facing and contributor docs alongside code changes.
+
+## Testing And Quality Gates
+
+Run all of the following before asking for review:
+
+- `pnpm lint`
+- `pnpm typecheck`
+- `pnpm test`
+- `pnpm test:integration`
+- `pnpm build`
+
+## Documentation Expectations
+
+Contributors should update:
+
+- package-level README files when package boundaries change
+- `docs/architecture/*` when runtime, tool, approval, or replay contracts change
+- `docs/roadmap.md` when milestones move
+- ADRs when a significant tradeoff is chosen
+
+## Module Guide
+
+- `apps/*` own transport and UI concerns
+- `packages/domain` owns shared language and domain contracts
+- `packages/core-runtime` will own orchestration semantics
+- `packages/persistence` will own repositories and storage adapters
+- `packages/tools` and `packages/mcp` will own tool invocation boundaries
+- `packages/approvals` and `packages/replay` will own approval and replay models
+
+## Pull Requests
+
+Keep pull requests scoped, document tradeoffs, and avoid bundling unrelated changes. Small, well-documented increments are preferred over large drops.

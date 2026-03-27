@@ -1,0 +1,125 @@
+:root {
+  color-scheme: light;
+  --surface: #f6f4ef;
+  --surface-strong: #fffdf8;
+  --ink: #1f1a14;
+  --ink-soft: #5d5448;
+  --line: rgba(38, 28, 17, 0.12);
+  --accent: #9a4b25;
+  --accent-soft: rgba(154, 75, 37, 0.12);
+  --shadow: 0 20px 60px rgba(46, 31, 18, 0.12);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  background:
+    radial-gradient(
+      circle at top left,
+      rgba(154, 75, 37, 0.12),
+      transparent 32rem
+    ),
+    linear-gradient(180deg, #f8f2e8 0%, #f2eee7 100%);
+  color: var(--ink);
+  font-family: "Palatino Linotype", "Book Antiqua", Georgia, serif;
+}
+
+a {
+  color: inherit;
+}
+
+.page {
+  margin: 0 auto;
+  max-width: 72rem;
+  padding: 3rem 1.5rem 4rem;
+}
+
+.hero {
+  background: rgba(255, 253, 248, 0.82);
+  border: 1px solid var(--line);
+  border-radius: 2rem;
+  box-shadow: var(--shadow);
+  padding: 2rem;
+}
+
+.eyebrow {
+  color: var(--accent);
+  font-family: "Courier New", monospace;
+  font-size: 0.8rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.hero h1 {
+  font-size: clamp(2.5rem, 6vw, 4.75rem);
+  line-height: 0.95;
+  margin: 0.75rem 0 1rem;
+}
+
+.hero p {
+  color: var(--ink-soft);
+  font-size: 1.05rem;
+  line-height: 1.7;
+  margin: 0;
+  max-width: 48rem;
+}
+
+.grid {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.grid.two {
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+}
+
+.card {
+  background: rgba(255, 253, 248, 0.82);
+  border: 1px solid var(--line);
+  border-radius: 1.5rem;
+  box-shadow: var(--shadow);
+  padding: 1.25rem;
+}
+
+.card h2,
+.card h3 {
+  margin-top: 0;
+}
+
+.card ul {
+  color: var(--ink-soft);
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.badge {
+  background: var(--accent-soft);
+  border-radius: 999px;
+  color: var(--accent);
+  display: inline-block;
+  font-family: "Courier New", monospace;
+  font-size: 0.8rem;
+  margin-bottom: 0.75rem;
+  padding: 0.35rem 0.65rem;
+}
+
+@media (max-width: 640px) {
+  .page {
+    padding: 1.25rem 1rem 3rem;
+  }
+
+  .hero,
+  .card {
+    border-radius: 1.25rem;
+    padding: 1.1rem;
+  }
+}

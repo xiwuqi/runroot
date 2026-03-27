@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: runroot-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${RUNROOT_POSTGRES_DB:-runroot}
+      POSTGRES_USER: ${RUNROOT_POSTGRES_USER:-runroot}
+      POSTGRES_PASSWORD: ${RUNROOT_POSTGRES_PASSWORD:-runroot}
+    ports:
+      - "${RUNROOT_POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - runroot-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${RUNROOT_POSTGRES_USER:-runroot}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  runroot-postgres-data:

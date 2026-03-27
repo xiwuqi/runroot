@@ -1,0 +1,27 @@
+{
+  "name": "@runroot/core-runtime",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Framework-independent runtime orchestration for Runroot.",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@runroot/config": "workspace:*"
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format esm,cjs --dts --out-dir dist --clean",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  }
+}
