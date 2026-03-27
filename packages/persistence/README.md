@@ -4,8 +4,8 @@ Owns repository contracts, event storage abstractions, and database adapter seam
 
 Phase 2 exports:
 
-- run, event, and checkpoint repository contracts
-- an atomic transition commit boundary for `run + events + optional checkpoint`
+- run, event, checkpoint, and approval repository contracts
+- an atomic transition commit boundary for `run + events + optional checkpoint + optional approval state`
 - an in-memory reference adapter for local execution and integration tests
 
 Example:

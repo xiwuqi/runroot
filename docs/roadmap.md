@@ -31,6 +31,8 @@ Status: completed
 - support pause, await approval, and resume
 - expose replayable run timelines
 
+Status: completed
+
 ## Phase 5: API, CLI, And Templates
 
 - expose operator APIs and a usable CLI
