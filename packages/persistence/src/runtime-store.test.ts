@@ -1,3 +1,7 @@
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import {
   createWorkflowRunSnapshot,
   createWorkflowStepSnapshot,
@@ -5,7 +9,10 @@ import {
 } from "@runroot/domain";
 import { describe, expect, it } from "vitest";
 
-import { createInMemoryRuntimePersistence } from "./runtime-store";
+import {
+  createFileRuntimePersistence,
+  createInMemoryRuntimePersistence,
+} from "./runtime-store";
 
 function createRun(runId = "run_1") {
   const createdAt = "2026-03-27T00:00:00.000Z";
@@ -227,5 +234,49 @@ describe("@runroot/persistence in-memory store", () => {
     expect(await persistence.runs.get(run.id)).toBeUndefined();
     expect(await persistence.events.listByRunId(run.id)).toEqual([]);
     expect(await persistence.approvals.listByRunId(run.id)).toEqual([]);
+  });
+
+  it("persists runtime state to a JSON workspace file", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "runroot-persistence-"));
+    const filePath = join(workspaceRoot, "workspace.json");
+    const run = createRun("run_file");
+    const persistence = createFileRuntimePersistence({
+      filePath,
+      idGenerator: (prefix) => `${prefix}_fixed`,
+    });
+
+    await persistence.commitTransition({
+      checkpoint: {
+        attempt: 0,
+        createdAt: "2026-03-27T00:00:00.000Z",
+        nextStepIndex: 0,
+        reason: "run_created",
+        runId: run.id,
+      },
+      events: [
+        {
+          name: "run.created",
+          occurredAt: "2026-03-27T00:00:00.000Z",
+          payload: {
+            definitionId: run.definitionId,
+            status: run.status,
+          },
+          runId: run.id,
+        },
+      ],
+      run,
+    });
+
+    const reloadedPersistence = createFileRuntimePersistence({
+      filePath,
+      idGenerator: (prefix) => `${prefix}_fixed`,
+    });
+
+    expect(await reloadedPersistence.runs.get(run.id)).toEqual(run);
+    expect(
+      (await reloadedPersistence.events.listByRunId(run.id)).map(
+        (event) => event.name,
+      ),
+    ).toEqual(["run.created", "checkpoint.saved"]);
   });
 });
