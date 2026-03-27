@@ -34,6 +34,11 @@ This Code of Conduct applies within all project spaces and when an individual is
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the project maintainers through the maintainer contact path once it is published. All complaints will be reviewed and investigated promptly and fairly.
 
+For contributor workflow and repo expectations, see:
+
+- [CONTRIBUTING.md](./CONTRIBUTING.md)
+- [Security Policy](./SECURITY.md)
+
 ## Attribution
 
 This Code of Conduct is adapted from the Contributor Covenant, version 2.1, available at https://www.contributor-covenant.org/version/2/1/code_of_conduct.html.
