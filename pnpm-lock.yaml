@@ -218,6 +218,9 @@ importers:
       '@runroot/events':
         specifier: workspace:*
         version: link:../events
+      '@runroot/tools':
+        specifier: workspace:*
+        version: link:../tools
       pg:
         specifier: ^8.20.0
         version: 8.20.0
@@ -264,6 +267,9 @@ importers:
       '@runroot/domain':
         specifier: workspace:*
         version: link:../domain
+      '@runroot/observability':
+        specifier: workspace:*
+        version: link:../observability
       '@runroot/persistence':
         specifier: workspace:*
         version: link:../persistence

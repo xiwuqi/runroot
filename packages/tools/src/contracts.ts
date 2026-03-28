@@ -89,6 +89,7 @@ export interface ToolInvocationStartedEvent {
   readonly context: ToolInvocationContext;
   readonly occurredAt: string;
   readonly request: ToolInvocationRequest;
+  readonly startedAt: string;
   readonly tool: ToolMetadata;
 }
 

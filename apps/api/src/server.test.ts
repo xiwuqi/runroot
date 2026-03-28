@@ -25,7 +25,7 @@ describe("@runroot/api", () => {
     expect(response.json()).toEqual({
       status: "ok",
       project: "Runroot",
-      phase: 9,
+      phase: 10,
     });
   });
 
@@ -92,5 +92,55 @@ describe("@runroot/api", () => {
     expect(
       timelinePayload.timeline.entries.map((entry) => entry.kind),
     ).toContain("run-succeeded");
+  });
+
+  it("exposes persisted tool history through the operator API", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "runroot-api-tools-"));
+    app = buildServer({
+      operator: createRunrootOperatorService({
+        workspacePath: join(workspaceRoot, "workspace.json"),
+      }),
+    });
+
+    const createResponse = await app.inject({
+      method: "POST",
+      payload: {
+        input: {
+          approvalRequired: false,
+          commandAlias: "print-ready",
+          runbookId: "node-health-check",
+        },
+        templateId: "shell-runbook-flow",
+      },
+      url: "/runs",
+    });
+    const createdPayload = createResponse.json() as {
+      run: {
+        id: string;
+      };
+    };
+    const toolHistoryResponse = await app.inject({
+      method: "GET",
+      url: `/runs/${createdPayload.run.id}/tool-history`,
+    });
+    const toolHistoryPayload = toolHistoryResponse.json() as {
+      entries: Array<{
+        executionMode?: string;
+        outcome: string;
+        toolName: string;
+      }>;
+    };
+
+    expect(toolHistoryResponse.statusCode).toBe(200);
+    expect(toolHistoryPayload.entries.map((entry) => entry.toolName)).toEqual([
+      "shell.runbook",
+      "shell.runbook",
+    ]);
+    expect(
+      toolHistoryPayload.entries.every(
+        (entry) =>
+          entry.executionMode === "inline" && entry.outcome === "succeeded",
+      ),
+    ).toBe(true);
   });
 });

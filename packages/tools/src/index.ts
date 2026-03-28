@@ -31,11 +31,25 @@ export {
   ToolValidationError,
 } from "./errors";
 export { createEchoTool } from "./examples";
+export type {
+  ToolExecutionMode,
+  ToolHistoryEntry,
+  ToolHistoryOutcome,
+  ToolHistoryStore,
+} from "./history";
+export {
+  createBlockedToolHistoryEntry,
+  createFailedToolHistoryEntry,
+  createSucceededToolHistoryEntry,
+  summarizeToolValue,
+  toolTelemetryMetadataKeys,
+} from "./history";
 export {
   createRegistryToolInvoker,
   createUnavailableToolInvoker,
   type RegistryToolInvokerOptions,
 } from "./invoker";
+export { withToolInvocationMetadata } from "./metadata";
 export {
   type AllowlistToolPermissionGateOptions,
   allowAllToolPermissionGate,
@@ -65,6 +79,7 @@ export const toolsPackageBoundary = {
     "tool definition contract",
     "tool registry",
     "tool invoker",
+    "tool history contract",
     "permission policy",
   ],
 } as const satisfies PackageBoundary;

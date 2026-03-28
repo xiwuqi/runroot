@@ -5,6 +5,7 @@ export {
   createTemplateRuntimeBundle,
 } from "./catalog";
 export type {
+  CreateTemplateRuntimeBundleOptions,
   TemplateCatalog,
   TemplateRuntimeBundle,
   WorkflowTemplate,

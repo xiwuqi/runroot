@@ -2,9 +2,11 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { createMemoryLogger, createMemoryTracer } from "@runroot/observability";
 import {
   createPostgresDispatchQueue,
   createPostgresRuntimePersistence,
+  createPostgresToolHistoryStore,
 } from "@runroot/persistence";
 import { newDb } from "pg-mem";
 import { describe, expect, it } from "vitest";
@@ -49,12 +51,18 @@ describe("@runroot/sdk worker service integration", () => {
       idGenerator: createIdGenerator(),
       now,
       persistence,
+      toolHistory: createPostgresToolHistoryStore({
+        pool,
+      }),
     });
     const worker = createRunrootWorkerService({
       dispatchQueue,
       idGenerator: createIdGenerator(),
       now,
       persistence,
+      toolHistory: createPostgresToolHistoryStore({
+        pool,
+      }),
       workerId: "worker_pg",
     });
 
@@ -85,6 +93,12 @@ describe("@runroot/sdk worker service integration", () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "runroot-worker-"));
     const sqlitePath = join(workspaceRoot, "runroot.sqlite");
     const now = createClock();
+    const logger = createMemoryLogger({
+      now: () => "2026-03-28T01:10:00.000Z",
+    });
+    const tracer = createMemoryTracer({
+      now: () => "2026-03-28T01:10:00.000Z",
+    });
     const service = createRunrootOperatorService({
       approvalIdGenerator: () => "approval_1",
       executionMode: "queued",
@@ -95,9 +109,11 @@ describe("@runroot/sdk worker service integration", () => {
     });
     const worker = createRunrootWorkerService({
       idGenerator: createIdGenerator(),
+      logger,
       now,
       persistenceDriver: "sqlite",
       sqlitePath,
+      tracer,
       workerId: "worker_sqlite",
     });
 
@@ -135,10 +151,35 @@ describe("@runroot/sdk worker service integration", () => {
 
     const secondJob = await worker.processNextJob();
     const completedRun = await service.getRun(queuedRun.id);
+    const toolHistory = await service.getToolHistory(queuedRun.id);
     const timeline = await service.getTimeline(queuedRun.id);
 
     expect(secondJob?.status).toBe("completed");
     expect(completedRun.status).toBe("succeeded");
+    expect(toolHistory).toHaveLength(2);
+    expect(
+      toolHistory.every(
+        (entry) =>
+          entry.executionMode === "queued" &&
+          entry.workerId === "worker_sqlite" &&
+          entry.dispatchJobId,
+      ),
+    ).toBe(true);
+    expect(
+      tracer.spans.every(
+        (span) =>
+          span.attributes.executionMode === "queued" &&
+          span.attributes.workerId === "worker_sqlite" &&
+          typeof span.attributes.dispatchJobId === "string",
+      ),
+    ).toBe(true);
+    expect(
+      logger.records.some(
+        (record) =>
+          record.message === "tool invocation succeeded" &&
+          record.attributes?.workerId === "worker_sqlite",
+      ),
+    ).toBe(true);
     expect(timeline.entries.map((entry) => entry.kind)).toContain("run-queued");
     expect(timeline.entries.map((entry) => entry.kind)).toContain(
       "waiting-for-approval",

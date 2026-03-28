@@ -103,6 +103,7 @@ class RegistryToolInvoker implements ToolInvoker {
 
       await this.#notifyBlocked({
         ...lifecycleBase,
+        occurredAt: this.#now(),
         decision: permissionDecision,
       });
 
@@ -132,6 +133,7 @@ class RegistryToolInvoker implements ToolInvoker {
 
       await this.#notifySucceeded({
         ...lifecycleBase,
+        occurredAt: finishedAt,
         result,
       });
 
@@ -141,6 +143,7 @@ class RegistryToolInvoker implements ToolInvoker {
 
       await this.#notifyFailed({
         ...lifecycleBase,
+        occurredAt: this.#now(),
         error: normalizedError,
       });
 
@@ -190,14 +193,15 @@ function createLifecycleBase(
   callId: string,
   context: ToolInvocationContext,
   request: ToolInvocationRequest,
-  occurredAt: string,
+  startedAt: string,
   tool: ToolDefinition,
 ): ToolInvocationStartedEvent {
   return {
     callId,
     context,
-    occurredAt,
+    occurredAt: startedAt,
     request,
+    startedAt,
     tool: tool.metadata,
   };
 }

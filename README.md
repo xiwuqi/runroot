@@ -16,7 +16,7 @@ Runroot focuses on:
 
 ## Current Status
 
-Phase 9 is complete. The repository now includes:
+Phase 10 is complete on this branch. The repository now includes:
 
 - the Phase 2 runtime core for runs, steps, checkpoints, and retries
 - the Phase 3 tool layer and minimal MCP adapter
@@ -32,8 +32,11 @@ Phase 9 is complete. The repository now includes:
 - migration entrypoints and local infra guidance for the database-backed path
 - a shared queue-backed execution seam and minimal worker coordination path
 - a minimal worker app that can claim queued runs and drive them through the existing runtime
+- persisted tool history and minimal telemetry correlation across inline and
+  queued execution
 
-Tool invocation hooks remain in-memory hooks inside `@runroot/tools`; they are not yet part of the shared replay source of truth.
+Persisted tool history is additive audit data. It does not become part of the
+shared replay or approval source of truth.
 
 ## Planned Capabilities
 
@@ -93,6 +96,10 @@ Phase 8 adds a fifth rule: database-backed persistence must stay behind the shar
 
 Phase 9 adds a sixth rule: queued execution must stay behind shared dispatch and worker seams. Runs may execute out of process, but replay, approval, and operator semantics still derive from persisted runtime and approval events.
 
+Phase 10 adds a seventh rule: persisted tool history remains additive to replay.
+It can record scoped tool outcomes and telemetry correlation, but replay and
+approval still derive only from persisted runtime and approval events.
+
 ## Example Use Cases
 
 - GitHub issue triage with optional human approval
@@ -112,6 +119,7 @@ Phase 9 adds a sixth rule: queued execution must stay behind shared dispatch and
 - [Observability](./docs/guides/observability.md)
 - [Persistence Baseline](./docs/guides/persistence-baseline.md)
 - [Queued Execution](./docs/guides/queued-execution.md)
+- [Tool Telemetry](./docs/guides/tool-telemetry.md)
 - [Release Readiness](./docs/guides/release-readiness.md)
 - [Examples](./examples/README.md)
 - [Web Console](./docs/architecture/web-console.md)

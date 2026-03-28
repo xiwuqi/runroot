@@ -60,6 +60,26 @@ export interface ApiTimeline {
   readonly runId: string;
 }
 
+export interface ApiToolHistoryEntry {
+  readonly attempt?: number;
+  readonly callId: string;
+  readonly dispatchJobId?: string;
+  readonly executionMode?: "inline" | "queued";
+  readonly finishedAt: string;
+  readonly inputSummary: string;
+  readonly outcome: "blocked" | "failed" | "succeeded";
+  readonly outcomeDetail?: string;
+  readonly outputSummary?: string;
+  readonly runId?: string;
+  readonly source: string;
+  readonly startedAt: string;
+  readonly stepId?: string;
+  readonly toolId: string;
+  readonly toolName: string;
+  readonly toolSource: string;
+  readonly workerId?: string;
+}
+
 export interface DecideApprovalRequest {
   readonly actorDisplayName?: string;
   readonly actorId?: string;
@@ -75,6 +95,7 @@ export interface RunrootApiClient {
   getApprovals(runId: string): Promise<readonly ApiApproval[]>;
   getPendingApprovals(): Promise<readonly PendingApprovalSummary[]>;
   getRun(runId: string): Promise<ApiRun>;
+  getToolHistory(runId: string): Promise<readonly ApiToolHistoryEntry[]>;
   getTimeline(runId: string): Promise<ApiTimeline>;
   listRuns(): Promise<readonly ApiRun[]>;
   resumeRun(runId: string): Promise<ApiRun>;
@@ -233,6 +254,18 @@ export function createRunrootApiClient(
       }>(`/runs/${runId}`, { method: "GET" }, "web.api.getRun");
 
       return payload.run;
+    },
+
+    async getToolHistory(runId) {
+      const payload = await requestJson<{
+        entries: readonly ApiToolHistoryEntry[];
+      }>(
+        `/runs/${runId}/tool-history`,
+        { method: "GET" },
+        "web.api.getToolHistory",
+      );
+
+      return payload.entries;
     },
 
     async getTimeline(runId) {

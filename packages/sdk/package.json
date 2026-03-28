@@ -23,6 +23,7 @@
     "@runroot/core-runtime": "workspace:*",
     "@runroot/dispatch": "workspace:*",
     "@runroot/domain": "workspace:*",
+    "@runroot/observability": "workspace:*",
     "@runroot/persistence": "workspace:*",
     "@runroot/replay": "workspace:*",
     "@runroot/templates": "workspace:*",

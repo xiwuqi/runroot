@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 
-export type DeliveryPhase = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+export type DeliveryPhase = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
 
 export type ExecutionMode = "inline" | "queued";
 
@@ -47,8 +47,8 @@ export const projectMetadata = {
   name: "Runroot",
   description:
     "MCP-native runtime and orchestration for durable developer and ops workflows.",
-  currentPhase: 9,
-  phaseName: "Queue-Backed Execution and Worker Coordination",
+  currentPhase: 10,
+  phaseName: "Persisted Tool History and Execution Telemetry",
 } as const;
 
 export const requiredQualityCommands = [

@@ -254,11 +254,28 @@ describe("@runroot/api integration", () => {
         }>;
       };
     };
+    const toolHistoryResponse = await fetch(
+      `${address}/runs/${createdRun.run.id}/tool-history`,
+    );
+    const toolHistoryPayload = (await toolHistoryResponse.json()) as {
+      entries: Array<{
+        executionMode?: string;
+        outcome: string;
+        toolName: string;
+      }>;
+    };
 
     expect(worker.getWorkspacePath()).toContain("runroot.sqlite");
     expect(createResponse.status).toBe(201);
     expect(createdRun.run.status).toBe("queued");
     expect(runPayload.run.status).toBe("succeeded");
+    expect(toolHistoryPayload.entries).toHaveLength(2);
+    expect(
+      toolHistoryPayload.entries.every(
+        (entry) =>
+          entry.executionMode === "queued" && entry.outcome === "succeeded",
+      ),
+    ).toBe(true);
     expect(
       timelinePayload.timeline.entries.map((entry) => entry.kind),
     ).toContain("run-queued");

@@ -153,6 +153,51 @@ export const runtimePersistenceMigrations = [
         ON runroot_dispatch_jobs (run_id, enqueued_at, id)`,
     ],
   },
+  {
+    id: "0003_tool_history",
+    postgres: [
+      `CREATE TABLE IF NOT EXISTS runroot_tool_history (
+        call_id TEXT PRIMARY KEY,
+        run_id TEXT,
+        step_id TEXT,
+        dispatch_job_id TEXT,
+        worker_id TEXT,
+        execution_mode TEXT,
+        tool_id TEXT NOT NULL,
+        tool_name TEXT NOT NULL,
+        tool_source TEXT NOT NULL,
+        invocation_source TEXT NOT NULL,
+        attempt INTEGER,
+        outcome TEXT NOT NULL,
+        started_at TEXT NOT NULL,
+        finished_at TEXT NOT NULL,
+        data TEXT NOT NULL
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_runroot_tool_history_run_started
+        ON runroot_tool_history (run_id, started_at, call_id)`,
+    ],
+    sqlite: [
+      `CREATE TABLE IF NOT EXISTS runroot_tool_history (
+        call_id TEXT PRIMARY KEY,
+        run_id TEXT,
+        step_id TEXT,
+        dispatch_job_id TEXT,
+        worker_id TEXT,
+        execution_mode TEXT,
+        tool_id TEXT NOT NULL,
+        tool_name TEXT NOT NULL,
+        tool_source TEXT NOT NULL,
+        invocation_source TEXT NOT NULL,
+        attempt INTEGER,
+        outcome TEXT NOT NULL,
+        started_at TEXT NOT NULL,
+        finished_at TEXT NOT NULL,
+        data TEXT NOT NULL
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_runroot_tool_history_run_started
+        ON runroot_tool_history (run_id, started_at, call_id)`,
+    ],
+  },
 ] as const satisfies readonly PersistenceMigration[];
 
 export function getRuntimePersistenceMigrationStatements(

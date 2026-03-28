@@ -187,6 +187,18 @@ export function buildServer(options: BuildServerOptions = {}) {
     }),
   );
 
+  app.get("/runs/:runId/tool-history", async (request, reply) =>
+    handleOperatorResponse(reply, async () => {
+      const params = request.params as {
+        readonly runId: string;
+      };
+
+      return {
+        entries: await operator.getToolHistory(params.runId),
+      };
+    }),
+  );
+
   app.get("/approvals/pending", async (_request, reply) =>
     handleOperatorResponse(reply, async () => ({
       approvals: await operator.getPendingApprovals(),
