@@ -36,6 +36,10 @@ This keeps the boundary clear:
 - tools own external capability access
 - MCP is one tool provider, not a parallel runtime system
 
+Phase 10 adds one more rule: durable tool history stays additive to runtime
+state. Tool invocation outcomes may be persisted for audit and telemetry, but
+they do not redefine replay, approval, or run-state source of truth.
+
 ## Invocation Flow
 
 1. runtime or another caller builds a `ToolInvocationRequest`
@@ -46,6 +50,19 @@ This keeps the boundary clear:
 6. invocation hooks receive started, blocked, succeeded, or failed callbacks
 
 Phase 3 does not persist tool invocation events into the shared runtime event store. It only establishes the hook points needed for later audit and replay work.
+
+Phase 10 turns those hook points into a shared persisted tool-history seam. The
+persisted history is intentionally scoped:
+
+- keep stable correlation facts such as run, step, dispatch job, worker, and
+  tool identifiers
+- keep generic input and output summaries
+- avoid provider-specific raw payload persistence by default
+- stay queryable through existing operator surfaces rather than a new telemetry
+  service layer
+
+Persisted tool history is not part of the replay event stream. Replay still
+derives only from persisted runtime and approval events.
 
 ## Minimal MCP Scope
 

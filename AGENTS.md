@@ -45,6 +45,7 @@ The project is executed in phases. Only work on the current phase.
 - Phase 8: Postgres-First Persistence and SQLite Development Fallback
 - Phase 9: Queue-Backed Execution and Worker Coordination
 - Phase 10: Persisted Tool History and Execution Telemetry
+- Phase 10: Persisted Tool History and Execution Telemetry
 
 Do not pull work from later phases into the current phase unless it is required to unblock the current phase and the reason is documented.
 
