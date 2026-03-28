@@ -9,6 +9,7 @@ Current exports:
 - an in-memory reference adapter for local execution and integration tests
 - a JSON-file adapter for legacy local operator workflows
 - database-backed adapter seams for the Phase 8 persistence baseline
+- dispatch queue adapters for the Phase 9 queued-execution path
 
 Example:
 
@@ -35,6 +36,14 @@ The Phase 8 default selection order is:
 The JSON-file adapter remains available as a compatibility path, but it is no
 longer the default operator persistence path.
 
+For Phase 9 queued execution, the supported backends are:
+
+- Postgres
+- SQLite
+
+The legacy JSON-file adapter remains inline-only and cannot back the dispatch
+queue path.
+
 ## Phase 8 Boundaries
 
 - Postgres is the primary durable backing store.
@@ -43,3 +52,5 @@ longer the default operator persistence path.
   events.
 - The persistence package owns schema, migrations, and adapter seams. Apps and
   operator surfaces must keep using the shared contracts.
+- Queue-backed execution uses the shared dispatch queue seam rather than
+  app-owned queue logic.
