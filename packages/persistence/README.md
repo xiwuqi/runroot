@@ -2,19 +2,44 @@
 
 Owns repository contracts, event storage abstractions, and database adapter seams.
 
-Phase 2 exports:
+Current exports:
 
 - run, event, checkpoint, and approval repository contracts
 - an atomic transition commit boundary for `run + events + optional checkpoint + optional approval state`
 - an in-memory reference adapter for local execution and integration tests
-- a JSON-file adapter for local operator workflows in Phase 5
+- a JSON-file adapter for legacy local operator workflows
+- database-backed adapter seams for the Phase 8 persistence baseline
 
 Example:
 
 ```ts
-import { createInMemoryRuntimePersistence } from "@runroot/persistence";
+import {
+  createConfiguredRuntimePersistence,
+  createInMemoryRuntimePersistence,
+} from "@runroot/persistence";
 
 const persistence = createInMemoryRuntimePersistence();
+const configuredPersistence = createConfiguredRuntimePersistence();
 ```
 
-Postgres and SQLite adapters remain deferred. The in-memory adapter validates the contracts first, and the JSON-file adapter exists only to make local API/CLI workflows usable before a real database adapter lands.
+## Driver Selection
+
+The Phase 8 default selection order is:
+
+1. explicit driver configuration
+2. `RUNROOT_PERSISTENCE_DRIVER`
+3. legacy `RUNROOT_WORKSPACE_PATH` forcing the JSON-file adapter
+4. `DATABASE_URL` forcing Postgres
+5. SQLite fallback at `RUNROOT_SQLITE_PATH`
+
+The JSON-file adapter remains available as a compatibility path, but it is no
+longer the default operator persistence path.
+
+## Phase 8 Boundaries
+
+- Postgres is the primary durable backing store.
+- SQLite exists for local development fallback only.
+- Replay and approval facts still derive from persisted runtime and approval
+  events.
+- The persistence package owns schema, migrations, and adapter seams. Apps and
+  operator surfaces must keep using the shared contracts.

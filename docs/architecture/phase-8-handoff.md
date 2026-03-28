@@ -1,6 +1,6 @@
 # Phase 8: Postgres-First Persistence and SQLite Development Fallback
 
-Status: suggested freeze version, scope frozen, implementation not started
+Status: implementation completed, ready for review
 
 This document freezes a suggested Phase 8 execution contract for Runroot. The
 name and scope below are derived from repository-owned sources that already
@@ -165,6 +165,15 @@ Phase 8 execution assumes:
 Current repository status at freeze time:
 
 - these preconditions are satisfied
+
+Current repository status after implementation:
+
+- the Phase 8 persistence baseline has been landed on a direct implementation
+  branch
+- Postgres and SQLite adapters exist behind the shared persistence contracts
+- current operator surfaces can use configured database-backed persistence
+  through existing seams
+- the remaining work after this document is review, not scope definition
 
 ## Primary Architecture Risks
 

@@ -16,7 +16,7 @@ Runroot focuses on:
 
 ## Current Status
 
-Phase 7 is complete. The repository now includes:
+Phase 8 is complete. The repository now includes:
 
 - the Phase 2 runtime core for runs, steps, checkpoints, and retries
 - the Phase 3 tool layer and minimal MCP adapter
@@ -28,6 +28,8 @@ Phase 7 is complete. The repository now includes:
 - contributor onboarding guides and example guidance for open-source collaboration
 - issue and pull request templates for public contribution flow
 - a documented release-readiness workflow and release-note strategy
+- a Postgres-first persistence baseline with a SQLite local-development fallback
+- migration entrypoints and local infra guidance for the database-backed path
 
 Tool invocation hooks remain in-memory hooks inside `@runroot/tools`; they are not yet part of the shared replay source of truth.
 
@@ -84,6 +86,8 @@ Phase 5 adds a third rule: API and CLI remain thin operator surfaces, while work
 
 Phase 6 adds a fourth rule: the web console stays a thin visualization layer over the API surface, and observability begins as logging and tracing adapters rather than a new runtime center.
 
+Phase 8 adds a fifth rule: database-backed persistence must stay behind the shared persistence contracts. Postgres is the primary backing store, SQLite is the local-development fallback, and the JSON-file adapter is no longer the default operator path.
+
 ## Example Use Cases
 
 - GitHub issue triage with optional human approval
@@ -101,6 +105,7 @@ Phase 6 adds a fourth rule: the web console stays a thin visualization layer ove
 - [Templates](./docs/guides/templates.md)
 - [Web Console](./docs/guides/web-console.md)
 - [Observability](./docs/guides/observability.md)
+- [Persistence Baseline](./docs/guides/persistence-baseline.md)
 - [Release Readiness](./docs/guides/release-readiness.md)
 - [Examples](./examples/README.md)
 - [Web Console](./docs/architecture/web-console.md)

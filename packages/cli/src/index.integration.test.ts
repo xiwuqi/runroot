@@ -182,4 +182,65 @@ describe("@runroot/cli integration", () => {
     expect(resumeExitCode).toBe(0);
     expect(resumedPayload.run.status).toBe("succeeded");
   });
+
+  it("uses the SQLite fallback when no legacy workspace path is provided", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "runroot-cli-sqlite-"));
+    const inputFile = join(workspaceRoot, "shell-runbook.json");
+    await writeFile(
+      inputFile,
+      JSON.stringify({
+        approvalRequired: false,
+        commandAlias: "print-ready",
+        runbookId: "node-health-check",
+      }),
+    );
+    const startIo = createIo();
+
+    const startExitCode = await runCli(
+      ["runs", "start", "shell-runbook-flow", "--input-file", inputFile],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: join(workspaceRoot, "runroot.sqlite"),
+        },
+        io: startIo.io,
+      },
+    );
+
+    expect(startExitCode).toBe(0);
+    const startedRun = JSON.parse(startIo.stdout.join("")) as {
+      run: {
+        id: string;
+        status: string;
+      };
+      workspacePath: string;
+    };
+    const timelineIo = createIo();
+    const timelineExitCode = await runCli(
+      ["runs", "timeline", startedRun.run.id],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: join(workspaceRoot, "runroot.sqlite"),
+        },
+        io: timelineIo.io,
+      },
+    );
+    const timelinePayload = JSON.parse(timelineIo.stdout.join("")) as {
+      timeline: {
+        entries: Array<{
+          kind: string;
+        }>;
+      };
+    };
+
+    expect(startedRun.workspacePath).toContain("runroot.sqlite");
+    expect(startedRun.run.status).toBe("succeeded");
+    expect(timelineExitCode).toBe(0);
+    expect(
+      timelinePayload.timeline.entries.map((entry) => entry.kind),
+    ).toContain("run-succeeded");
+  });
 });

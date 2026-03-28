@@ -11,6 +11,8 @@
   "scripts": {
     "bootstrap": "node ./scripts/bootstrap.mjs",
     "dev": "pnpm --parallel --filter @runroot/api --filter @runroot/web dev",
+    "db:migrate:postgres": "tsx ./packages/persistence/src/migrate.ts --driver postgres",
+    "db:migrate:sqlite": "tsx ./packages/persistence/src/migrate.ts --driver sqlite",
     "infra:up": "docker compose up -d postgres",
     "infra:down": "docker compose down --remove-orphans",
     "lint": "biome check .",

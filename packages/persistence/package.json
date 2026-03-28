@@ -21,10 +21,17 @@
     "@runroot/approvals": "workspace:*",
     "@runroot/config": "workspace:*",
     "@runroot/domain": "workspace:*",
-    "@runroot/events": "workspace:*"
+    "@runroot/events": "workspace:*",
+    "pg": "^8.20.0",
+    "sql.js": "^1.14.1"
   },
   "scripts": {
     "build": "tsup src/index.ts --format esm,cjs --dts --out-dir dist --clean",
     "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.20.0",
+    "@types/sql.js": "^1.4.11",
+    "pg-mem": "^3.0.14"
   }
 }
