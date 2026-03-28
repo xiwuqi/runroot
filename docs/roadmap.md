@@ -71,3 +71,20 @@ Status: completed
   thin wiring needed to use those adapters
 
 Status: completed
+
+## Phase 9: Queue-Backed Execution and Worker Coordination
+
+- suggested freeze version derived from the blueprint, runtime lifecycle docs,
+  and Phase 8 deferred execution concerns
+- add a queue-backed execution or dispatch contract behind the existing runtime
+  and operator seams
+- add a minimum worker coordination path to execute runs outside the initiating
+  request process
+- keep replay, approval, and operator semantics stable while introducing queued
+  execution
+- execute against the formal handoff in
+  [docs/architecture/phase-9-handoff.md](./architecture/phase-9-handoff.md)
+- keep the phase focused on queue-backed execution, worker coordination, local
+  infrastructure, and thin wiring
+
+Status: scope frozen
