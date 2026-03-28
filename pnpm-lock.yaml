@@ -243,12 +243,18 @@ importers:
       '@runroot/config':
         specifier: workspace:*
         version: link:../config
+      '@runroot/dispatch':
+        specifier: workspace:*
+        version: link:../dispatch
       '@runroot/domain':
         specifier: workspace:*
         version: link:../domain
       '@runroot/events':
         specifier: workspace:*
         version: link:../events
+      '@runroot/tools':
+        specifier: workspace:*
+        version: link:../tools
 
   packages/sdk:
     dependencies:
