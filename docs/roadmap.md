@@ -100,4 +100,21 @@ Status: completed
 - keep the phase focused on persisted tool history, telemetry correlation, and
   thin wiring instead of a full observability platform
 
-Status: implementation completed on phase branch, pending stage review
+Status: completed
+
+## Phase 11: Correlated Audit Projections and Operator Views
+
+- add a shared correlated audit projection that joins replay timeline facts with
+  additive dispatch, worker, and tool-history data without redefining replay
+  source of truth
+- expose minimal correlated audit read paths through the existing operator
+  seams in SDK, API, CLI, and web
+- keep the web console and operator surfaces thin while making inline and
+  queued execution auditable through the same identifiers
+- execute against the formal handoff in
+  [docs/architecture/phase-11-handoff.md](./architecture/phase-11-handoff.md)
+- keep the phase focused on audit projections, operator read paths, and thin
+  presentation rather than a full observability backend or productized
+  dashboard
+
+Status: suggested freeze, pending review and merge
