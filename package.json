@@ -11,6 +11,7 @@
   "scripts": {
     "bootstrap": "node ./scripts/bootstrap.mjs",
     "dev": "pnpm --parallel --filter @runroot/api --filter @runroot/web dev",
+    "dev:queued": "pnpm --parallel --filter @runroot/api --filter @runroot/web --filter @runroot/worker dev",
     "db:migrate:postgres": "tsx ./packages/persistence/src/migrate.ts --driver postgres",
     "db:migrate:sqlite": "tsx ./packages/persistence/src/migrate.ts --driver sqlite",
     "infra:up": "docker compose up -d postgres",
@@ -23,7 +24,8 @@
     "build": "pnpm --recursive --filter @runroot/* build",
     "ci": "pnpm lint && pnpm typecheck && pnpm test && pnpm test:integration && pnpm build",
     "changeset": "changeset",
-    "version-packages": "changeset version"
+    "version-packages": "changeset version",
+    "worker:dev": "pnpm --filter @runroot/worker dev"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.9",

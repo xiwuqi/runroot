@@ -18,6 +18,7 @@ const workspacePackageEntries = {
   "@runroot/cli": "packages/cli/src/index.ts",
   "@runroot/config": "packages/config/src/index.ts",
   "@runroot/core-runtime": "packages/core-runtime/src/index.ts",
+  "@runroot/dispatch": "packages/dispatch/src/index.ts",
   "@runroot/domain": "packages/domain/src/index.ts",
   "@runroot/events": "packages/events/src/index.ts",
   "@runroot/mcp": "packages/mcp/src/index.ts",

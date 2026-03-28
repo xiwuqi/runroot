@@ -353,6 +353,83 @@ export class RuntimeEngine {
     return this.#persistence.events.listByRunId(runId);
   }
 
+  async queueResumeRun(
+    definition: WorkflowDefinition,
+    runId: string,
+  ): Promise<WorkflowRun> {
+    const run = await this.#requireRun(runId);
+
+    this.#assertDefinitionCompatibility(definition, run);
+
+    const pendingApproval = await this.#persistence.approvals.getPendingByRunId(
+      run.id,
+    );
+
+    if (pendingApproval) {
+      throw new RuntimeExecutionError(
+        `Run "${run.id}" is waiting on approval "${pendingApproval.id}" and cannot resume until the decision is recorded.`,
+      );
+    }
+
+    if (run.status !== "paused") {
+      return run;
+    }
+
+    const latestCheckpoint =
+      await this.#persistence.checkpoints.getLatestByRunId(run.id);
+    const resumedAt = this.#now();
+    const queuedRun = transitionRunStatus(run, "queued", resumedAt);
+    const commitResult = await this.#commitTransition({
+      events: [
+        {
+          name: "run.resumed",
+          occurredAt: resumedAt,
+          payload: {
+            ...(latestCheckpoint ? { checkpointId: latestCheckpoint.id } : {}),
+            fromStatus: run.status,
+            toStatus: queuedRun.status,
+          },
+          runId: queuedRun.id,
+        },
+      ],
+      run: queuedRun,
+    });
+
+    return commitResult.run;
+  }
+
+  async queueRun(
+    definition: WorkflowDefinition,
+    runId: string,
+  ): Promise<WorkflowRun> {
+    const run = await this.#requireRun(runId);
+
+    this.#assertDefinitionCompatibility(definition, run);
+
+    if (run.status !== "pending") {
+      return run;
+    }
+
+    const queuedAt = this.#now();
+    const queuedRun = transitionRunStatus(run, "queued", queuedAt);
+    const commitResult = await this.#commitTransition({
+      events: [
+        {
+          name: "run.queued",
+          occurredAt: queuedAt,
+          payload: {
+            fromStatus: run.status,
+            toStatus: queuedRun.status,
+          },
+          runId: queuedRun.id,
+        },
+      ],
+      run: queuedRun,
+    });
+
+    return commitResult.run;
+  }
+
   async pauseRun(runId: string, reason: string): Promise<WorkflowRun> {
     const run = await this.#requireRun(runId);
 

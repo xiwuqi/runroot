@@ -21,6 +21,7 @@
     "@runroot/approvals": "workspace:*",
     "@runroot/config": "workspace:*",
     "@runroot/core-runtime": "workspace:*",
+    "@runroot/dispatch": "workspace:*",
     "@runroot/domain": "workspace:*",
     "@runroot/persistence": "workspace:*",
     "@runroot/replay": "workspace:*",

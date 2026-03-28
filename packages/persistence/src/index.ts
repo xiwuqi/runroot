@@ -11,6 +11,15 @@ export {
   type PostgresRuntimePersistenceOptions,
   type SqliteRuntimePersistenceOptions,
 } from "./database-store";
+export {
+  type ConfiguredDispatchQueueOptions,
+  createConfiguredDispatchQueue as createConfiguredRunDispatchQueue,
+  createConfiguredDispatchQueue,
+  createPostgresDispatchQueue,
+  createSqliteDispatchQueue,
+  type PostgresDispatchQueueOptions,
+  type SqliteDispatchQueueOptions,
+} from "./dispatch-store";
 export type { PersistenceDialect } from "./migrations";
 export {
   type ApprovalRepository,
@@ -34,10 +43,11 @@ export const persistencePackageBoundary = {
   kind: "package",
   phaseOwned: 2,
   responsibility:
-    "Repository contracts, checkpoint storage, and database adapter seams.",
+    "Repository contracts, checkpoint storage, database adapters, and dispatch queue persistence seams.",
   publicSurface: [
     "repository interfaces",
     "storage adapters",
     "checkpoint persistence",
+    "dispatch queue adapters",
   ],
 } as const satisfies PackageBoundary;

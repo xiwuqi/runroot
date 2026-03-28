@@ -3,6 +3,7 @@ import { approvalsPackageBoundary } from "@runroot/approvals";
 import { cliPackageBoundary } from "@runroot/cli";
 import { projectMetadata, requiredQualityCommands } from "@runroot/config";
 import { coreRuntimePackageBoundary } from "@runroot/core-runtime";
+import { dispatchPackageBoundary } from "@runroot/dispatch";
 import { domainPackageBoundary, type JsonValue } from "@runroot/domain";
 import { eventsPackageBoundary } from "@runroot/events";
 import { mcpPackageBoundary } from "@runroot/mcp";
@@ -25,6 +26,7 @@ import Fastify from "fastify";
 export const packageBoundaries = [
   domainPackageBoundary,
   coreRuntimePackageBoundary,
+  dispatchPackageBoundary,
   persistencePackageBoundary,
   eventsPackageBoundary,
   toolsPackageBoundary,

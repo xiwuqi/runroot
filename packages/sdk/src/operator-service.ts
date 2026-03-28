@@ -1,6 +1,8 @@
 import type { ApprovalActor, ApprovalRequest } from "@runroot/approvals";
 import {
+  type ExecutionMode,
   type PersistenceDriver,
+  resolveExecutionMode,
   resolvePersistenceConfig,
   resolveWorkspacePath,
 } from "@runroot/config";
@@ -9,8 +11,10 @@ import {
   RuntimeEngine,
   RuntimeExecutionError,
 } from "@runroot/core-runtime";
+import type { DispatchQueue } from "@runroot/dispatch";
 import type { JsonValue, WorkflowRun } from "@runroot/domain";
 import {
+  createConfiguredDispatchQueue,
   createConfiguredRuntimePersistence,
   type RuntimePersistence,
 } from "@runroot/persistence";
@@ -71,7 +75,9 @@ export interface RunrootOperatorService {
 export interface RunrootOperatorServiceOptions {
   readonly approvalIdGenerator?: () => string;
   readonly databaseUrl?: string;
+  readonly dispatchQueue?: DispatchQueue;
   readonly env?: Readonly<Record<string, string | undefined>>;
+  readonly executionMode?: ExecutionMode;
   readonly idGenerator?: (prefix: "run" | "step") => string;
   readonly now?: () => string;
   readonly persistence?: RuntimePersistence;
@@ -86,6 +92,7 @@ export function createRunrootOperatorService(
 ): RunrootOperatorService {
   const templateRuntime = createTemplateRuntimeBundle();
   const templates = options.templates ?? templateRuntime.templates;
+  const now = options.now ?? (() => new Date().toISOString());
   const persistenceConfig = resolvePersistenceConfig({
     ...(options.databaseUrl ? { databaseUrl: options.databaseUrl } : {}),
     ...(options.env ? { env: options.env } : {}),
@@ -106,12 +113,31 @@ export function createRunrootOperatorService(
         ? { workspacePath: options.workspacePath }
         : {}),
     });
+  const executionMode = resolveExecutionMode({
+    ...(options.env ? { env: options.env } : {}),
+    ...(options.executionMode ? { executionMode: options.executionMode } : {}),
+  });
+  const dispatchQueue =
+    executionMode === "queued"
+      ? (options.dispatchQueue ??
+        createConfiguredDispatchQueue({
+          ...(options.databaseUrl ? { databaseUrl: options.databaseUrl } : {}),
+          ...(options.env ? { env: options.env } : {}),
+          ...(options.persistenceDriver
+            ? { driver: options.persistenceDriver }
+            : {}),
+          ...(options.sqlitePath ? { sqlitePath: options.sqlitePath } : {}),
+          ...(options.workspacePath
+            ? { workspacePath: options.workspacePath }
+            : {}),
+        }))
+      : undefined;
   const runtime = new RuntimeEngine({
     ...(options.approvalIdGenerator
       ? { approvalIdGenerator: options.approvalIdGenerator }
       : {}),
     ...(options.idGenerator ? { idGenerator: options.idGenerator } : {}),
-    ...(options.now ? { now: options.now } : {}),
+    now,
     persistence,
     toolInvoker: templateRuntime.toolInvoker,
   });
@@ -200,6 +226,29 @@ export function createRunrootOperatorService(
       }
 
       try {
+        if (executionMode === "queued") {
+          if (run.status !== "paused") {
+            return run;
+          }
+
+          const pendingApproval = await runtime.getPendingApproval(run.id);
+
+          if (pendingApproval) {
+            throw new RuntimeExecutionError(
+              `Run "${run.id}" is waiting on approval "${pendingApproval.id}" and cannot resume until the decision is recorded.`,
+            );
+          }
+
+          await dispatchQueue?.enqueue({
+            definitionId: template.definition.id,
+            enqueuedAt: now(),
+            kind: "resume_run",
+            runId,
+          });
+
+          return runtime.queueResumeRun(template.definition, runId);
+        }
+
         return await runtime.resumeRun(template.definition, runId);
       } catch (error) {
         throw normalizeOperatorError(error);
@@ -215,6 +264,17 @@ export function createRunrootOperatorService(
           templateId: template.descriptor.id,
         },
       });
+
+      if (executionMode === "queued") {
+        await dispatchQueue?.enqueue({
+          definitionId: template.definition.id,
+          enqueuedAt: now(),
+          kind: "start_run",
+          runId: run.id,
+        });
+
+        return runtime.queueRun(template.definition, run.id);
+      }
 
       return runtime.executeRun(template.definition, run.id);
     },

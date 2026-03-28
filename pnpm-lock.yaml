@@ -47,6 +47,9 @@ importers:
       '@runroot/core-runtime':
         specifier: workspace:*
         version: link:../../packages/core-runtime
+      '@runroot/dispatch':
+        specifier: workspace:*
+        version: link:../../packages/dispatch
       '@runroot/domain':
         specifier: workspace:*
         version: link:../../packages/domain
@@ -103,6 +106,15 @@ importers:
         specifier: ^19.2.3
         version: 19.2.3(@types/react@19.2.14)
 
+  apps/worker:
+    dependencies:
+      '@runroot/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      '@runroot/sdk':
+        specifier: workspace:*
+        version: link:../../packages/sdk
+
   packages/approvals:
     dependencies:
       '@runroot/config':
@@ -143,6 +155,15 @@ importers:
       '@runroot/tools':
         specifier: workspace:*
         version: link:../tools
+
+  packages/dispatch:
+    dependencies:
+      '@runroot/config':
+        specifier: workspace:*
+        version: link:../config
+      '@runroot/domain':
+        specifier: workspace:*
+        version: link:../domain
 
   packages/domain:
     dependencies:
@@ -188,6 +209,9 @@ importers:
       '@runroot/config':
         specifier: workspace:*
         version: link:../config
+      '@runroot/dispatch':
+        specifier: workspace:*
+        version: link:../dispatch
       '@runroot/domain':
         specifier: workspace:*
         version: link:../domain
@@ -234,6 +258,9 @@ importers:
       '@runroot/core-runtime':
         specifier: workspace:*
         version: link:../core-runtime
+      '@runroot/dispatch':
+        specifier: workspace:*
+        version: link:../dispatch
       '@runroot/domain':
         specifier: workspace:*
         version: link:../domain
