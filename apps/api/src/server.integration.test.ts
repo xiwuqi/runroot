@@ -9,17 +9,20 @@ import { buildServer } from "./server";
 
 let app = buildServer();
 let originalDatabaseUrl = process.env.DATABASE_URL;
+let originalExecutionMode = process.env.RUNROOT_EXECUTION_MODE;
 let originalPersistenceDriver = process.env.RUNROOT_PERSISTENCE_DRIVER;
 let originalSqlitePath = process.env.RUNROOT_SQLITE_PATH;
 
 beforeEach(() => {
   originalDatabaseUrl = process.env.DATABASE_URL;
+  originalExecutionMode = process.env.RUNROOT_EXECUTION_MODE;
   originalPersistenceDriver = process.env.RUNROOT_PERSISTENCE_DRIVER;
   originalSqlitePath = process.env.RUNROOT_SQLITE_PATH;
 });
 
 afterEach(async () => {
   process.env.DATABASE_URL = originalDatabaseUrl;
+  process.env.RUNROOT_EXECUTION_MODE = originalExecutionMode;
   process.env.RUNROOT_PERSISTENCE_DRIVER = originalPersistenceDriver;
   process.env.RUNROOT_SQLITE_PATH = originalSqlitePath;
   await app.close();
@@ -184,5 +187,83 @@ describe("@runroot/api integration", () => {
     expect(createResponse.status).toBe(201);
     expect(createdRun.run.status).toBe("succeeded");
     expect(runPayload.run.status).toBe("succeeded");
+  });
+
+  it("submits a queued run over the network and lets the worker complete it", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "runroot-api-queue-"));
+    const sqlitePath = join(workspaceRoot, "runroot.sqlite");
+
+    process.env.DATABASE_URL = undefined;
+    process.env.RUNROOT_EXECUTION_MODE = "queued";
+    process.env.RUNROOT_PERSISTENCE_DRIVER = "sqlite";
+    process.env.RUNROOT_SQLITE_PATH = sqlitePath;
+    app = buildServer();
+    const worker = createRunrootOperatorService({
+      executionMode: "queued",
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+    const workerService = (
+      await import("@runroot/sdk")
+    ).createRunrootWorkerService({
+      persistenceDriver: "sqlite",
+      sqlitePath,
+      workerId: "worker_api",
+    });
+    const address = await app.listen({
+      host: "127.0.0.1",
+      port: 0,
+    });
+
+    const createResponse = await fetch(`${address}/runs`, {
+      body: JSON.stringify({
+        input: {
+          approvalRequired: false,
+          commandAlias: "print-ready",
+          runbookId: "node-health-check",
+        },
+        templateId: "shell-runbook-flow",
+      }),
+      headers: {
+        "content-type": "application/json",
+      },
+      method: "POST",
+    });
+    const createdRun = (await createResponse.json()) as {
+      run: {
+        id: string;
+        status: string;
+      };
+    };
+
+    await workerService.processNextJob();
+
+    const runResponse = await fetch(`${address}/runs/${createdRun.run.id}`);
+    const runPayload = (await runResponse.json()) as {
+      run: {
+        status: string;
+      };
+    };
+    const timelineResponse = await fetch(
+      `${address}/runs/${createdRun.run.id}/timeline`,
+    );
+    const timelinePayload = (await timelineResponse.json()) as {
+      timeline: {
+        entries: Array<{
+          kind: string;
+        }>;
+      };
+    };
+
+    expect(worker.getWorkspacePath()).toContain("runroot.sqlite");
+    expect(createResponse.status).toBe(201);
+    expect(createdRun.run.status).toBe("queued");
+    expect(runPayload.run.status).toBe("succeeded");
+    expect(
+      timelinePayload.timeline.entries.map((entry) => entry.kind),
+    ).toContain("run-queued");
+    expect(
+      timelinePayload.timeline.entries.map((entry) => entry.kind),
+    ).toContain("run-succeeded");
   });
 });

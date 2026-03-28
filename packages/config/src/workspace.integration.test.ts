@@ -1,6 +1,7 @@
 import { approvalsPackageBoundary } from "@runroot/approvals";
 import { cliPackageBoundary } from "@runroot/cli";
 import { coreRuntimePackageBoundary } from "@runroot/core-runtime";
+import { dispatchPackageBoundary } from "@runroot/dispatch";
 import { domainPackageBoundary } from "@runroot/domain";
 import { eventsPackageBoundary } from "@runroot/events";
 import { mcpPackageBoundary } from "@runroot/mcp";
@@ -16,6 +17,7 @@ import { describe, expect, it } from "vitest";
 const packageBoundaries = [
   domainPackageBoundary,
   coreRuntimePackageBoundary,
+  dispatchPackageBoundary,
   persistencePackageBoundary,
   eventsPackageBoundary,
   toolsPackageBoundary,
