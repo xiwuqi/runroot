@@ -25,7 +25,7 @@ describe("@runroot/api", () => {
     expect(response.json()).toEqual({
       status: "ok",
       project: "Runroot",
-      phase: 10,
+      phase: 11,
     });
   });
 
@@ -140,6 +140,69 @@ describe("@runroot/api", () => {
       toolHistoryPayload.entries.every(
         (entry) =>
           entry.executionMode === "inline" && entry.outcome === "succeeded",
+      ),
+    ).toBe(true);
+  });
+
+  it("exposes correlated audit views through the operator API", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "runroot-api-audit-"));
+    app = buildServer({
+      operator: createRunrootOperatorService({
+        workspacePath: join(workspaceRoot, "workspace.json"),
+      }),
+    });
+
+    const createResponse = await app.inject({
+      method: "POST",
+      payload: {
+        input: {
+          approvalRequired: false,
+          commandAlias: "print-ready",
+          runbookId: "node-health-check",
+        },
+        templateId: "shell-runbook-flow",
+      },
+      url: "/runs",
+    });
+    const createdPayload = createResponse.json() as {
+      run: {
+        id: string;
+      };
+    };
+    const auditResponse = await app.inject({
+      method: "GET",
+      url: `/runs/${createdPayload.run.id}/audit`,
+    });
+    const auditPayload = auditResponse.json() as {
+      audit: {
+        entries: Array<{
+          correlation: {
+            runId: string;
+            toolCallId?: string;
+          };
+          fact: {
+            sourceOfTruth: string;
+          };
+          kind: string;
+        }>;
+      };
+    };
+
+    expect(auditResponse.statusCode).toBe(200);
+    expect(
+      auditPayload.audit.entries.some(
+        (entry) =>
+          entry.kind === "replay-event" &&
+          entry.fact.sourceOfTruth === "runtime-event",
+      ),
+    ).toBe(true);
+    expect(
+      auditPayload.audit.entries.some(
+        (entry) =>
+          entry.kind === "tool-outcome" &&
+          entry.fact.sourceOfTruth === "tool-history" &&
+          entry.correlation.runId === createdPayload.run.id &&
+          typeof entry.correlation.toolCallId === "string",
       ),
     ).toBe(true);
   });

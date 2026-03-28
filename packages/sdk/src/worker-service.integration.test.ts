@@ -151,6 +151,7 @@ describe("@runroot/sdk worker service integration", () => {
 
     const secondJob = await worker.processNextJob();
     const completedRun = await service.getRun(queuedRun.id);
+    const audit = await service.getAuditView(queuedRun.id);
     const toolHistory = await service.getToolHistory(queuedRun.id);
     const timeline = await service.getTimeline(queuedRun.id);
 
@@ -178,6 +179,31 @@ describe("@runroot/sdk worker service integration", () => {
         (record) =>
           record.message === "tool invocation succeeded" &&
           record.attributes?.workerId === "worker_sqlite",
+      ),
+    ).toBe(true);
+    expect(
+      audit.entries.some(
+        (entry) =>
+          entry.kind === "dispatch-completed" &&
+          entry.fact.sourceOfTruth === "dispatch" &&
+          entry.correlation.workerId === "worker_sqlite",
+      ),
+    ).toBe(true);
+    expect(
+      audit.entries.some(
+        (entry) =>
+          entry.kind === "tool-outcome" &&
+          entry.fact.sourceOfTruth === "tool-history" &&
+          entry.correlation.dispatchJobId !== undefined &&
+          entry.correlation.workerId === "worker_sqlite",
+      ),
+    ).toBe(true);
+    expect(
+      audit.entries.some(
+        (entry) =>
+          entry.kind === "replay-event" &&
+          entry.fact.sourceOfTruth === "runtime-event" &&
+          entry.correlation.approvalId === approvalId,
       ),
     ).toBe(true);
     expect(timeline.entries.map((entry) => entry.kind)).toContain("run-queued");

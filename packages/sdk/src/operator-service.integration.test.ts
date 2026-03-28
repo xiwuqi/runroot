@@ -108,6 +108,7 @@ describe("@runroot/sdk operator service integration", () => {
 
     const timeline = await service.getTimeline(run.id);
     const toolHistory = await service.getToolHistory(run.id);
+    const audit = await service.getAuditView(run.id);
 
     expect(run.status).toBe("succeeded");
     expect(run.output?.["execute-runbook"]).toMatchObject({
@@ -136,6 +137,22 @@ describe("@runroot/sdk operator service integration", () => {
         (record) =>
           record.message === "tool invocation succeeded" &&
           record.attributes?.runId === run.id,
+      ),
+    ).toBe(true);
+    expect(
+      audit.entries.some(
+        (entry) =>
+          entry.kind === "replay-event" &&
+          entry.fact.sourceOfTruth === "runtime-event",
+      ),
+    ).toBe(true);
+    expect(
+      audit.entries.some(
+        (entry) =>
+          entry.kind === "tool-outcome" &&
+          entry.fact.sourceOfTruth === "tool-history" &&
+          entry.correlation.runId === run.id &&
+          entry.correlation.toolId === "builtin.shell.runbook",
       ),
     ).toBe(true);
     expect(timeline.entries.map((entry) => entry.kind)).toContain(
