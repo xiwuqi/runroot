@@ -1,0 +1,20 @@
+{
+  "name": "@runroot/worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Minimal queued-execution worker for Runroot.",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "dependencies": {
+    "@runroot/config": "workspace:*",
+    "@runroot/sdk": "workspace:*"
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format esm,cjs --dts --out-dir dist --clean",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  }
+}

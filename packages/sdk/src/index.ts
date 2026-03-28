@@ -16,6 +16,12 @@ export {
   resolveWorkspacePath,
   type StartTemplateRunInput,
 } from "./operator-service";
+export {
+  createRunrootWorkerService,
+  type RunrootWorkerService,
+  type RunrootWorkerServiceOptions,
+  type WorkerProcessResult,
+} from "./worker-service";
 
 export const sdkPackageBoundary = {
   name: "@runroot/sdk",

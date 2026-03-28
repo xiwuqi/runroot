@@ -16,7 +16,7 @@ Runroot focuses on:
 
 ## Current Status
 
-Phase 8 is complete. The repository now includes:
+Phase 9 is complete. The repository now includes:
 
 - the Phase 2 runtime core for runs, steps, checkpoints, and retries
 - the Phase 3 tool layer and minimal MCP adapter
@@ -30,6 +30,8 @@ Phase 8 is complete. The repository now includes:
 - a documented release-readiness workflow and release-note strategy
 - a Postgres-first persistence baseline with a SQLite local-development fallback
 - migration entrypoints and local infra guidance for the database-backed path
+- a shared queue-backed execution seam and minimal worker coordination path
+- a minimal worker app that can claim queued runs and drive them through the existing runtime
 
 Tool invocation hooks remain in-memory hooks inside `@runroot/tools`; they are not yet part of the shared replay source of truth.
 
@@ -73,7 +75,8 @@ Runroot is organized as a TypeScript monorepo:
 
 - `apps/api`: Fastify-based control plane API
 - `apps/web`: Next.js console for runs and approvals
-- `packages/*`: runtime, domain, persistence, events, tools, approvals, replay, observability, SDK, CLI, and templates
+- `apps/worker`: minimal queued-execution worker surface
+- `packages/*`: runtime, domain, persistence, dispatch, events, tools, approvals, replay, observability, SDK, CLI, and templates
 - `docs/architecture`: system design docs and ADRs
 
 The core rule is simple: runtime concerns stay in packages, and apps remain thin transport and presentation layers.
@@ -87,6 +90,8 @@ Phase 5 adds a third rule: API and CLI remain thin operator surfaces, while work
 Phase 6 adds a fourth rule: the web console stays a thin visualization layer over the API surface, and observability begins as logging and tracing adapters rather than a new runtime center.
 
 Phase 8 adds a fifth rule: database-backed persistence must stay behind the shared persistence contracts. Postgres is the primary backing store, SQLite is the local-development fallback, and the JSON-file adapter is no longer the default operator path.
+
+Phase 9 adds a sixth rule: queued execution must stay behind shared dispatch and worker seams. Runs may execute out of process, but replay, approval, and operator semantics still derive from persisted runtime and approval events.
 
 ## Example Use Cases
 
@@ -106,6 +111,7 @@ Phase 8 adds a fifth rule: database-backed persistence must stay behind the shar
 - [Web Console](./docs/guides/web-console.md)
 - [Observability](./docs/guides/observability.md)
 - [Persistence Baseline](./docs/guides/persistence-baseline.md)
+- [Queued Execution](./docs/guides/queued-execution.md)
 - [Release Readiness](./docs/guides/release-readiness.md)
 - [Examples](./examples/README.md)
 - [Web Console](./docs/architecture/web-console.md)

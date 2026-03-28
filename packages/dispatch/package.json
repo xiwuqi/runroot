@@ -1,9 +1,9 @@
 {
-  "name": "@runroot/persistence",
+  "name": "@runroot/dispatch",
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Persistence contracts and storage adapters for Runroot.",
+  "description": "Shared queue and dispatch contracts for queued Runroot execution.",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -18,21 +18,11 @@
     "dist"
   ],
   "dependencies": {
-    "@runroot/approvals": "workspace:*",
     "@runroot/config": "workspace:*",
-    "@runroot/dispatch": "workspace:*",
-    "@runroot/domain": "workspace:*",
-    "@runroot/events": "workspace:*",
-    "pg": "^8.20.0",
-    "sql.js": "^1.14.1"
+    "@runroot/domain": "workspace:*"
   },
   "scripts": {
     "build": "tsup src/index.ts --format esm,cjs --dts --out-dir dist --clean",
     "typecheck": "tsc --noEmit -p tsconfig.json"
-  },
-  "devDependencies": {
-    "@types/pg": "^8.20.0",
-    "@types/sql.js": "^1.4.11",
-    "pg-mem": "^3.0.14"
   }
 }

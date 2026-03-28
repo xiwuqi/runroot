@@ -110,6 +110,49 @@ export const runtimePersistenceMigrations = [
         ON runroot_events (run_id, occurred_at, id)`,
     ],
   },
+  {
+    id: "0002_dispatch_queue",
+    postgres: [
+      `CREATE TABLE IF NOT EXISTS runroot_dispatch_jobs (
+        id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL,
+        run_id TEXT NOT NULL,
+        definition_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        attempts INTEGER NOT NULL,
+        enqueued_at TEXT NOT NULL,
+        available_at TEXT NOT NULL,
+        claimed_at TEXT,
+        claimed_by TEXT,
+        completed_at TEXT,
+        data TEXT NOT NULL
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_runroot_dispatch_jobs_claim
+        ON runroot_dispatch_jobs (status, available_at, enqueued_at, id)`,
+      `CREATE INDEX IF NOT EXISTS idx_runroot_dispatch_jobs_run
+        ON runroot_dispatch_jobs (run_id, enqueued_at, id)`,
+    ],
+    sqlite: [
+      `CREATE TABLE IF NOT EXISTS runroot_dispatch_jobs (
+        id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL,
+        run_id TEXT NOT NULL,
+        definition_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        attempts INTEGER NOT NULL,
+        enqueued_at TEXT NOT NULL,
+        available_at TEXT NOT NULL,
+        claimed_at TEXT,
+        claimed_by TEXT,
+        completed_at TEXT,
+        data TEXT NOT NULL
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_runroot_dispatch_jobs_claim
+        ON runroot_dispatch_jobs (status, available_at, enqueued_at, id)`,
+      `CREATE INDEX IF NOT EXISTS idx_runroot_dispatch_jobs_run
+        ON runroot_dispatch_jobs (run_id, enqueued_at, id)`,
+    ],
+  },
 ] as const satisfies readonly PersistenceMigration[];
 
 export function getRuntimePersistenceMigrationStatements(
@@ -118,4 +161,16 @@ export function getRuntimePersistenceMigrationStatements(
   return runtimePersistenceMigrations.flatMap(
     (migration) => migration[dialect],
   );
+}
+
+export function getRuntimePersistenceMigrations(
+  dialect: PersistenceDialect,
+): readonly {
+  readonly id: string;
+  readonly statements: readonly string[];
+}[] {
+  return runtimePersistenceMigrations.map((migration) => ({
+    id: migration.id,
+    statements: migration[dialect],
+  }));
 }

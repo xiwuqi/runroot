@@ -1,11 +1,12 @@
 # Phase 9: Queue-Backed Execution and Worker Coordination
 
-Status: suggested freeze version, scope frozen, implementation not started
+Status: implementation completed, ready for review
 
 This document is the formal Phase 9 execution contract for Runroot. It is a
 conservative freeze derived from repository-owned materials that explicitly
-defer queue-backed execution and worker coordination to a later phase. It is
-not a record of work already completed.
+defer queue-backed execution and worker coordination to a later phase. The
+implementation on the Phase 9 branch follows this contract without widening the
+phase into broader distributed-systems or platform work.
 
 Primary source material:
 
@@ -30,9 +31,7 @@ stabilized.
 - Primary name: `Queue-Backed Execution and Worker Coordination`
 - Short label: `Queued Execution`
 
-This name is the suggested freeze version derived from existing repository
-materials. Once merged into `main`, it becomes the repository-owned formal
-Phase 9 name.
+This name is the repository-owned formal Phase 9 name.
 
 ## Formal Goals
 

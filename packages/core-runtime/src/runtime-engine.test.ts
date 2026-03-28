@@ -222,6 +222,73 @@ describe("@runroot/core-runtime createRun", () => {
     );
   });
 
+  it("queues a pending run without starting execution immediately", async () => {
+    const persistence = createInMemoryRuntimePersistence();
+    const runtime = new RuntimeEngine({
+      idGenerator: createIdGenerator(),
+      now: createClock(),
+      persistence,
+    });
+    const definition = {
+      id: "workflow.queue.start",
+      name: "Queued start workflow",
+      steps: [
+        {
+          execute: () => undefined,
+          key: "prepare",
+          name: "Prepare",
+        },
+      ],
+      version: "0.1.0",
+    };
+    const run = await runtime.createRun(definition, {
+      trigger: "queued-start",
+    });
+
+    const queuedRun = await runtime.queueRun(definition, run.id);
+
+    expect(queuedRun.status).toBe("queued");
+    expect(
+      (await runtime.getRunEvents(run.id)).map((event) => event.name),
+    ).toContain("run.queued");
+  });
+
+  it("queues a paused run for resume without starting it immediately", async () => {
+    const persistence = createInMemoryRuntimePersistence();
+    const runtime = new RuntimeEngine({
+      approvalIdGenerator: () => "approval_1",
+      idGenerator: createIdGenerator(),
+      now: createClock(),
+      persistence,
+    });
+    const definition = {
+      id: "workflow.queue.resume",
+      name: "Queued resume workflow",
+      steps: [
+        {
+          execute: () => ({
+            kind: "paused" as const,
+            reason: "manual gate",
+          }),
+          key: "gate",
+          name: "Gate",
+        },
+      ],
+      version: "0.1.0",
+    };
+    const run = await runtime.createRun(definition, {
+      trigger: "queued-resume",
+    });
+    const pausedRun = await runtime.executeRun(definition, run.id);
+
+    const queuedRun = await runtime.queueResumeRun(definition, pausedRun.id);
+
+    expect(queuedRun.status).toBe("queued");
+    expect(
+      (await runtime.getRunEvents(run.id)).map((event) => event.name),
+    ).toContain("run.resumed");
+  });
+
   it("rejects approval decisions for unknown approval ids", async () => {
     const persistence = createInMemoryRuntimePersistence();
     const runtime = new RuntimeEngine({

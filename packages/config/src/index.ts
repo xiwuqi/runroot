@@ -1,8 +1,15 @@
 import { resolve } from "node:path";
 
-export type DeliveryPhase = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+export type DeliveryPhase = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+
+export type ExecutionMode = "inline" | "queued";
 
 export type PersistenceDriver = "file" | "postgres" | "sqlite";
+
+export interface ResolveExecutionModeOptions {
+  readonly env?: Readonly<Record<string, string | undefined>>;
+  readonly executionMode?: ExecutionMode;
+}
 
 export interface ResolvePersistenceConfigOptions {
   readonly databaseUrl?: string;
@@ -40,8 +47,8 @@ export const projectMetadata = {
   name: "Runroot",
   description:
     "MCP-native runtime and orchestration for durable developer and ops workflows.",
-  currentPhase: 8,
-  phaseName: "Postgres-First Persistence and SQLite Development Fallback",
+  currentPhase: 9,
+  phaseName: "Queue-Backed Execution and Worker Coordination",
 } as const;
 
 export const requiredQualityCommands = [
@@ -139,6 +146,19 @@ function readPersistenceDriver(
   return undefined;
 }
 
+export function resolveExecutionMode(
+  options: ResolveExecutionModeOptions = {},
+): ExecutionMode {
+  if (options.executionMode) {
+    return options.executionMode;
+  }
+
+  const env = options.env ?? process.env;
+  const envMode = readExecutionMode(env.RUNROOT_EXECUTION_MODE);
+
+  return envMode ?? "inline";
+}
+
 function resolvePersistenceConfigForDriver(
   driver: PersistenceDriver,
   env: Readonly<Record<string, string | undefined>>,
@@ -179,4 +199,14 @@ function resolvePersistenceConfigForDriver(
       };
     }
   }
+}
+
+function readExecutionMode(
+  value: string | undefined,
+): ExecutionMode | undefined {
+  if (value === "inline" || value === "queued") {
+    return value;
+  }
+
+  return undefined;
 }

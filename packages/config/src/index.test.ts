@@ -3,15 +3,16 @@ import { describe, expect, it } from "vitest";
 import {
   projectMetadata,
   requiredQualityCommands,
+  resolveExecutionMode,
   resolvePersistenceConfig,
 } from "./index";
 
 describe("@runroot/config", () => {
   it("exposes phase-aware project metadata", () => {
     expect(projectMetadata.name).toBe("Runroot");
-    expect(projectMetadata.currentPhase).toBe(8);
+    expect(projectMetadata.currentPhase).toBe(9);
     expect(projectMetadata.phaseName).toBe(
-      "Postgres-First Persistence and SQLite Development Fallback",
+      "Queue-Backed Execution and Worker Coordination",
     );
   });
 
@@ -57,5 +58,23 @@ describe("@runroot/config", () => {
       databaseUrl: "postgres://runroot:runroot@localhost:5432/runroot",
       driver: "postgres",
     });
+  });
+
+  it("defaults execution mode to inline when no queue mode is configured", () => {
+    expect(
+      resolveExecutionMode({
+        env: {},
+      }),
+    ).toBe("inline");
+  });
+
+  it("honors queued execution mode from the environment", () => {
+    expect(
+      resolveExecutionMode({
+        env: {
+          RUNROOT_EXECUTION_MODE: "queued",
+        },
+      }),
+    ).toBe("queued");
   });
 });

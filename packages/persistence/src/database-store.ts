@@ -16,7 +16,7 @@ import type {
   SqlJsStatic,
 } from "sql.js";
 import initSqlJs from "sql.js/dist/sql-asm.js";
-import { getRuntimePersistenceMigrationStatements } from "./migrations";
+import { getRuntimePersistenceMigrations } from "./migrations";
 import {
   type CheckpointWrite,
   createFileRuntimePersistence,
@@ -709,12 +709,7 @@ async function applyRuntimePersistenceMigrations(
 }
 
 function getMigrationsForDialect(dialect: "postgres" | "sqlite") {
-  return [
-    {
-      id: "0001_persistence_baseline",
-      statements: getRuntimePersistenceMigrationStatements(dialect),
-    },
-  ] as const;
+  return getRuntimePersistenceMigrations(dialect);
 }
 
 function createDefaultPool(databaseUrl?: string): PostgresPoolLike {
