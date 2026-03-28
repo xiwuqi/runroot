@@ -85,4 +85,19 @@ Status: completed
 - keep the phase focused on queue-backed execution, worker coordination, local
   infrastructure, and thin wiring
 
-Status: implementation completed, ready for review
+Status: completed
+
+## Phase 10: Persisted Tool History and Execution Telemetry
+
+- add a shared persisted tool-history path behind the existing tool hooks and
+  package seams
+- correlate run, step, dispatch job, worker, and tool identifiers through the
+  existing observability adapters
+- expose minimal read paths for tool audit history through the existing
+  operator surfaces
+- execute against the formal handoff in
+  [docs/architecture/phase-10-handoff.md](./architecture/phase-10-handoff.md)
+- keep the phase focused on persisted tool history, telemetry correlation, and
+  thin wiring instead of a full observability platform
+
+Status: suggested freeze, pending review and merge
