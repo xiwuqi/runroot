@@ -103,6 +103,14 @@ export async function runCli(
         return writeJson(io.stdout.write, {
           timeline: await service.getTimeline(subject),
         });
+      case "runs:audit":
+        if (!subject) {
+          throw new Error("runs audit requires a run id.");
+        }
+
+        return writeJson(io.stdout.write, {
+          audit: await service.getAuditView(subject),
+        });
       case "approvals:pending":
         return writeJson(io.stdout.write, {
           approvals: await service.getPendingApprovals(),
@@ -267,6 +275,7 @@ Commands:
   runs show <run-id>
   runs resume <run-id>
   runs timeline <run-id>
+  runs audit <run-id>
   approvals pending
   approvals show <approval-id>
   approvals decide <approval-id> --decision approved|rejected|cancelled [--actor <id>] [--note <text>]

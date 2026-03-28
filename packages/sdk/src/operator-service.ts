@@ -21,7 +21,9 @@ import {
   type RuntimePersistence,
 } from "@runroot/persistence";
 import {
+  createRunAuditQuery,
   createRunTimelineQuery,
+  type RunAuditView,
   type RunTimeline,
   type RunTimelineQuery,
 } from "@runroot/replay";
@@ -66,6 +68,7 @@ export interface PendingApprovalSummary {
 }
 
 export interface RunrootOperatorService {
+  getAuditView(runId: string): Promise<RunAuditView>;
   decideApproval(
     approvalId: string,
     input: DecideApprovalInput,
@@ -181,6 +184,13 @@ export function createRunrootOperatorService(
   const replay = createRunTimelineQuery({
     listByRunId: (runId) => runtime.getRunEvents(runId),
   });
+  const audit = createRunAuditQuery({
+    listByRunId: (runId) => runtime.getRunEvents(runId),
+    async listDispatchJobsByRunId(runId) {
+      return dispatchQueue ? dispatchQueue.listByRunId(runId) : [];
+    },
+    listToolHistoryByRunId: (runId) => toolHistory.listByRunId(runId),
+  });
   const persistenceLocation = persistenceConfig.location;
 
   return {
@@ -212,6 +222,12 @@ export function createRunrootOperatorService(
       await requireRun(runtime, runId);
 
       return runtime.getApprovals(runId);
+    },
+
+    async getAuditView(runId) {
+      await requireRun(runtime, runId);
+
+      return audit.getAuditView(runId);
     },
 
     async getPendingApprovals() {
