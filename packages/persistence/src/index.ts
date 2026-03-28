@@ -37,17 +37,31 @@ export {
   type RuntimeTransitionCommit,
   type RuntimeTransitionCommitResult,
 } from "./runtime-store";
+export {
+  type ConfiguredToolHistoryStoreOptions,
+  createConfiguredToolHistoryStore,
+  createFileToolHistoryStore,
+  createInMemoryToolHistoryStore,
+  createPostgresToolHistoryStore,
+  createSqliteToolHistoryStore,
+  type FileToolHistoryStoreOptions,
+  type InMemoryToolHistoryStoreOptions,
+  type PostgresToolHistoryStoreOptions,
+  resolveToolHistoryFilePath,
+  type SqliteToolHistoryStoreOptions,
+} from "./tool-history-store";
 
 export const persistencePackageBoundary = {
   name: "@runroot/persistence",
   kind: "package",
   phaseOwned: 2,
   responsibility:
-    "Repository contracts, checkpoint storage, database adapters, and dispatch queue persistence seams.",
+    "Repository contracts, checkpoint storage, database adapters, dispatch queue persistence seams, and tool-history storage adapters.",
   publicSurface: [
     "repository interfaces",
     "storage adapters",
     "checkpoint persistence",
     "dispatch queue adapters",
+    "tool history adapters",
   ],
 } as const satisfies PackageBoundary;

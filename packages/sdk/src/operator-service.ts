@@ -13,9 +13,11 @@ import {
 } from "@runroot/core-runtime";
 import type { DispatchQueue } from "@runroot/dispatch";
 import type { JsonValue, WorkflowRun } from "@runroot/domain";
+import type { RunrootLogger, RunrootTracer } from "@runroot/observability";
 import {
   createConfiguredDispatchQueue,
   createConfiguredRuntimePersistence,
+  createConfiguredToolHistoryStore,
   type RuntimePersistence,
 } from "@runroot/persistence";
 import {
@@ -24,19 +26,27 @@ import {
   type RunTimelineQuery,
 } from "@runroot/replay";
 import {
+  type CreateTemplateRuntimeBundleOptions,
   createTemplateRuntimeBundle,
   type TemplateCatalog,
   TemplateNotFoundError,
   type WorkflowTemplate,
   type WorkflowTemplateDescriptor,
 } from "@runroot/templates";
-import { validateToolValue } from "@runroot/tools";
+import {
+  type ToolHistoryEntry,
+  type ToolHistoryStore,
+  toolTelemetryMetadataKeys,
+  validateToolValue,
+  withToolInvocationMetadata,
+} from "@runroot/tools";
 
 import {
   OperatorConflictError,
   OperatorInputError,
   OperatorNotFoundError,
 } from "./errors";
+import { createToolTelemetryObserver } from "./tool-telemetry";
 
 export interface StartTemplateRunInput {
   readonly input: JsonValue;
@@ -64,6 +74,7 @@ export interface RunrootOperatorService {
   getApprovals(runId: string): Promise<readonly ApprovalRequest[]>;
   getPendingApprovals(): Promise<readonly PendingApprovalSummary[]>;
   getRun(runId: string): Promise<WorkflowRun>;
+  getToolHistory(runId: string): Promise<readonly ToolHistoryEntry[]>;
   getTimeline(runId: string): Promise<RunTimeline>;
   getWorkspacePath(): string;
   listRuns(): Promise<readonly WorkflowRun[]>;
@@ -79,19 +90,20 @@ export interface RunrootOperatorServiceOptions {
   readonly env?: Readonly<Record<string, string | undefined>>;
   readonly executionMode?: ExecutionMode;
   readonly idGenerator?: (prefix: "run" | "step") => string;
+  readonly logger?: RunrootLogger;
   readonly now?: () => string;
   readonly persistence?: RuntimePersistence;
   readonly persistenceDriver?: PersistenceDriver;
   readonly sqlitePath?: string;
   readonly templates?: TemplateCatalog;
+  readonly toolHistory?: ToolHistoryStore;
+  readonly tracer?: RunrootTracer;
   readonly workspacePath?: string;
 }
 
 export function createRunrootOperatorService(
   options: RunrootOperatorServiceOptions = {},
 ): RunrootOperatorService {
-  const templateRuntime = createTemplateRuntimeBundle();
-  const templates = options.templates ?? templateRuntime.templates;
   const now = options.now ?? (() => new Date().toISOString());
   const persistenceConfig = resolvePersistenceConfig({
     ...(options.databaseUrl ? { databaseUrl: options.databaseUrl } : {}),
@@ -113,6 +125,29 @@ export function createRunrootOperatorService(
         ? { workspacePath: options.workspacePath }
         : {}),
     });
+  const toolHistory =
+    options.toolHistory ??
+    createConfiguredToolHistoryStore({
+      ...(options.databaseUrl ? { databaseUrl: options.databaseUrl } : {}),
+      ...(options.env ? { env: options.env } : {}),
+      ...(options.persistenceDriver
+        ? { driver: options.persistenceDriver }
+        : {}),
+      ...(options.sqlitePath ? { sqlitePath: options.sqlitePath } : {}),
+      ...(options.workspacePath
+        ? { workspacePath: options.workspacePath }
+        : {}),
+    });
+  const templateRuntimeOptions: CreateTemplateRuntimeBundleOptions = {
+    toolObserver: createToolTelemetryObserver({
+      history: toolHistory,
+      ...(options.logger ? { logger: options.logger } : {}),
+      surface: "operator",
+      ...(options.tracer ? { tracer: options.tracer } : {}),
+    }),
+  };
+  const templateRuntime = createTemplateRuntimeBundle(templateRuntimeOptions);
+  const templates = options.templates ?? templateRuntime.templates;
   const executionMode = resolveExecutionMode({
     ...(options.env ? { env: options.env } : {}),
     ...(options.executionMode ? { executionMode: options.executionMode } : {}),
@@ -139,7 +174,9 @@ export function createRunrootOperatorService(
     ...(options.idGenerator ? { idGenerator: options.idGenerator } : {}),
     now,
     persistence,
-    toolInvoker: templateRuntime.toolInvoker,
+    toolInvoker: withToolInvocationMetadata(templateRuntime.toolInvoker, {
+      [toolTelemetryMetadataKeys.executionMode]: "inline",
+    }),
   });
   const replay = createRunTimelineQuery({
     listByRunId: (runId) => runtime.getRunEvents(runId),
@@ -197,6 +234,12 @@ export function createRunrootOperatorService(
 
     async getRun(runId) {
       return requireRun(runtime, runId);
+    },
+
+    async getToolHistory(runId) {
+      await requireRun(runtime, runId);
+
+      return toolHistory.listByRunId(runId);
     },
 
     async getTimeline(runId) {

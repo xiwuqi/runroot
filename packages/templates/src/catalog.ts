@@ -1,4 +1,5 @@
 import type {
+  CreateTemplateRuntimeBundleOptions,
   TemplateCatalog,
   TemplateRuntimeBundle,
   WorkflowTemplate,
@@ -36,10 +37,14 @@ export function createTemplateCatalog(
   };
 }
 
-export function createTemplateRuntimeBundle(): TemplateRuntimeBundle {
+export function createTemplateRuntimeBundle(
+  options: CreateTemplateRuntimeBundleOptions = {},
+): TemplateRuntimeBundle {
   return {
     templates: createTemplateCatalog(),
-    toolInvoker: createTemplateToolInvoker(),
+    toolInvoker: createTemplateToolInvoker({
+      ...(options.toolObserver ? { observer: options.toolObserver } : {}),
+    }),
   };
 }
 

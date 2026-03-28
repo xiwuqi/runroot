@@ -4,6 +4,7 @@ import type {
   ApiApproval,
   ApiRun,
   ApiTimeline,
+  ApiToolHistoryEntry,
   PendingApprovalSummary,
 } from "../lib/runroot-api";
 
@@ -125,10 +126,12 @@ export function RunsListView({
 export function RunDetailView({
   approvals,
   run,
+  toolHistory,
   timeline,
 }: Readonly<{
   approvals: readonly ApiApproval[];
   run: ApiRun;
+  toolHistory: readonly ApiToolHistoryEntry[];
   timeline: ApiTimeline;
 }>) {
   const latestApproval = approvals.at(-1);
@@ -136,6 +139,7 @@ export function RunDetailView({
     (approval) => approval.status === "pending",
   );
   const recentEntries = timeline.entries.slice(-5).reverse();
+  const recentToolHistory = [...toolHistory].slice(-5).reverse();
 
   return (
     <section className="detail-grid">
@@ -212,6 +216,54 @@ export function RunDetailView({
                 </li>
               ))}
           </ul>
+        )}
+      </article>
+
+      <article className="card">
+        <h3>Tool history</h3>
+        {recentToolHistory.length === 0 ? (
+          <p className="empty-copy">
+            No persisted tool history has been recorded for this run yet.
+          </p>
+        ) : (
+          <ol className="timeline-list">
+            {recentToolHistory.map((entry) => (
+              <li className="timeline-entry" key={entry.callId}>
+                <div className="row spread">
+                  <strong>{entry.toolName}</strong>
+                  <StatusBadge status={entry.outcome} />
+                </div>
+                <div className="timeline-meta">
+                  call {entry.callId}
+                  {entry.stepId ? ` · step ${entry.stepId}` : ""}
+                  {entry.dispatchJobId
+                    ? ` · dispatch ${entry.dispatchJobId}`
+                    : ""}
+                  {entry.workerId ? ` · worker ${entry.workerId}` : ""}
+                </div>
+                <div className="timeline-meta">
+                  {formatTimestamp(entry.startedAt)} to{" "}
+                  {formatTimestamp(entry.finishedAt)}
+                </div>
+                <pre className="payload-preview">
+                  {JSON.stringify(
+                    {
+                      input: entry.inputSummary,
+                      ...(entry.outputSummary
+                        ? { output: entry.outputSummary }
+                        : {}),
+                      ...(entry.outcomeDetail
+                        ? { detail: entry.outcomeDetail }
+                        : {}),
+                      source: entry.source,
+                    },
+                    null,
+                    2,
+                  )}
+                </pre>
+              </li>
+            ))}
+          </ol>
         )}
       </article>
     </section>

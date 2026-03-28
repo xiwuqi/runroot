@@ -5,15 +5,24 @@ import {
 import { RuntimeEngine } from "@runroot/core-runtime";
 import type { DispatchJob, DispatchQueue } from "@runroot/dispatch";
 import type { WorkflowRun } from "@runroot/domain";
+import type { RunrootLogger, RunrootTracer } from "@runroot/observability";
 import {
   createConfiguredDispatchQueue,
   createConfiguredRuntimePersistence,
+  createConfiguredToolHistoryStore,
   type RuntimePersistence,
 } from "@runroot/persistence";
 import {
+  type CreateTemplateRuntimeBundleOptions,
   createTemplateRuntimeBundle,
   type TemplateCatalog,
 } from "@runroot/templates";
+import {
+  type ToolHistoryStore,
+  toolTelemetryMetadataKeys,
+  withToolInvocationMetadata,
+} from "@runroot/tools";
+import { createToolTelemetryObserver } from "./tool-telemetry";
 
 export interface RunrootWorkerServiceOptions {
   readonly approvalIdGenerator?: () => string;
@@ -21,11 +30,14 @@ export interface RunrootWorkerServiceOptions {
   readonly dispatchQueue?: DispatchQueue;
   readonly env?: Readonly<Record<string, string | undefined>>;
   readonly idGenerator?: (prefix: "run" | "step") => string;
+  readonly logger?: RunrootLogger;
   readonly now?: () => string;
   readonly persistence?: RuntimePersistence;
   readonly persistenceDriver?: PersistenceDriver;
   readonly sqlitePath?: string;
   readonly templates?: TemplateCatalog;
+  readonly toolHistory?: ToolHistoryStore;
+  readonly tracer?: RunrootTracer;
   readonly workerId?: string;
   readonly workspacePath?: string;
 }
@@ -45,8 +57,6 @@ export interface RunrootWorkerService {
 export function createRunrootWorkerService(
   options: RunrootWorkerServiceOptions = {},
 ): RunrootWorkerService {
-  const templateRuntime = createTemplateRuntimeBundle();
-  const templates = options.templates ?? templateRuntime.templates;
   const now = options.now ?? (() => new Date().toISOString());
   const persistenceConfig = resolvePersistenceConfig({
     ...(options.databaseUrl ? { databaseUrl: options.databaseUrl } : {}),
@@ -68,6 +78,29 @@ export function createRunrootWorkerService(
         ? { workspacePath: options.workspacePath }
         : {}),
     });
+  const toolHistory =
+    options.toolHistory ??
+    createConfiguredToolHistoryStore({
+      ...(options.databaseUrl ? { databaseUrl: options.databaseUrl } : {}),
+      ...(options.env ? { env: options.env } : {}),
+      ...(options.persistenceDriver
+        ? { driver: options.persistenceDriver }
+        : {}),
+      ...(options.sqlitePath ? { sqlitePath: options.sqlitePath } : {}),
+      ...(options.workspacePath
+        ? { workspacePath: options.workspacePath }
+        : {}),
+    });
+  const templateRuntimeOptions: CreateTemplateRuntimeBundleOptions = {
+    toolObserver: createToolTelemetryObserver({
+      history: toolHistory,
+      ...(options.logger ? { logger: options.logger } : {}),
+      surface: "worker",
+      ...(options.tracer ? { tracer: options.tracer } : {}),
+    }),
+  };
+  const templateRuntime = createTemplateRuntimeBundle(templateRuntimeOptions);
+  const templates = options.templates ?? templateRuntime.templates;
   const dispatchQueue =
     options.dispatchQueue ??
     createConfiguredDispatchQueue({
@@ -81,19 +114,14 @@ export function createRunrootWorkerService(
         ? { workspacePath: options.workspacePath }
         : {}),
     });
-  const runtime = new RuntimeEngine({
-    ...(options.approvalIdGenerator
-      ? { approvalIdGenerator: options.approvalIdGenerator }
-      : {}),
-    ...(options.idGenerator ? { idGenerator: options.idGenerator } : {}),
-    now,
-    persistence,
-    toolInvoker: templateRuntime.toolInvoker,
-  });
   const workerId =
     options.workerId ??
     options.env?.RUNROOT_WORKER_ID ??
     `worker:${persistenceConfig.driver}`;
+  const runtime = createRuntime({
+    [toolTelemetryMetadataKeys.executionMode]: "queued",
+    [toolTelemetryMetadataKeys.workerId]: workerId,
+  });
 
   return {
     async processNextJob() {
@@ -130,9 +158,18 @@ export function createRunrootWorkerService(
           );
         }
 
-        const nextRun = await executeClaimedJob(claimedJob, run, runtime, {
-          definition: template.definition,
-        });
+        const nextRun = await executeClaimedJob(
+          claimedJob,
+          run,
+          createRuntime({
+            [toolTelemetryMetadataKeys.dispatchJobId]: claimedJob.id,
+            [toolTelemetryMetadataKeys.executionMode]: "queued",
+            [toolTelemetryMetadataKeys.workerId]: workerId,
+          }),
+          {
+            definition: template.definition,
+          },
+        );
         const completedJob =
           (await dispatchQueue.complete(claimedJob.id, now())) ?? claimedJob;
 
@@ -167,6 +204,23 @@ export function createRunrootWorkerService(
       return results;
     },
   };
+
+  function createRuntime(
+    metadata: Readonly<Record<string, string>>,
+  ): RuntimeEngine {
+    return new RuntimeEngine({
+      ...(options.approvalIdGenerator
+        ? { approvalIdGenerator: options.approvalIdGenerator }
+        : {}),
+      ...(options.idGenerator ? { idGenerator: options.idGenerator } : {}),
+      now,
+      persistence,
+      toolInvoker: withToolInvocationMetadata(
+        templateRuntime.toolInvoker,
+        metadata,
+      ),
+    });
+  }
 }
 
 async function executeClaimedJob(

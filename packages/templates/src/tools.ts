@@ -8,12 +8,21 @@ import {
   createRegistryToolInvoker,
   createToolRegistry,
   type ToolDefinition,
+  type ToolInvocationObserver,
   type ToolInvoker,
 } from "@runroot/tools";
 
 const execFileAsync = promisify(execFile);
 
-export function createTemplateToolInvoker(): ToolInvoker {
+export interface CreateTemplateToolInvokerOptions {
+  readonly observer?:
+    | ToolInvocationObserver
+    | readonly ToolInvocationObserver[];
+}
+
+export function createTemplateToolInvoker(
+  options: CreateTemplateToolInvokerOptions = {},
+): ToolInvoker {
   const registry = createToolRegistry([
     createEchoTool(),
     createShellRunbookTool(),
@@ -22,6 +31,7 @@ export function createTemplateToolInvoker(): ToolInvoker {
   ]);
 
   return createRegistryToolInvoker({
+    ...(options.observer ? { observer: options.observer } : {}),
     registry,
   });
 }

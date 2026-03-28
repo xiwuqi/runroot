@@ -1,6 +1,10 @@
 import type { WorkflowDefinition } from "@runroot/core-runtime";
 import type { JsonValue } from "@runroot/domain";
-import type { ToolInvoker, ToolSchema } from "@runroot/tools";
+import type {
+  ToolInvocationObserver,
+  ToolInvoker,
+  ToolSchema,
+} from "@runroot/tools";
 
 export interface WorkflowTemplateDescriptor {
   readonly description: string;
@@ -27,4 +31,10 @@ export interface TemplateCatalog {
 export interface TemplateRuntimeBundle {
   readonly templates: TemplateCatalog;
   readonly toolInvoker: ToolInvoker;
+}
+
+export interface CreateTemplateRuntimeBundleOptions {
+  readonly toolObserver?:
+    | ToolInvocationObserver
+    | readonly ToolInvocationObserver[];
 }
