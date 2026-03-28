@@ -10,9 +10,9 @@ import {
 describe("@runroot/config", () => {
   it("exposes phase-aware project metadata", () => {
     expect(projectMetadata.name).toBe("Runroot");
-    expect(projectMetadata.currentPhase).toBe(9);
+    expect(projectMetadata.currentPhase).toBe(10);
     expect(projectMetadata.phaseName).toBe(
-      "Queue-Backed Execution and Worker Coordination",
+      "Persisted Tool History and Execution Telemetry",
     );
   });
 

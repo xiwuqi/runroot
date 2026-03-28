@@ -2,7 +2,11 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { createPostgresRuntimePersistence } from "@runroot/persistence";
+import { createMemoryLogger, createMemoryTracer } from "@runroot/observability";
+import {
+  createPostgresRuntimePersistence,
+  createPostgresToolHistoryStore,
+} from "@runroot/persistence";
 import { newDb } from "pg-mem";
 import { describe, expect, it } from "vitest";
 
@@ -79,9 +83,17 @@ describe("@runroot/sdk operator service integration", () => {
 
   it("runs a shell runbook end to end without approval", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "runroot-sdk-shell-"));
+    const logger = createMemoryLogger({
+      now: () => "2026-03-27T01:10:00.000Z",
+    });
+    const tracer = createMemoryTracer({
+      now: () => "2026-03-27T01:10:00.000Z",
+    });
     const service = createRunrootOperatorService({
       idGenerator: createIdGenerator(),
+      logger,
       now: createClock(),
+      tracer,
       workspacePath: join(workspaceRoot, "workspace.json"),
     });
 
@@ -95,12 +107,37 @@ describe("@runroot/sdk operator service integration", () => {
     });
 
     const timeline = await service.getTimeline(run.id);
+    const toolHistory = await service.getToolHistory(run.id);
 
     expect(run.status).toBe("succeeded");
     expect(run.output?.["execute-runbook"]).toMatchObject({
       action: "print-ready",
       exitCode: 0,
     });
+    expect(toolHistory.map((entry) => entry.toolName)).toEqual([
+      "shell.runbook",
+      "shell.runbook",
+    ]);
+    expect(toolHistory.every((entry) => entry.executionMode === "inline")).toBe(
+      true,
+    );
+    expect(tracer.spans.every((span) => span.name === "tool.invoke")).toBe(
+      true,
+    );
+    expect(
+      tracer.spans.every(
+        (span) =>
+          span.attributes.runId === run.id &&
+          span.attributes.executionMode === "inline",
+      ),
+    ).toBe(true);
+    expect(
+      logger.records.some(
+        (record) =>
+          record.message === "tool invocation succeeded" &&
+          record.attributes?.runId === run.id,
+      ),
+    ).toBe(true);
     expect(timeline.entries.map((entry) => entry.kind)).toContain(
       "run-succeeded",
     );
@@ -161,6 +198,9 @@ describe("@runroot/sdk operator service integration", () => {
       idGenerator: createIdGenerator(),
       now: createClock(),
       persistence: createPostgresRuntimePersistence({
+        pool,
+      }),
+      toolHistory: createPostgresToolHistoryStore({
         pool,
       }),
     });
