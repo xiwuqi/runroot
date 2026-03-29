@@ -11,6 +11,13 @@ import {
   matchesCrossRunAuditFilters,
   projectCrossRunAuditResult,
 } from "./cross-run";
+import {
+  type CrossRunAuditDrilldownFilters,
+  type CrossRunAuditDrilldownResults,
+  compareCrossRunAuditDrilldownResults,
+  hasCrossRunAuditDrilldownFilters,
+  projectCrossRunAuditDrilldownResult,
+} from "./drilldown";
 import { projectRunTimeline, type RunTimeline } from "./timeline";
 
 export interface RunTimelineReader {
@@ -38,6 +45,12 @@ export interface CrossRunAuditQuery {
   listAuditResults(
     filters?: CrossRunAuditQueryFilters,
   ): Promise<CrossRunAuditResults>;
+}
+
+export interface CrossRunAuditDrilldownQuery {
+  listAuditDrilldowns(
+    filters?: CrossRunAuditDrilldownFilters,
+  ): Promise<CrossRunAuditDrilldownResults>;
 }
 
 export function createRunTimelineQuery(
@@ -109,6 +122,57 @@ export function createCrossRunAuditQuery(
         filters,
         results: filteredResults,
         totalCount: filteredResults.length,
+      };
+    },
+  };
+}
+
+export function createCrossRunAuditDrilldownQuery(
+  reader: CrossRunAuditReader,
+): CrossRunAuditDrilldownQuery {
+  const auditQuery = createRunAuditQuery(reader);
+
+  return {
+    async listAuditDrilldowns(filters = {}) {
+      if (!hasCrossRunAuditDrilldownFilters(filters)) {
+        return {
+          filters,
+          isConstrained: false,
+          results: [],
+          totalCount: 0,
+          totalMatchedEntryCount: 0,
+        };
+      }
+
+      const runs = (await reader.listRuns())
+        .filter((run) => (filters.runId ? run.id === filters.runId : true))
+        .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+      const results = (
+        await Promise.all(
+          runs.map(async (run) =>
+            projectCrossRunAuditDrilldownResult(
+              run,
+              await auditQuery.getAuditView(run.id),
+              filters,
+            ),
+          ),
+        )
+      )
+        .filter(
+          (result): result is NonNullable<typeof result> =>
+            result !== undefined,
+        )
+        .sort(compareCrossRunAuditDrilldownResults);
+
+      return {
+        filters,
+        isConstrained: true,
+        results,
+        totalCount: results.length,
+        totalMatchedEntryCount: results.reduce(
+          (count, result) => count + result.matchedEntryCount,
+          0,
+        ),
       };
     },
   };

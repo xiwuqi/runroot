@@ -420,4 +420,92 @@ describe("@runroot/api integration", () => {
       queuedResultsPayload.audit.results.map((result) => result.runId),
     ).toEqual([queuedRun.id]);
   });
+
+  it("serves cross-run audit drilldowns for inline and queued runs through the network API", async () => {
+    const workspaceRoot = await mkdtemp(
+      join(tmpdir(), "runroot-api-drilldown-"),
+    );
+    const sqlitePath = join(workspaceRoot, "runroot.sqlite");
+    const inlineOperator = createRunrootOperatorService({
+      executionMode: "inline",
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+    const queuedOperator = createRunrootOperatorService({
+      executionMode: "queued",
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+    const workerService = (
+      await import("@runroot/sdk")
+    ).createRunrootWorkerService({
+      persistenceDriver: "sqlite",
+      sqlitePath,
+      workerId: "worker_drilldown_api",
+    });
+
+    const inlineRun = await inlineOperator.startRun({
+      input: {
+        approvalRequired: false,
+        commandAlias: "print-ready",
+        runbookId: "node-health-check",
+      },
+      templateId: "shell-runbook-flow",
+    });
+    await queuedOperator.startRun({
+      input: {
+        approvalRequired: false,
+        commandAlias: "print-ready",
+        runbookId: "node-health-check",
+      },
+      templateId: "shell-runbook-flow",
+    });
+
+    await workerService.processNextJob();
+
+    app = buildServer({
+      operator: createRunrootOperatorService({
+        persistenceDriver: "sqlite",
+        sqlitePath,
+      }),
+    });
+    const address = await app.listen({
+      host: "127.0.0.1",
+      port: 0,
+    });
+
+    const inlineResponse = await fetch(
+      `${address}/audit/drilldowns?runId=${inlineRun.id}`,
+    );
+    const queuedResponse = await fetch(
+      `${address}/audit/drilldowns?workerId=worker_drilldown_api`,
+    );
+    const inlinePayload = (await inlineResponse.json()) as {
+      audit: {
+        results: Array<{
+          runId: string;
+        }>;
+        totalCount: number;
+      };
+    };
+    const queuedPayload = (await queuedResponse.json()) as {
+      audit: {
+        results: Array<{
+          identifiers: {
+            workerIds: string[];
+          };
+        }>;
+        totalMatchedEntryCount: number;
+      };
+    };
+
+    expect(inlineResponse.status).toBe(200);
+    expect(inlinePayload.audit.totalCount).toBe(1);
+    expect(inlinePayload.audit.results[0]?.runId).toBe(inlineRun.id);
+    expect(queuedResponse.status).toBe(200);
+    expect(queuedPayload.audit.totalMatchedEntryCount).toBeGreaterThan(0);
+    expect(queuedPayload.audit.results[0]?.identifiers.workerIds).toContain(
+      "worker_drilldown_api",
+    );
+  });
 });

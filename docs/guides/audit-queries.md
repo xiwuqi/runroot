@@ -29,6 +29,10 @@ Phase 12 intentionally keeps filtering narrow and structured:
 This phase does not add broad text search, dashboard drill-downs, or
 open-ended analytics products.
 
+Phase 13 builds on this list-and-filter baseline with identifier-driven
+drilldowns. The Phase 12 query surface remains thin and structured rather than
+expanding into a general-purpose search product.
+
 ## Read Path
 
 The minimum cross-run audit query is available through the existing seams:

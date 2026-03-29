@@ -117,6 +117,12 @@ export async function runCli(
             resolveCrossRunAuditFilters(flags),
           ),
         });
+      case "audit:drilldown":
+        return writeJson(io.stdout.write, {
+          audit: await service.listAuditDrilldowns(
+            resolveCrossRunAuditDrilldownFilters(flags),
+          ),
+        });
       case "approvals:pending":
         return writeJson(io.stdout.write, {
           approvals: await service.getPendingApprovals(),
@@ -288,6 +294,28 @@ function resolveCrossRunAuditFilters(
   };
 }
 
+function resolveCrossRunAuditDrilldownFilters(
+  flags: ReadonlyMap<string, string | boolean>,
+) {
+  const approvalId = getStringFlag(flags, "approval-id");
+  const dispatchJobId = getStringFlag(flags, "dispatch-job-id");
+  const runId = getStringFlag(flags, "run-id");
+  const stepId = getStringFlag(flags, "step-id");
+  const toolCallId = getStringFlag(flags, "tool-call-id");
+  const toolId = getStringFlag(flags, "tool-id");
+  const workerId = getStringFlag(flags, "worker-id");
+
+  return {
+    ...(approvalId ? { approvalId } : {}),
+    ...(dispatchJobId ? { dispatchJobId } : {}),
+    ...(runId ? { runId } : {}),
+    ...(stepId ? { stepId } : {}),
+    ...(toolCallId ? { toolCallId } : {}),
+    ...(toolId ? { toolId } : {}),
+    ...(workerId ? { workerId } : {}),
+  };
+}
+
 function resolveExecutionModeFlag(
   flags: ReadonlyMap<string, string | boolean>,
 ): "inline" | "queued" | undefined {
@@ -341,6 +369,7 @@ Commands:
   runs timeline <run-id>
   runs audit <run-id>
   audit list [--definition-id <id>] [--status <status>] [--execution-mode <inline|queued>] [--tool-name <name>]
+  audit drilldown [--run-id <id>] [--approval-id <id>] [--step-id <id>] [--dispatch-job-id <id>] [--worker-id <id>] [--tool-call-id <id>] [--tool-id <id>]
   approvals pending
   approvals show <approval-id>
   approvals decide <approval-id> --decision approved|rejected|cancelled [--actor <id>] [--note <text>]

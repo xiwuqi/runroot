@@ -68,6 +68,7 @@ describe("@runroot/web integration", () => {
         }),
       );
       expect(runsMarkup).toContain("Cross-run audit queries");
+      expect(runsMarkup).toContain("Cross-run audit drilldowns");
       expect(runsMarkup).toContain(createdPayload.run.id);
       expect(runsMarkup).toContain("Slack approval flow");
 
@@ -151,6 +152,77 @@ describe("@runroot/web integration", () => {
       expect(timelineMarkup).toContain("waiting-for-approval");
       expect(timelineMarkup).toContain("approval-approved");
       expect(timelineMarkup).toContain("run-resumed");
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("renders identifier-driven drilldowns through the existing API surface", async () => {
+    const workspaceRoot = await mkdtemp(
+      join(tmpdir(), "runroot-web-drilldown-"),
+    );
+    const sqlitePath = join(workspaceRoot, "runroot.sqlite");
+    const inlineOperator = createRunrootOperatorService({
+      executionMode: "inline",
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+    const queuedOperator = createRunrootOperatorService({
+      executionMode: "queued",
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+    const workerService = (
+      await import("@runroot/sdk")
+    ).createRunrootWorkerService({
+      persistenceDriver: "sqlite",
+      sqlitePath,
+      workerId: "worker_web_drilldown",
+    });
+    const app = buildServer({
+      operator: createRunrootOperatorService({
+        persistenceDriver: "sqlite",
+        sqlitePath,
+      }),
+    });
+
+    try {
+      const inlineRun = await inlineOperator.startRun({
+        input: {
+          approvalRequired: false,
+          commandAlias: "print-ready",
+          runbookId: "node-health-check",
+        },
+        templateId: "shell-runbook-flow",
+      });
+      await queuedOperator.startRun({
+        input: {
+          approvalRequired: false,
+          commandAlias: "print-ready",
+          runbookId: "node-health-check",
+        },
+        templateId: "shell-runbook-flow",
+      });
+
+      await workerService.processNextJob();
+
+      const address = await app.listen({
+        host: "127.0.0.1",
+        port: 0,
+      });
+      process.env.RUNROOT_API_BASE_URL = address;
+
+      const drilldownMarkup = renderToStaticMarkup(
+        await RunsPage({
+          searchParams: Promise.resolve({
+            drilldownRunId: inlineRun.id,
+          }),
+        }),
+      );
+
+      expect(drilldownMarkup).toContain("Cross-run audit drilldowns");
+      expect(drilldownMarkup).toContain(inlineRun.id);
+      expect(drilldownMarkup).toContain("shell.runbook");
     } finally {
       await app.close();
     }

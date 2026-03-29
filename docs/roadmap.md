@@ -151,4 +151,4 @@ Status: completed
   presentation rather than a full observability backend, productized dashboard,
   or open-ended search and analytics product
 
-Status: scope freeze proposed on branch
+Status: implementation complete on branch
