@@ -130,6 +130,59 @@ export interface ApiAuditView {
   readonly runId: string;
 }
 
+export interface ApiCrossRunAuditFilters {
+  readonly definitionId?: string;
+  readonly executionMode?: "inline" | "queued";
+  readonly runStatus?: string;
+  readonly toolName?: string;
+}
+
+export interface ApiCrossRunAuditApprovalSummary {
+  readonly approvalId: string;
+  readonly status: "approved" | "cancelled" | "pending" | "rejected";
+  readonly stepId?: string;
+}
+
+export interface ApiCrossRunAuditDispatchSummary {
+  readonly dispatchJobId: string;
+  readonly kind: string;
+  readonly status: string;
+  readonly workerId?: string;
+}
+
+export interface ApiCrossRunAuditToolSummary {
+  readonly callId: string;
+  readonly dispatchJobId?: string;
+  readonly executionMode?: "inline" | "queued";
+  readonly outcome: "blocked" | "failed" | "succeeded";
+  readonly stepId?: string;
+  readonly toolId?: string;
+  readonly toolName: string;
+  readonly workerId?: string;
+}
+
+export interface ApiCrossRunAuditResult {
+  readonly approvals: readonly ApiCrossRunAuditApprovalSummary[];
+  readonly definitionId: string;
+  readonly definitionName: string;
+  readonly dispatchJobs: readonly ApiCrossRunAuditDispatchSummary[];
+  readonly executionModes: readonly ("inline" | "queued")[];
+  readonly lastOccurredAt?: string;
+  readonly runId: string;
+  readonly runStatus: string;
+  readonly stepIds: readonly string[];
+  readonly summary: string;
+  readonly toolCalls: readonly ApiCrossRunAuditToolSummary[];
+  readonly updatedAt: string;
+  readonly workerIds: readonly string[];
+}
+
+export interface ApiCrossRunAuditResults {
+  readonly filters: ApiCrossRunAuditFilters;
+  readonly results: readonly ApiCrossRunAuditResult[];
+  readonly totalCount: number;
+}
+
 export interface DecideApprovalRequest {
   readonly actorDisplayName?: string;
   readonly actorId?: string;
@@ -146,6 +199,9 @@ export interface RunrootApiClient {
   getPendingApprovals(): Promise<readonly PendingApprovalSummary[]>;
   getRun(runId: string): Promise<ApiRun>;
   getAuditView(runId: string): Promise<ApiAuditView>;
+  listAuditResults(
+    filters?: ApiCrossRunAuditFilters,
+  ): Promise<ApiCrossRunAuditResults>;
   getToolHistory(runId: string): Promise<readonly ApiToolHistoryEntry[]>;
   getTimeline(runId: string): Promise<ApiTimeline>;
   listRuns(): Promise<readonly ApiRun[]>;
@@ -315,6 +371,18 @@ export function createRunrootApiClient(
       return payload.audit;
     },
 
+    async listAuditResults(filters) {
+      const payload = await requestJson<{
+        audit: ApiCrossRunAuditResults;
+      }>(
+        buildCrossRunAuditPath(filters),
+        { method: "GET" },
+        "web.api.listAuditResults",
+      );
+
+      return payload.audit;
+    },
+
     async getToolHistory(runId) {
       const payload = await requestJson<{
         entries: readonly ApiToolHistoryEntry[];
@@ -351,4 +419,34 @@ export function createRunrootApiClient(
       return payload.run;
     },
   };
+}
+
+function buildCrossRunAuditPath(
+  filters: ApiCrossRunAuditFilters | undefined,
+): string {
+  if (!filters) {
+    return "/audit/runs";
+  }
+
+  const params = new URLSearchParams();
+
+  if (filters.definitionId) {
+    params.set("definitionId", filters.definitionId);
+  }
+
+  if (filters.executionMode) {
+    params.set("executionMode", filters.executionMode);
+  }
+
+  if (filters.runStatus) {
+    params.set("runStatus", filters.runStatus);
+  }
+
+  if (filters.toolName) {
+    params.set("toolName", filters.toolName);
+  }
+
+  const query = params.toString();
+
+  return query.length > 0 ? `/audit/runs?${query}` : "/audit/runs";
 }

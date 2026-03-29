@@ -1,9 +1,16 @@
 import type { DispatchJob } from "@runroot/dispatch";
-import type { RunId } from "@runroot/domain";
+import type { RunId, WorkflowRun } from "@runroot/domain";
 import type { RuntimeEvent } from "@runroot/events";
 import type { ToolHistoryEntry } from "@runroot/tools";
 
 import { projectRunAuditView, type RunAuditView } from "./audit";
+import {
+  type CrossRunAuditQueryFilters,
+  type CrossRunAuditResults,
+  compareCrossRunAuditResults,
+  matchesCrossRunAuditFilters,
+  projectCrossRunAuditResult,
+} from "./cross-run";
 import { projectRunTimeline, type RunTimeline } from "./timeline";
 
 export interface RunTimelineReader {
@@ -15,12 +22,22 @@ export interface RunAuditReader extends RunTimelineReader {
   listToolHistoryByRunId(runId: RunId): Promise<readonly ToolHistoryEntry[]>;
 }
 
+export interface CrossRunAuditReader extends RunAuditReader {
+  listRuns(): Promise<readonly WorkflowRun[]>;
+}
+
 export interface RunTimelineQuery {
   getTimeline(runId: RunId): Promise<RunTimeline>;
 }
 
 export interface RunAuditQuery {
   getAuditView(runId: RunId): Promise<RunAuditView>;
+}
+
+export interface CrossRunAuditQuery {
+  listAuditResults(
+    filters?: CrossRunAuditQueryFilters,
+  ): Promise<CrossRunAuditResults>;
 }
 
 export function createRunTimelineQuery(
@@ -49,6 +66,50 @@ export function createRunAuditQuery(reader: RunAuditReader): RunAuditQuery {
         events,
         toolHistory,
       });
+    },
+  };
+}
+
+export function createCrossRunAuditQuery(
+  reader: CrossRunAuditReader,
+): CrossRunAuditQuery {
+  const auditQuery = createRunAuditQuery(reader);
+
+  return {
+    async listAuditResults(filters = {}) {
+      const runs = (await reader.listRuns())
+        .filter((run) => {
+          if (
+            filters.definitionId &&
+            run.definitionId !== filters.definitionId
+          ) {
+            return false;
+          }
+
+          if (filters.runStatus && run.status !== filters.runStatus) {
+            return false;
+          }
+
+          return true;
+        })
+        .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+      const results = await Promise.all(
+        runs.map(async (run) =>
+          projectCrossRunAuditResult(
+            run,
+            await auditQuery.getAuditView(run.id),
+          ),
+        ),
+      );
+      const filteredResults = results
+        .filter((result) => matchesCrossRunAuditFilters(result, filters))
+        .sort(compareCrossRunAuditResults);
+
+      return {
+        filters,
+        results: filteredResults,
+        totalCount: filteredResults.length,
+      };
     },
   };
 }

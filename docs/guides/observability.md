@@ -11,6 +11,7 @@ Phase 6 introduces minimal observability seams without changing replay semantics
 - persisted tool-history records behind the shared tool hook seam
 - run-scoped correlated audit views built from replay, dispatch, worker, and
   tool-history facts
+- cross-run audit query and filter paths over the same derived audit facts
 - correlation attributes for run, step, dispatch job, worker, and tool
   identifiers across inline and queued execution
 
@@ -34,6 +35,8 @@ Phase 6 introduces minimal observability seams without changing replay semantics
   existing seams
 - correlated audit views stay derived and operator-facing instead of becoming a
   second workflow-state model
+- cross-run audit queries stay structured and thin instead of becoming a
+  dashboard or analytics product
 
 ## Minimal Local Path
 

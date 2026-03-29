@@ -4,7 +4,11 @@ import { cliPackageBoundary } from "@runroot/cli";
 import { projectMetadata, requiredQualityCommands } from "@runroot/config";
 import { coreRuntimePackageBoundary } from "@runroot/core-runtime";
 import { dispatchPackageBoundary } from "@runroot/dispatch";
-import { domainPackageBoundary, type JsonValue } from "@runroot/domain";
+import {
+  domainPackageBoundary,
+  type JsonValue,
+  type RunStatus,
+} from "@runroot/domain";
 import { eventsPackageBoundary } from "@runroot/events";
 import { mcpPackageBoundary } from "@runroot/mcp";
 import { observabilityPackageBoundary } from "@runroot/observability";
@@ -107,6 +111,29 @@ export function buildServer(options: BuildServerOptions = {}) {
     handleOperatorResponse(reply, async () => ({
       runs: await operator.listRuns(),
     })),
+  );
+
+  app.get("/audit/runs", async (request, reply) =>
+    handleOperatorResponse(reply, async () => {
+      const query = request.query as {
+        readonly definitionId?: string;
+        readonly executionMode?: "inline" | "queued";
+        readonly runStatus?: string;
+        readonly toolName?: string;
+      };
+      const runStatus = readRunStatusQuery(query.runStatus);
+
+      return {
+        audit: await operator.listAuditResults({
+          ...(query.definitionId ? { definitionId: query.definitionId } : {}),
+          ...(query.executionMode
+            ? { executionMode: query.executionMode }
+            : {}),
+          ...(runStatus ? { runStatus } : {}),
+          ...(query.toolName ? { toolName: query.toolName } : {}),
+        }),
+      };
+    }),
   );
 
   app.post("/runs", async (request, reply) =>
@@ -303,4 +330,23 @@ function mapOperatorError(
   }
 
   return error instanceof Error ? error : new Error(String(error));
+}
+
+function readRunStatusQuery(value: string | undefined): RunStatus | undefined {
+  switch (value) {
+    case undefined:
+      return undefined;
+    case "cancelled":
+    case "failed":
+    case "paused":
+    case "pending":
+    case "queued":
+    case "running":
+    case "succeeded":
+      return value;
+    default:
+      throw new OperatorInputError(
+        "runStatus must be one of cancelled|failed|paused|pending|queued|running|succeeded.",
+      );
+  }
 }

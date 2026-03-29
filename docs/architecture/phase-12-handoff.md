@@ -1,13 +1,11 @@
 # Phase 12: Cross-Run Audit Queries and Filters
 
-Status: proposed scope freeze on branch, pending review and merge
+Status: implemented on branch, pending phase review
 
-This document is the proposed formal Phase 12 execution contract for Runroot.
-It is a conservative freeze derived from repository-owned materials that now
-have run-scoped correlated audit views but still do not provide a shared,
-cross-run audit query path through existing operator seams. This is not a
-claim that Phase 12 was already defined elsewhere; it is the suggested
-repository-owned contract to adopt next.
+This document is the repository-owned formal Phase 12 execution contract for
+Runroot. It defines the minimum implementation boundary for shared, cross-run
+audit query paths over the derived audit facts that already exist in replay,
+dispatch, worker, and tool-history seams.
 
 Primary source material:
 

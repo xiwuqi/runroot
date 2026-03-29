@@ -3,6 +3,8 @@ import type { FlashMessage } from "../lib/navigation";
 import type {
   ApiApproval,
   ApiAuditView,
+  ApiCrossRunAuditFilters,
+  ApiCrossRunAuditResults,
   ApiRun,
   ApiTimeline,
   ApiToolHistoryEntry,
@@ -120,6 +122,140 @@ export function RunsListView({
           </div>
         </article>
       ))}
+    </section>
+  );
+}
+
+export function CrossRunAuditResultsView({
+  filters,
+  results,
+}: Readonly<{
+  filters: ApiCrossRunAuditFilters;
+  results: ApiCrossRunAuditResults;
+}>) {
+  return (
+    <section className="card">
+      <div className="row spread">
+        <div>
+          <div className="card-eyebrow">Phase 12 / Audit Queries</div>
+          <h2>Cross-run audit queries</h2>
+          <p className="empty-copy">
+            Thin operator-facing filters over the shared cross-run audit seam.
+          </p>
+        </div>
+        <div className="timeline-count">{results.totalCount} result(s)</div>
+      </div>
+
+      <form action="/runs" className="decision-form" method="get">
+        <div className="data-grid">
+          <label>
+            <span>Definition ID</span>
+            <input
+              defaultValue={filters.definitionId ?? ""}
+              name="auditDefinitionId"
+              placeholder="shell-runbook-flow"
+              type="text"
+            />
+          </label>
+          <label>
+            <span>Run status</span>
+            <select defaultValue={filters.runStatus ?? ""} name="auditStatus">
+              <option value="">all</option>
+              <option value="pending">pending</option>
+              <option value="queued">queued</option>
+              <option value="running">running</option>
+              <option value="paused">paused</option>
+              <option value="succeeded">succeeded</option>
+              <option value="failed">failed</option>
+              <option value="cancelled">cancelled</option>
+            </select>
+          </label>
+          <label>
+            <span>Execution mode</span>
+            <select
+              defaultValue={filters.executionMode ?? ""}
+              name="auditExecutionMode"
+            >
+              <option value="">all</option>
+              <option value="inline">inline</option>
+              <option value="queued">queued</option>
+            </select>
+          </label>
+          <label>
+            <span>Tool name</span>
+            <input
+              defaultValue={filters.toolName ?? ""}
+              name="auditToolName"
+              placeholder="shell.runbook"
+              type="text"
+            />
+          </label>
+        </div>
+        <div className="row spread">
+          <div className="decision-actions">
+            <button type="submit">Apply filters</button>
+            <a className="subtle-link" href="/runs">
+              Clear filters
+            </a>
+          </div>
+        </div>
+      </form>
+
+      {results.results.length === 0 ? (
+        <p className="empty-copy">
+          No cross-run audit results matched the current filters.
+        </p>
+      ) : (
+        <ol className="timeline-list">
+          {results.results.map((result) => (
+            <li className="timeline-entry" key={result.runId}>
+              <div className="row spread">
+                <div>
+                  <strong>{result.definitionName}</strong>
+                  <div className="timeline-meta">run {result.runId}</div>
+                </div>
+                <StatusBadge status={result.runStatus} />
+              </div>
+              <div className="timeline-meta">
+                updated {formatTimestamp(result.updatedAt)}
+                {result.lastOccurredAt
+                  ? ` · last fact ${formatTimestamp(result.lastOccurredAt)}`
+                  : ""}
+              </div>
+              <div className="timeline-meta">
+                execution {joinOrFallback(result.executionModes, "n/a")}
+                {result.workerIds.length > 0
+                  ? ` · workers ${joinOrFallback(result.workerIds, "n/a")}`
+                  : ""}
+              </div>
+              <div className="timeline-meta">
+                approvals {result.approvals.length}
+                {result.dispatchJobs.length > 0
+                  ? ` · dispatch ${result.dispatchJobs.length}`
+                  : ""}
+                {result.toolCalls.length > 0
+                  ? ` · tools ${joinOrFallback(
+                      result.toolCalls.map((tool) => tool.toolName),
+                      "n/a",
+                    )}`
+                  : ""}
+              </div>
+              <p className="empty-copy">{result.summary}</p>
+              <div className="row spread">
+                <a className="link-button" href={`/runs/${result.runId}`}>
+                  Open run detail
+                </a>
+                <a
+                  className="subtle-link"
+                  href={`/runs/${result.runId}/timeline`}
+                >
+                  Timeline
+                </a>
+              </div>
+            </li>
+          ))}
+        </ol>
+      )}
     </section>
   );
 }
@@ -525,4 +661,8 @@ function readAuditEntryKey(entry: ApiAuditView["entries"][number]): string {
     case "tool-history":
       return entry.fact.callId;
   }
+}
+
+function joinOrFallback(values: readonly string[], fallback: string): string {
+  return values.length > 0 ? values.join(", ") : fallback;
 }

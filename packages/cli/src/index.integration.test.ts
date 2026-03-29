@@ -2,6 +2,7 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { createRunrootWorkerService } from "@runroot/sdk";
 import { describe, expect, it } from "vitest";
 
 import { runCli } from "./index";
@@ -280,5 +281,106 @@ describe("@runroot/cli integration", () => {
     expect(
       timelinePayload.timeline.entries.map((entry) => entry.kind),
     ).toContain("run-succeeded");
+  });
+
+  it("lists cross-run audit results through the CLI for inline and queued runs", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "runroot-cli-audit-"));
+    const sqlitePath = join(workspaceRoot, "runroot.sqlite");
+    const inputFile = join(workspaceRoot, "shell-runbook.json");
+    await writeFile(
+      inputFile,
+      JSON.stringify({
+        approvalRequired: false,
+        commandAlias: "print-ready",
+        runbookId: "node-health-check",
+      }),
+    );
+    const inlineStartIo = createIo();
+    const queuedStartIo = createIo();
+    const queryIo = createIo();
+
+    await runCli(
+      ["runs", "start", "shell-runbook-flow", "--input-file", inputFile],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: inlineStartIo.io,
+      },
+    );
+    const inlineRun = JSON.parse(inlineStartIo.stdout.join("")) as {
+      run: {
+        id: string;
+      };
+    };
+
+    await runCli(
+      ["runs", "start", "shell-runbook-flow", "--input-file", inputFile],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_EXECUTION_MODE: "queued",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: queuedStartIo.io,
+      },
+    );
+    const queuedRun = JSON.parse(queuedStartIo.stdout.join("")) as {
+      run: {
+        id: string;
+        status: string;
+      };
+    };
+
+    const worker = createRunrootWorkerService({
+      persistenceDriver: "sqlite",
+      sqlitePath,
+      workerId: "worker_cli",
+    });
+    await worker.processNextJob();
+
+    const queryExitCode = await runCli(
+      ["audit", "list", "--execution-mode", "queued"],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: queryIo.io,
+      },
+    );
+    const queryPayload = JSON.parse(queryIo.stdout.join("")) as {
+      audit: {
+        results: Array<{
+          dispatchJobs: Array<{
+            workerId?: string;
+          }>;
+          executionModes: string[];
+          runId: string;
+        }>;
+      };
+    };
+
+    expect(queryExitCode).toBe(0);
+    expect(queuedRun.run.status).toBe("queued");
+    expect(
+      queryPayload.audit.results.some(
+        (result) =>
+          result.runId === queuedRun.run.id &&
+          result.executionModes.includes("queued") &&
+          result.dispatchJobs.some(
+            (dispatchJob) => dispatchJob.workerId === "worker_cli",
+          ),
+      ),
+    ).toBe(true);
+    expect(
+      queryPayload.audit.results.some(
+        (result) => result.runId === inlineRun.run.id,
+      ),
+    ).toBe(false);
   });
 });

@@ -21,6 +21,9 @@ import {
   type RuntimePersistence,
 } from "@runroot/persistence";
 import {
+  type CrossRunAuditQueryFilters,
+  type CrossRunAuditResults,
+  createCrossRunAuditQuery,
   createRunAuditQuery,
   createRunTimelineQuery,
   type RunAuditView,
@@ -80,6 +83,9 @@ export interface RunrootOperatorService {
   getToolHistory(runId: string): Promise<readonly ToolHistoryEntry[]>;
   getTimeline(runId: string): Promise<RunTimeline>;
   getWorkspacePath(): string;
+  listAuditResults(
+    filters?: CrossRunAuditQueryFilters,
+  ): Promise<CrossRunAuditResults>;
   listRuns(): Promise<readonly WorkflowRun[]>;
   listTemplates(): readonly WorkflowTemplateDescriptor[];
   resumeRun(runId: string): Promise<WorkflowRun>;
@@ -155,10 +161,11 @@ export function createRunrootOperatorService(
     ...(options.env ? { env: options.env } : {}),
     ...(options.executionMode ? { executionMode: options.executionMode } : {}),
   });
-  const dispatchQueue =
-    executionMode === "queued"
-      ? (options.dispatchQueue ??
-        createConfiguredDispatchQueue({
+  const dispatchReader =
+    options.dispatchQueue ??
+    (persistenceConfig.driver === "file"
+      ? undefined
+      : createConfiguredDispatchQueue({
           ...(options.databaseUrl ? { databaseUrl: options.databaseUrl } : {}),
           ...(options.env ? { env: options.env } : {}),
           ...(options.persistenceDriver
@@ -168,8 +175,8 @@ export function createRunrootOperatorService(
           ...(options.workspacePath
             ? { workspacePath: options.workspacePath }
             : {}),
-        }))
-      : undefined;
+        }));
+  const dispatchQueue = executionMode === "queued" ? dispatchReader : undefined;
   const runtime = new RuntimeEngine({
     ...(options.approvalIdGenerator
       ? { approvalIdGenerator: options.approvalIdGenerator }
@@ -187,7 +194,17 @@ export function createRunrootOperatorService(
   const audit = createRunAuditQuery({
     listByRunId: (runId) => runtime.getRunEvents(runId),
     async listDispatchJobsByRunId(runId) {
-      return dispatchQueue ? dispatchQueue.listByRunId(runId) : [];
+      return dispatchReader ? dispatchReader.listByRunId(runId) : [];
+    },
+    listToolHistoryByRunId: (runId) => toolHistory.listByRunId(runId),
+  });
+  const crossRunAudit = createCrossRunAuditQuery({
+    listByRunId: (runId) => runtime.getRunEvents(runId),
+    async listDispatchJobsByRunId(runId) {
+      return dispatchReader ? dispatchReader.listByRunId(runId) : [];
+    },
+    async listRuns() {
+      return runtime.listRuns();
     },
     listToolHistoryByRunId: (runId) => toolHistory.listByRunId(runId),
   });
@@ -266,6 +283,10 @@ export function createRunrootOperatorService(
 
     getWorkspacePath() {
       return persistenceLocation;
+    },
+
+    async listAuditResults(filters) {
+      return crossRunAudit.listAuditResults(filters);
     },
 
     async listRuns() {
