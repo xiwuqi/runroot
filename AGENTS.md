@@ -47,6 +47,7 @@ The project is executed in phases. Only work on the current phase.
 - Phase 10: Persisted Tool History and Execution Telemetry
 - Phase 11: Correlated Audit Projections and Operator Views
 - Phase 12: Cross-Run Audit Queries and Filters
+- Phase 13: Cross-Run Audit Drilldowns and Identifier Queries
 
 Do not pull work from later phases into the current phase unless it is required to unblock the current phase and the reason is documented.
 

@@ -134,4 +134,21 @@ Status: completed
   and minimal presentation rather than a full observability backend,
   productized dashboard, or broad analytics product
 
-Status: implemented on branch, pending phase review
+Status: completed
+
+## Phase 13: Cross-Run Audit Drilldowns and Identifier Queries
+
+- add a shared cross-run audit drilldown and identifier-query contract over the
+  derived audit facts already exposed through replay, dispatch, worker, and
+  tool-history seams
+- expose minimal operator-facing drilldown paths through the existing seams in
+  SDK, API, CLI, and web
+- keep operator surfaces thin while enabling constrained exploration by stable
+  run, approval, step, dispatch, worker, and tool identifiers
+- execute against the formal handoff in
+  [docs/architecture/phase-13-handoff.md](./architecture/phase-13-handoff.md)
+- keep the phase focused on identifier-driven audit drilldowns and minimal
+  presentation rather than a full observability backend, productized dashboard,
+  or open-ended search and analytics product
+
+Status: scope freeze proposed on branch
