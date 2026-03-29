@@ -167,4 +167,21 @@ Status: completed
   than a full observability backend, productized dashboard, or open-ended
   search and analytics product
 
-Status: implemented on branch, pending phase review
+Status: completed
+
+## Phase 15: Cross-Run Audit Saved Views and Operator Presets
+
+- add a shared saved-view and operator-preset contract over the existing audit
+  navigation path rather than snapshotting audit facts into a second source of
+  truth
+- expose minimal save, list, load, and apply paths through the existing seams
+  in SDK, API, CLI, and web
+- keep operator surfaces thin while allowing constrained audit investigations
+  to be reopened through stable presets instead of surface-specific bookmarks
+- execute against the formal handoff in
+  [docs/architecture/phase-15-handoff.md](./architecture/phase-15-handoff.md)
+- keep the phase focused on saved audit views and operator presets rather than
+  a full observability backend, productized dashboard, or open-ended search
+  and analytics product
+
+Status: defined in handoff, pending execution
