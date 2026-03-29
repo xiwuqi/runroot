@@ -3,6 +3,8 @@ import type { FlashMessage } from "../lib/navigation";
 import type {
   ApiApproval,
   ApiAuditView,
+  ApiCrossRunAuditDrilldownFilters,
+  ApiCrossRunAuditDrilldownResults,
   ApiCrossRunAuditFilters,
   ApiCrossRunAuditResults,
   ApiRun,
@@ -241,6 +243,219 @@ export function CrossRunAuditResultsView({
                   : ""}
               </div>
               <p className="empty-copy">{result.summary}</p>
+              <div className="row spread">
+                <a className="link-button" href={`/runs/${result.runId}`}>
+                  Open run detail
+                </a>
+                <div className="row">
+                  <a
+                    className="subtle-link"
+                    href={buildAuditDrilldownHref({
+                      runId: result.runId,
+                    })}
+                  >
+                    Drill down
+                  </a>
+                  <a
+                    className="subtle-link"
+                    href={`/runs/${result.runId}/timeline`}
+                  >
+                    Timeline
+                  </a>
+                </div>
+              </div>
+            </li>
+          ))}
+        </ol>
+      )}
+    </section>
+  );
+}
+
+export function CrossRunAuditDrilldownsView({
+  filters,
+  results,
+}: Readonly<{
+  filters: ApiCrossRunAuditDrilldownFilters;
+  results: ApiCrossRunAuditDrilldownResults;
+}>) {
+  return (
+    <section className="card">
+      <div className="row spread">
+        <div>
+          <div className="card-eyebrow">Phase 13 / Audit Drilldowns</div>
+          <h2>Cross-run audit drilldowns</h2>
+          <p className="empty-copy">
+            Thin operator-facing drilldowns constrained by stable identifiers.
+          </p>
+        </div>
+        <div className="timeline-count">
+          {results.totalMatchedEntryCount} matched fact(s)
+        </div>
+      </div>
+
+      <form action="/runs" className="decision-form" method="get">
+        <div className="data-grid">
+          <label>
+            <span>Run ID</span>
+            <input
+              defaultValue={filters.runId ?? ""}
+              name="drilldownRunId"
+              placeholder="run_1"
+              type="text"
+            />
+          </label>
+          <label>
+            <span>Approval ID</span>
+            <input
+              defaultValue={filters.approvalId ?? ""}
+              name="drilldownApprovalId"
+              placeholder="approval_1"
+              type="text"
+            />
+          </label>
+          <label>
+            <span>Step ID</span>
+            <input
+              defaultValue={filters.stepId ?? ""}
+              name="drilldownStepId"
+              placeholder="step_review"
+              type="text"
+            />
+          </label>
+          <label>
+            <span>Dispatch Job ID</span>
+            <input
+              defaultValue={filters.dispatchJobId ?? ""}
+              name="drilldownDispatchJobId"
+              placeholder="dispatch_1"
+              type="text"
+            />
+          </label>
+          <label>
+            <span>Worker ID</span>
+            <input
+              defaultValue={filters.workerId ?? ""}
+              name="drilldownWorkerId"
+              placeholder="worker_1"
+              type="text"
+            />
+          </label>
+          <label>
+            <span>Tool Call ID</span>
+            <input
+              defaultValue={filters.toolCallId ?? ""}
+              name="drilldownToolCallId"
+              placeholder="call_1"
+              type="text"
+            />
+          </label>
+          <label>
+            <span>Tool ID</span>
+            <input
+              defaultValue={filters.toolId ?? ""}
+              name="drilldownToolId"
+              placeholder="builtin.shell.runbook"
+              type="text"
+            />
+          </label>
+        </div>
+        <div className="row spread">
+          <div className="decision-actions">
+            <button type="submit">Apply drilldown</button>
+            <a className="subtle-link" href="/runs">
+              Clear drilldown
+            </a>
+          </div>
+        </div>
+      </form>
+
+      {!results.isConstrained ? (
+        <p className="empty-copy">
+          Provide at least one stable identifier to narrow cross-run audit
+          facts.
+        </p>
+      ) : results.results.length === 0 ? (
+        <p className="empty-copy">
+          No audit drilldown results matched the current identifiers.
+        </p>
+      ) : (
+        <ol className="timeline-list">
+          {results.results.map((result) => (
+            <li className="timeline-entry" key={result.runId}>
+              <div className="row spread">
+                <div>
+                  <strong>{result.definitionName}</strong>
+                  <div className="timeline-meta">run {result.runId}</div>
+                </div>
+                <StatusBadge status={result.runStatus} />
+              </div>
+              <div className="timeline-meta">
+                updated {formatTimestamp(result.updatedAt)}
+                {result.lastOccurredAt
+                  ? ` · last fact ${formatTimestamp(result.lastOccurredAt)}`
+                  : ""}
+              </div>
+              <div className="timeline-meta">
+                approvals{" "}
+                {joinOrFallback(result.identifiers.approvalIds, "n/a")}
+                {result.identifiers.dispatchJobIds.length > 0
+                  ? ` · dispatch ${joinOrFallback(
+                      result.identifiers.dispatchJobIds,
+                      "n/a",
+                    )}`
+                  : ""}
+                {result.identifiers.workerIds.length > 0
+                  ? ` · workers ${joinOrFallback(
+                      result.identifiers.workerIds,
+                      "n/a",
+                    )}`
+                  : ""}
+              </div>
+              <div className="timeline-meta">
+                steps {joinOrFallback(result.identifiers.stepIds, "n/a")}
+                {result.identifiers.toolIds.length > 0
+                  ? ` · tools ${joinOrFallback(
+                      result.identifiers.toolIds,
+                      "n/a",
+                    )}`
+                  : ""}
+              </div>
+              <p className="empty-copy">{result.summary}</p>
+              <ol className="timeline-list">
+                {result.entries.map((entry) => (
+                  <li
+                    className="timeline-entry"
+                    key={`${result.runId}:${readAuditEntryKey(entry)}`}
+                  >
+                    <div className="row spread">
+                      <strong>{entry.summary}</strong>
+                      <span>{formatTimestamp(entry.occurredAt)}</span>
+                    </div>
+                    <div className="timeline-meta">
+                      {entry.kind}
+                      {entry.correlation.stepId
+                        ? ` · step ${entry.correlation.stepId}`
+                        : ""}
+                      {entry.correlation.dispatchJobId
+                        ? ` · dispatch ${entry.correlation.dispatchJobId}`
+                        : ""}
+                      {entry.correlation.workerId
+                        ? ` · worker ${entry.correlation.workerId}`
+                        : ""}
+                      {entry.correlation.approvalId
+                        ? ` · approval ${entry.correlation.approvalId}`
+                        : ""}
+                      {entry.correlation.toolCallId
+                        ? ` · call ${entry.correlation.toolCallId}`
+                        : ""}
+                      {entry.correlation.toolId
+                        ? ` · tool ${entry.correlation.toolId}`
+                        : ""}
+                    </div>
+                  </li>
+                ))}
+              </ol>
               <div className="row spread">
                 <a className="link-button" href={`/runs/${result.runId}`}>
                   Open run detail
@@ -665,4 +880,42 @@ function readAuditEntryKey(entry: ApiAuditView["entries"][number]): string {
 
 function joinOrFallback(values: readonly string[], fallback: string): string {
   return values.length > 0 ? values.join(", ") : fallback;
+}
+
+function buildAuditDrilldownHref(
+  filters: ApiCrossRunAuditDrilldownFilters,
+): string {
+  const params = new URLSearchParams();
+
+  if (filters.approvalId) {
+    params.set("drilldownApprovalId", filters.approvalId);
+  }
+
+  if (filters.dispatchJobId) {
+    params.set("drilldownDispatchJobId", filters.dispatchJobId);
+  }
+
+  if (filters.runId) {
+    params.set("drilldownRunId", filters.runId);
+  }
+
+  if (filters.stepId) {
+    params.set("drilldownStepId", filters.stepId);
+  }
+
+  if (filters.toolCallId) {
+    params.set("drilldownToolCallId", filters.toolCallId);
+  }
+
+  if (filters.toolId) {
+    params.set("drilldownToolId", filters.toolId);
+  }
+
+  if (filters.workerId) {
+    params.set("drilldownWorkerId", filters.workerId);
+  }
+
+  const query = params.toString();
+
+  return query.length > 0 ? `/runs?${query}` : "/runs";
 }

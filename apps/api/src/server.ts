@@ -136,6 +136,34 @@ export function buildServer(options: BuildServerOptions = {}) {
     }),
   );
 
+  app.get("/audit/drilldowns", async (request, reply) =>
+    handleOperatorResponse(reply, async () => {
+      const query = request.query as {
+        readonly approvalId?: string;
+        readonly dispatchJobId?: string;
+        readonly runId?: string;
+        readonly stepId?: string;
+        readonly toolCallId?: string;
+        readonly toolId?: string;
+        readonly workerId?: string;
+      };
+
+      return {
+        audit: await operator.listAuditDrilldowns({
+          ...(query.approvalId ? { approvalId: query.approvalId } : {}),
+          ...(query.dispatchJobId
+            ? { dispatchJobId: query.dispatchJobId }
+            : {}),
+          ...(query.runId ? { runId: query.runId } : {}),
+          ...(query.stepId ? { stepId: query.stepId } : {}),
+          ...(query.toolCallId ? { toolCallId: query.toolCallId } : {}),
+          ...(query.toolId ? { toolId: query.toolId } : {}),
+          ...(query.workerId ? { workerId: query.workerId } : {}),
+        }),
+      };
+    }),
+  );
+
   app.post("/runs", async (request, reply) =>
     handleOperatorResponse(reply, async () => {
       const body = request.body as {

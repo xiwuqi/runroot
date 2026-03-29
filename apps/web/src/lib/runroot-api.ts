@@ -183,6 +183,47 @@ export interface ApiCrossRunAuditResults {
   readonly totalCount: number;
 }
 
+export interface ApiCrossRunAuditDrilldownFilters {
+  readonly approvalId?: string;
+  readonly dispatchJobId?: string;
+  readonly runId?: string;
+  readonly stepId?: string;
+  readonly toolCallId?: string;
+  readonly toolId?: string;
+  readonly workerId?: string;
+}
+
+export interface ApiCrossRunAuditDrilldownIdentifiers {
+  readonly approvalIds: readonly string[];
+  readonly dispatchJobIds: readonly string[];
+  readonly runIds: readonly string[];
+  readonly stepIds: readonly string[];
+  readonly toolCallIds: readonly string[];
+  readonly toolIds: readonly string[];
+  readonly workerIds: readonly string[];
+}
+
+export interface ApiCrossRunAuditDrilldownResult {
+  readonly definitionId: string;
+  readonly definitionName: string;
+  readonly entries: readonly ApiAuditEntry[];
+  readonly identifiers: ApiCrossRunAuditDrilldownIdentifiers;
+  readonly lastOccurredAt?: string;
+  readonly matchedEntryCount: number;
+  readonly runId: string;
+  readonly runStatus: string;
+  readonly summary: string;
+  readonly updatedAt: string;
+}
+
+export interface ApiCrossRunAuditDrilldownResults {
+  readonly filters: ApiCrossRunAuditDrilldownFilters;
+  readonly isConstrained: boolean;
+  readonly results: readonly ApiCrossRunAuditDrilldownResult[];
+  readonly totalCount: number;
+  readonly totalMatchedEntryCount: number;
+}
+
 export interface DecideApprovalRequest {
   readonly actorDisplayName?: string;
   readonly actorId?: string;
@@ -199,6 +240,9 @@ export interface RunrootApiClient {
   getPendingApprovals(): Promise<readonly PendingApprovalSummary[]>;
   getRun(runId: string): Promise<ApiRun>;
   getAuditView(runId: string): Promise<ApiAuditView>;
+  listAuditDrilldowns(
+    filters?: ApiCrossRunAuditDrilldownFilters,
+  ): Promise<ApiCrossRunAuditDrilldownResults>;
   listAuditResults(
     filters?: ApiCrossRunAuditFilters,
   ): Promise<ApiCrossRunAuditResults>;
@@ -371,6 +415,18 @@ export function createRunrootApiClient(
       return payload.audit;
     },
 
+    async listAuditDrilldowns(filters) {
+      const payload = await requestJson<{
+        audit: ApiCrossRunAuditDrilldownResults;
+      }>(
+        buildCrossRunAuditDrilldownPath(filters),
+        { method: "GET" },
+        "web.api.listAuditDrilldowns",
+      );
+
+      return payload.audit;
+    },
+
     async listAuditResults(filters) {
       const payload = await requestJson<{
         audit: ApiCrossRunAuditResults;
@@ -449,4 +505,46 @@ function buildCrossRunAuditPath(
   const query = params.toString();
 
   return query.length > 0 ? `/audit/runs?${query}` : "/audit/runs";
+}
+
+function buildCrossRunAuditDrilldownPath(
+  filters: ApiCrossRunAuditDrilldownFilters | undefined,
+): string {
+  if (!filters) {
+    return "/audit/drilldowns";
+  }
+
+  const params = new URLSearchParams();
+
+  if (filters.approvalId) {
+    params.set("approvalId", filters.approvalId);
+  }
+
+  if (filters.dispatchJobId) {
+    params.set("dispatchJobId", filters.dispatchJobId);
+  }
+
+  if (filters.runId) {
+    params.set("runId", filters.runId);
+  }
+
+  if (filters.stepId) {
+    params.set("stepId", filters.stepId);
+  }
+
+  if (filters.toolCallId) {
+    params.set("toolCallId", filters.toolCallId);
+  }
+
+  if (filters.toolId) {
+    params.set("toolId", filters.toolId);
+  }
+
+  if (filters.workerId) {
+    params.set("workerId", filters.workerId);
+  }
+
+  const query = params.toString();
+
+  return query.length > 0 ? `/audit/drilldowns?${query}` : "/audit/drilldowns";
 }

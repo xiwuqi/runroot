@@ -1,5 +1,6 @@
 import {
   ConsoleShell,
+  CrossRunAuditDrilldownsView,
   CrossRunAuditResultsView,
   ErrorState,
   FlashBanner,
@@ -11,6 +12,7 @@ import {
   resolvePageSearchParams,
 } from "../../lib/navigation";
 import {
+  type ApiCrossRunAuditDrilldownFilters,
   type ApiCrossRunAuditFilters,
   type ApiRun,
   createRunrootApiClient,
@@ -32,6 +34,8 @@ export default async function RunsPage({
     const runs = [...(await api.listRuns())].sort(compareRunsByUpdatedAt);
     const auditFilters = readAuditFilters(resolvedSearchParams);
     const auditResults = await api.listAuditResults(auditFilters);
+    const drilldownFilters = readAuditDrilldownFilters(resolvedSearchParams);
+    const drilldownResults = await api.listAuditDrilldowns(drilldownFilters);
 
     return (
       <ConsoleShell
@@ -42,6 +46,10 @@ export default async function RunsPage({
         <CrossRunAuditResultsView
           filters={auditFilters}
           results={auditResults}
+        />
+        <CrossRunAuditDrilldownsView
+          filters={drilldownFilters}
+          results={drilldownResults}
         />
         <RunsListView runs={runs} />
       </ConsoleShell>
@@ -81,6 +89,30 @@ function readAuditFilters(
       ? { executionMode }
       : {}),
     ...(toolName ? { toolName } : {}),
+  };
+}
+
+function readAuditDrilldownFilters(
+  searchParams: PageSearchParams,
+): ApiCrossRunAuditDrilldownFilters {
+  const approvalId = readFirstSearchParam(searchParams.drilldownApprovalId);
+  const dispatchJobId = readFirstSearchParam(
+    searchParams.drilldownDispatchJobId,
+  );
+  const runId = readFirstSearchParam(searchParams.drilldownRunId);
+  const stepId = readFirstSearchParam(searchParams.drilldownStepId);
+  const toolCallId = readFirstSearchParam(searchParams.drilldownToolCallId);
+  const toolId = readFirstSearchParam(searchParams.drilldownToolId);
+  const workerId = readFirstSearchParam(searchParams.drilldownWorkerId);
+
+  return {
+    ...(approvalId ? { approvalId } : {}),
+    ...(dispatchJobId ? { dispatchJobId } : {}),
+    ...(runId ? { runId } : {}),
+    ...(stepId ? { stepId } : {}),
+    ...(toolCallId ? { toolCallId } : {}),
+    ...(toolId ? { toolId } : {}),
+    ...(workerId ? { workerId } : {}),
   };
 }
 

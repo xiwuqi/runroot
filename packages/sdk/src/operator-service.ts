@@ -21,8 +21,11 @@ import {
   type RuntimePersistence,
 } from "@runroot/persistence";
 import {
+  type CrossRunAuditDrilldownFilters,
+  type CrossRunAuditDrilldownResults,
   type CrossRunAuditQueryFilters,
   type CrossRunAuditResults,
+  createCrossRunAuditDrilldownQuery,
   createCrossRunAuditQuery,
   createRunAuditQuery,
   createRunTimelineQuery,
@@ -83,6 +86,9 @@ export interface RunrootOperatorService {
   getToolHistory(runId: string): Promise<readonly ToolHistoryEntry[]>;
   getTimeline(runId: string): Promise<RunTimeline>;
   getWorkspacePath(): string;
+  listAuditDrilldowns(
+    filters?: CrossRunAuditDrilldownFilters,
+  ): Promise<CrossRunAuditDrilldownResults>;
   listAuditResults(
     filters?: CrossRunAuditQueryFilters,
   ): Promise<CrossRunAuditResults>;
@@ -208,6 +214,16 @@ export function createRunrootOperatorService(
     },
     listToolHistoryByRunId: (runId) => toolHistory.listByRunId(runId),
   });
+  const crossRunAuditDrilldowns = createCrossRunAuditDrilldownQuery({
+    listByRunId: (runId) => runtime.getRunEvents(runId),
+    async listDispatchJobsByRunId(runId) {
+      return dispatchReader ? dispatchReader.listByRunId(runId) : [];
+    },
+    async listRuns() {
+      return runtime.listRuns();
+    },
+    listToolHistoryByRunId: (runId) => toolHistory.listByRunId(runId),
+  });
   const persistenceLocation = persistenceConfig.location;
 
   return {
@@ -283,6 +299,10 @@ export function createRunrootOperatorService(
 
     getWorkspacePath() {
       return persistenceLocation;
+    },
+
+    async listAuditDrilldowns(filters) {
+      return crossRunAuditDrilldowns.listAuditDrilldowns(filters);
     },
 
     async listAuditResults(filters) {
