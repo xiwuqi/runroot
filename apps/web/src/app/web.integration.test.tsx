@@ -67,8 +67,8 @@ describe("@runroot/web integration", () => {
           searchParams: Promise.resolve({}),
         }),
       );
-      expect(runsMarkup).toContain("Cross-run audit queries");
-      expect(runsMarkup).toContain("Cross-run audit drilldowns");
+      expect(runsMarkup).toContain("Cross-run audit navigation");
+      expect(runsMarkup).toContain("Provide at least one stable identifier");
       expect(runsMarkup).toContain(createdPayload.run.id);
       expect(runsMarkup).toContain("Slack approval flow");
 
@@ -157,7 +157,7 @@ describe("@runroot/web integration", () => {
     }
   });
 
-  it("renders identifier-driven drilldowns through the existing API surface", async () => {
+  it("renders linked audit navigation through the existing API surface", async () => {
     const workspaceRoot = await mkdtemp(
       join(tmpdir(), "runroot-web-drilldown-"),
     );
@@ -195,7 +195,7 @@ describe("@runroot/web integration", () => {
         },
         templateId: "shell-runbook-flow",
       });
-      await queuedOperator.startRun({
+      const queuedRun = await queuedOperator.startRun({
         input: {
           approvalRequired: false,
           commandAlias: "print-ready",
@@ -220,9 +220,11 @@ describe("@runroot/web integration", () => {
         }),
       );
 
-      expect(drilldownMarkup).toContain("Cross-run audit drilldowns");
+      expect(drilldownMarkup).toContain("Cross-run audit navigation");
       expect(drilldownMarkup).toContain(inlineRun.id);
+      expect(drilldownMarkup).toContain(queuedRun.id);
       expect(drilldownMarkup).toContain("shell.runbook");
+      expect(drilldownMarkup).toContain("Run audit view");
     } finally {
       await app.close();
     }

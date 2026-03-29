@@ -508,4 +508,143 @@ describe("@runroot/api integration", () => {
       "worker_drilldown_api",
     );
   });
+
+  it("serves linked audit navigation for inline and queued runs through the network API", async () => {
+    const workspaceRoot = await mkdtemp(
+      join(tmpdir(), "runroot-api-navigation-"),
+    );
+    const sqlitePath = join(workspaceRoot, "runroot.sqlite");
+    const inlineOperator = createRunrootOperatorService({
+      executionMode: "inline",
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+    const queuedOperator = createRunrootOperatorService({
+      executionMode: "queued",
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+    const workerService = (
+      await import("@runroot/sdk")
+    ).createRunrootWorkerService({
+      persistenceDriver: "sqlite",
+      sqlitePath,
+      workerId: "worker_navigation_api",
+    });
+
+    const inlineRun = await inlineOperator.startRun({
+      input: {
+        approvalRequired: false,
+        commandAlias: "print-ready",
+        runbookId: "node-health-check",
+      },
+      templateId: "shell-runbook-flow",
+    });
+    const queuedRun = await queuedOperator.startRun({
+      input: {
+        approvalRequired: false,
+        commandAlias: "print-ready",
+        runbookId: "node-health-check",
+      },
+      templateId: "shell-runbook-flow",
+    });
+
+    await workerService.processNextJob();
+
+    app = buildServer({
+      operator: createRunrootOperatorService({
+        persistenceDriver: "sqlite",
+        sqlitePath,
+      }),
+    });
+    const address = await app.listen({
+      host: "127.0.0.1",
+      port: 0,
+    });
+
+    const unfilteredResponse = await fetch(`${address}/audit/navigation`);
+    const queuedResponse = await fetch(
+      `${address}/audit/navigation?executionMode=queued&workerId=worker_navigation_api`,
+    );
+    const unfilteredPayload = (await unfilteredResponse.json()) as {
+      audit: {
+        isConstrained: boolean;
+        summaries: Array<{
+          links: {
+            auditView: {
+              kind: string;
+              runId: string;
+            };
+          };
+          result: {
+            runId: string;
+          };
+        }>;
+        totalSummaryCount: number;
+      };
+    };
+    const queuedPayload = (await queuedResponse.json()) as {
+      audit: {
+        drilldowns: Array<{
+          links: {
+            auditView: {
+              kind: string;
+              runId: string;
+            };
+          };
+          result: {
+            runId: string;
+          };
+        }>;
+        isConstrained: boolean;
+        summaries: Array<{
+          links: {
+            drilldowns: Array<{
+              filters: {
+                workerId?: string;
+              };
+            }>;
+          };
+          result: {
+            runId: string;
+          };
+        }>;
+        totalSummaryCount: number;
+      };
+    };
+
+    expect(unfilteredResponse.status).toBe(200);
+    expect(unfilteredPayload.audit.isConstrained).toBe(false);
+    expect(unfilteredPayload.audit.totalSummaryCount).toBe(2);
+    expect(
+      unfilteredPayload.audit.summaries.map((summary) => summary.result.runId),
+    ).toEqual([queuedRun.id, inlineRun.id]);
+    expect(
+      unfilteredPayload.audit.summaries.some(
+        (summary) =>
+          summary.links.auditView.kind === "run-audit-view" &&
+          summary.links.auditView.runId === inlineRun.id,
+      ),
+    ).toBe(true);
+    expect(queuedResponse.status).toBe(200);
+    expect(queuedPayload.audit.isConstrained).toBe(true);
+    expect(queuedPayload.audit.totalSummaryCount).toBe(1);
+    expect(queuedPayload.audit.summaries[0]?.result.runId).toBe(queuedRun.id);
+    expect(
+      queuedPayload.audit.summaries[0]?.links.drilldowns.some(
+        (link) => link.filters.workerId === "worker_navigation_api",
+      ),
+    ).toBe(true);
+    expect(queuedPayload.audit.drilldowns[0]).toMatchObject({
+      links: {
+        auditView: {
+          kind: "run-audit-view",
+          runId: queuedRun.id,
+        },
+      },
+      result: {
+        runId: queuedRun.id,
+      },
+    });
+  });
 });

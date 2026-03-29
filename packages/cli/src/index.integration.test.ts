@@ -486,4 +486,177 @@ describe("@runroot/cli integration", () => {
       "worker_cli_drilldown",
     );
   });
+
+  it("navigates summaries, drilldowns, and run audit views through the CLI", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "runroot-cli-nav-"));
+    const sqlitePath = join(workspaceRoot, "runroot.sqlite");
+    const inputFile = join(workspaceRoot, "shell-runbook.json");
+    await writeFile(
+      inputFile,
+      JSON.stringify({
+        approvalRequired: false,
+        commandAlias: "print-ready",
+        runbookId: "node-health-check",
+      }),
+    );
+    const inlineStartIo = createIo();
+    const queuedStartIo = createIo();
+    const allNavigationIo = createIo();
+    const queuedNavigationIo = createIo();
+
+    await runCli(
+      ["runs", "start", "shell-runbook-flow", "--input-file", inputFile],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: inlineStartIo.io,
+      },
+    );
+    const inlineRun = JSON.parse(inlineStartIo.stdout.join("")) as {
+      run: {
+        id: string;
+      };
+    };
+
+    await runCli(
+      ["runs", "start", "shell-runbook-flow", "--input-file", inputFile],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_EXECUTION_MODE: "queued",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: queuedStartIo.io,
+      },
+    );
+    const queuedRun = JSON.parse(queuedStartIo.stdout.join("")) as {
+      run: {
+        id: string;
+      };
+    };
+
+    const worker = createRunrootWorkerService({
+      persistenceDriver: "sqlite",
+      sqlitePath,
+      workerId: "worker_cli_navigation",
+    });
+    await worker.processNextJob();
+
+    const allNavigationExitCode = await runCli(["audit", "navigate"], {
+      cwd: workspaceRoot,
+      env: {
+        RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+        RUNROOT_SQLITE_PATH: sqlitePath,
+      },
+      io: allNavigationIo.io,
+    });
+    const queuedNavigationExitCode = await runCli(
+      [
+        "audit",
+        "navigate",
+        "--execution-mode",
+        "queued",
+        "--worker-id",
+        "worker_cli_navigation",
+      ],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: queuedNavigationIo.io,
+      },
+    );
+    const allNavigationPayload = JSON.parse(
+      allNavigationIo.stdout.join(""),
+    ) as {
+      audit: {
+        isConstrained: boolean;
+        summaries: Array<{
+          links: {
+            auditView: {
+              kind: string;
+              runId: string;
+            };
+          };
+          result: {
+            runId: string;
+          };
+        }>;
+        totalSummaryCount: number;
+      };
+    };
+    const queuedNavigationPayload = JSON.parse(
+      queuedNavigationIo.stdout.join(""),
+    ) as {
+      audit: {
+        drilldowns: Array<{
+          links: {
+            auditView: {
+              kind: string;
+              runId: string;
+            };
+          };
+          result: {
+            runId: string;
+          };
+        }>;
+        isConstrained: boolean;
+        summaries: Array<{
+          links: {
+            drilldowns: Array<{
+              filters: {
+                workerId?: string;
+              };
+            }>;
+          };
+          result: {
+            runId: string;
+          };
+        }>;
+      };
+    };
+
+    expect(allNavigationExitCode).toBe(0);
+    expect(allNavigationPayload.audit.isConstrained).toBe(false);
+    expect(allNavigationPayload.audit.totalSummaryCount).toBe(2);
+    expect(
+      allNavigationPayload.audit.summaries.map(
+        (summary) => summary.result.runId,
+      ),
+    ).toEqual([queuedRun.run.id, inlineRun.run.id]);
+    expect(
+      allNavigationPayload.audit.summaries.some(
+        (summary) =>
+          summary.links.auditView.kind === "run-audit-view" &&
+          summary.links.auditView.runId === inlineRun.run.id,
+      ),
+    ).toBe(true);
+    expect(queuedNavigationExitCode).toBe(0);
+    expect(queuedNavigationPayload.audit.isConstrained).toBe(true);
+    expect(queuedNavigationPayload.audit.summaries[0]?.result.runId).toBe(
+      queuedRun.run.id,
+    );
+    expect(
+      queuedNavigationPayload.audit.summaries[0]?.links.drilldowns.some(
+        (link) => link.filters.workerId === "worker_cli_navigation",
+      ),
+    ).toBe(true);
+    expect(queuedNavigationPayload.audit.drilldowns[0]).toMatchObject({
+      links: {
+        auditView: {
+          kind: "run-audit-view",
+          runId: queuedRun.run.id,
+        },
+      },
+      result: {
+        runId: queuedRun.run.id,
+      },
+    });
+  });
 });

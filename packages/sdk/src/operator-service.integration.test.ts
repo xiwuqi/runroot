@@ -417,4 +417,103 @@ describe("@runroot/sdk operator service integration", () => {
       ),
     ).toBe(true);
   });
+
+  it("links summaries, drilldowns, and run audit views for inline and queued runs through the operator seam", async () => {
+    const workspaceRoot = await mkdtemp(
+      join(tmpdir(), "runroot-sdk-navigation-"),
+    );
+    const sqlitePath = join(workspaceRoot, "runroot.sqlite");
+    const now = createClock();
+    const idGenerator = createIdGenerator();
+    const inlineService = createRunrootOperatorService({
+      executionMode: "inline",
+      idGenerator,
+      now,
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+    const queuedService = createRunrootOperatorService({
+      executionMode: "queued",
+      idGenerator,
+      now,
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+    const worker = createRunrootWorkerService({
+      idGenerator,
+      now,
+      persistenceDriver: "sqlite",
+      sqlitePath,
+      workerId: "worker_navigation",
+    });
+    const queryService = createRunrootOperatorService({
+      idGenerator,
+      now,
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+
+    const inlineRun = await inlineService.startRun({
+      input: {
+        approvalRequired: false,
+        commandAlias: "print-ready",
+        runbookId: "node-health-check",
+      },
+      templateId: "shell-runbook-flow",
+    });
+    const queuedRun = await queuedService.startRun({
+      input: {
+        approvalRequired: false,
+        commandAlias: "print-ready",
+        runbookId: "node-health-check",
+      },
+      templateId: "shell-runbook-flow",
+    });
+
+    await worker.processNextJob();
+
+    const summaries = await queryService.getAuditNavigation();
+    const queuedNavigation = await queryService.getAuditNavigation({
+      drilldown: {
+        workerId: "worker_navigation",
+      },
+      summary: {
+        executionMode: "queued",
+      },
+    });
+
+    expect(summaries.isConstrained).toBe(false);
+    expect(summaries.totalSummaryCount).toBe(2);
+    expect(summaries.summaries.map((summary) => summary.result.runId)).toEqual([
+      queuedRun.id,
+      inlineRun.id,
+    ]);
+    expect(
+      summaries.summaries.find(
+        (summary) => summary.result.runId === inlineRun.id,
+      )?.links.auditView,
+    ).toMatchObject({
+      kind: "run-audit-view",
+      runId: inlineRun.id,
+    });
+    expect(queuedNavigation.isConstrained).toBe(true);
+    expect(queuedNavigation.totalSummaryCount).toBe(1);
+    expect(queuedNavigation.summaries[0]?.result.runId).toBe(queuedRun.id);
+    expect(queuedNavigation.drilldowns[0]).toMatchObject({
+      result: {
+        runId: queuedRun.id,
+      },
+    });
+    expect(queuedNavigation.drilldowns[0]?.links.auditView).toMatchObject({
+      kind: "run-audit-view",
+      runId: queuedRun.id,
+    });
+    expect(
+      queuedNavigation.summaries[0]?.links.drilldowns.some(
+        (link) =>
+          link.kind === "audit-drilldown" &&
+          link.filters.workerId === "worker_navigation",
+      ),
+    ).toBe(true);
+  });
 });
