@@ -207,6 +207,91 @@ export function buildServer(options: BuildServerOptions = {}) {
     }),
   );
 
+  app.get("/audit/saved-views", async (_request, reply) =>
+    handleOperatorResponse(reply, async () => ({
+      savedViews: await operator.listSavedViews(),
+    })),
+  );
+
+  app.post("/audit/saved-views", async (request, reply) =>
+    handleOperatorResponse(reply, async () => {
+      const body = request.body as {
+        readonly description?: string;
+        readonly kind?: "operator-preset" | "saved-view";
+        readonly name?: string;
+        readonly navigation?: {
+          readonly drilldown?: {
+            readonly approvalId?: string;
+            readonly dispatchJobId?: string;
+            readonly runId?: string;
+            readonly stepId?: string;
+            readonly toolCallId?: string;
+            readonly toolId?: string;
+            readonly workerId?: string;
+          };
+          readonly summary?: {
+            readonly definitionId?: string;
+            readonly executionMode?: string;
+            readonly runStatus?: string;
+            readonly toolName?: string;
+          };
+        };
+        readonly refs?: {
+          readonly auditViewRunId?: string;
+          readonly drilldownRunId?: string;
+        };
+      };
+
+      if (!body?.name) {
+        throw new OperatorInputError("name is required.");
+      }
+
+      const kind = body.kind ? readSavedViewKind(body.kind) : undefined;
+      const navigation = body.navigation
+        ? readSavedViewNavigation(body.navigation)
+        : undefined;
+      const refs = body.refs ? readSavedViewRefs(body.refs) : undefined;
+
+      const savedView = await operator.saveSavedView({
+        ...(body.description ? { description: body.description } : {}),
+        ...(kind ? { kind } : {}),
+        name: body.name,
+        ...(navigation ? { navigation } : {}),
+        ...(refs ? { refs } : {}),
+      });
+
+      reply.code(201);
+
+      return {
+        savedView,
+      };
+    }),
+  );
+
+  app.get("/audit/saved-views/:savedViewId", async (request, reply) =>
+    handleOperatorResponse(reply, async () => {
+      const params = request.params as {
+        readonly savedViewId: string;
+      };
+
+      return {
+        savedView: await operator.getSavedView(params.savedViewId),
+      };
+    }),
+  );
+
+  app.get("/audit/saved-views/:savedViewId/apply", async (request, reply) =>
+    handleOperatorResponse(reply, async () => {
+      const params = request.params as {
+        readonly savedViewId: string;
+      };
+
+      return {
+        application: await operator.applySavedView(params.savedViewId),
+      };
+    }),
+  );
+
   app.post("/runs", async (request, reply) =>
     handleOperatorResponse(reply, async () => {
       const body = request.body as {
@@ -420,4 +505,93 @@ function readRunStatusQuery(value: string | undefined): RunStatus | undefined {
         "runStatus must be one of cancelled|failed|paused|pending|queued|running|succeeded.",
       );
   }
+}
+
+function readExecutionModeValue(
+  value: string | undefined,
+  fieldName: string,
+): "inline" | "queued" | undefined {
+  switch (value) {
+    case undefined:
+      return undefined;
+    case "inline":
+    case "queued":
+      return value;
+    default:
+      throw new OperatorInputError(
+        `${fieldName} must be one of inline|queued.`,
+      );
+  }
+}
+
+function readSavedViewKind(
+  value: string | undefined,
+): "operator-preset" | "saved-view" | undefined {
+  switch (value) {
+    case undefined:
+      return undefined;
+    case "operator-preset":
+    case "saved-view":
+      return value;
+    default:
+      throw new OperatorInputError(
+        "kind must be one of saved-view|operator-preset.",
+      );
+  }
+}
+
+function readSavedViewNavigation(input: {
+  readonly drilldown?: {
+    readonly approvalId?: string;
+    readonly dispatchJobId?: string;
+    readonly runId?: string;
+    readonly stepId?: string;
+    readonly toolCallId?: string;
+    readonly toolId?: string;
+    readonly workerId?: string;
+  };
+  readonly summary?: {
+    readonly definitionId?: string;
+    readonly executionMode?: string;
+    readonly runStatus?: string;
+    readonly toolName?: string;
+  };
+}) {
+  const summary = input.summary ?? {};
+  const drilldown = input.drilldown ?? {};
+  const runStatus = readRunStatusQuery(summary.runStatus);
+  const executionMode = readExecutionModeValue(
+    summary.executionMode,
+    "navigation.summary.executionMode",
+  );
+
+  return {
+    drilldown: {
+      ...(drilldown.approvalId ? { approvalId: drilldown.approvalId } : {}),
+      ...(drilldown.dispatchJobId
+        ? { dispatchJobId: drilldown.dispatchJobId }
+        : {}),
+      ...(drilldown.runId ? { runId: drilldown.runId } : {}),
+      ...(drilldown.stepId ? { stepId: drilldown.stepId } : {}),
+      ...(drilldown.toolCallId ? { toolCallId: drilldown.toolCallId } : {}),
+      ...(drilldown.toolId ? { toolId: drilldown.toolId } : {}),
+      ...(drilldown.workerId ? { workerId: drilldown.workerId } : {}),
+    },
+    summary: {
+      ...(summary.definitionId ? { definitionId: summary.definitionId } : {}),
+      ...(executionMode ? { executionMode } : {}),
+      ...(runStatus ? { runStatus } : {}),
+      ...(summary.toolName ? { toolName: summary.toolName } : {}),
+    },
+  };
+}
+
+function readSavedViewRefs(input: {
+  readonly auditViewRunId?: string;
+  readonly drilldownRunId?: string;
+}) {
+  return {
+    ...(input.auditViewRunId ? { auditViewRunId: input.auditViewRunId } : {}),
+    ...(input.drilldownRunId ? { drilldownRunId: input.drilldownRunId } : {}),
+  };
 }

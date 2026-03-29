@@ -4,6 +4,7 @@ import {
   ErrorState,
   FlashBanner,
   RunsListView,
+  SavedAuditViewsView,
 } from "../../components/console";
 import {
   getFlashMessage,
@@ -12,6 +13,9 @@ import {
 } from "../../lib/navigation";
 import {
   type ApiAuditNavigationFilters,
+  type ApiAuditNavigationView,
+  type ApiAuditSavedView,
+  type ApiAuditSavedViewApplication,
   type ApiRun,
   createRunrootApiClient,
   RunrootApiError,
@@ -29,13 +33,29 @@ export default async function RunsPage({
   const api = createRunrootApiClient();
 
   try {
-    const runs = [...(await api.listRuns())].sort(compareRunsByUpdatedAt);
+    const savedViewId = readFirstSearchParam(resolvedSearchParams.savedViewId);
     const auditFilters = readAuditFilters(resolvedSearchParams);
     const drilldownFilters = readAuditDrilldownFilters(resolvedSearchParams);
-    const navigation = await api.getAuditNavigation({
-      drilldown: drilldownFilters,
-      summary: auditFilters,
-    });
+    const [runs, savedViews, navigationResult] = await Promise.all([
+      api.listRuns(),
+      api.listSavedAuditViews(),
+      savedViewId
+        ? api.applySavedAuditView(savedViewId)
+        : api.getAuditNavigation({
+            drilldown: drilldownFilters,
+            summary: auditFilters,
+          }),
+    ]);
+    const sortedRuns = [...runs].sort(compareRunsByUpdatedAt);
+    let navigation: ApiAuditNavigationView;
+    let activeSavedView: ApiAuditSavedView | undefined;
+
+    if (hasSavedViewApplication(navigationResult)) {
+      navigation = navigationResult.navigation;
+      activeSavedView = navigationResult.savedView;
+    } else {
+      navigation = navigationResult;
+    }
 
     return (
       <ConsoleShell
@@ -43,8 +63,13 @@ export default async function RunsPage({
         title="Runs"
       >
         <FlashBanner message={flash} />
+        <SavedAuditViewsView
+          navigation={navigation}
+          savedViews={savedViews}
+          {...(activeSavedView ? { activeSavedView } : {})}
+        />
         <CrossRunAuditNavigationView navigation={navigation} />
-        <RunsListView runs={runs} />
+        <RunsListView runs={sortedRuns} />
       </ConsoleShell>
     );
   } catch (error) {
@@ -65,6 +90,12 @@ export default async function RunsPage({
 
 function compareRunsByUpdatedAt(left: ApiRun, right: ApiRun): number {
   return right.updatedAt.localeCompare(left.updatedAt);
+}
+
+function hasSavedViewApplication(
+  value: ApiAuditNavigationView | ApiAuditSavedViewApplication,
+): value is ApiAuditSavedViewApplication {
+  return "savedView" in value;
 }
 
 function readAuditFilters(

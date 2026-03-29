@@ -9,6 +9,7 @@ import {
   type DecideApprovalInput,
   OperatorError,
   resolveWorkspacePath,
+  type SaveAuditSavedViewInput,
 } from "@runroot/sdk";
 
 export interface CliIo {
@@ -59,7 +60,44 @@ export async function runCli(
   });
 
   try {
-    const [resource, action, subject] = positionals;
+    const [resource, action, subject, detail] = positionals;
+
+    if (resource === "audit" && action === "saved-views") {
+      switch (subject) {
+        case "apply":
+          if (!detail) {
+            throw new Error(
+              "audit saved-views apply requires a saved view id.",
+            );
+          }
+
+          return writeJson(io.stdout.write, {
+            application: await service.applySavedView(detail),
+          });
+        case "list":
+          return writeJson(io.stdout.write, {
+            savedViews: await service.listSavedViews(),
+          });
+        case "save":
+          return writeJson(io.stdout.write, {
+            savedView: await service.saveSavedView(
+              resolveSaveSavedViewInput(flags),
+            ),
+          });
+        case "show":
+          if (!detail) {
+            throw new Error("audit saved-views show requires a saved view id.");
+          }
+
+          return writeJson(io.stdout.write, {
+            savedView: await service.getSavedView(detail),
+          });
+        default:
+          throw new Error(
+            `Unknown command "${positionals.join(" ")}". Run "help" to see supported commands.`,
+          );
+      }
+    }
 
     switch (`${resource}:${action ?? ""}`) {
       case "templates:list":
@@ -276,6 +314,35 @@ function createApprovalDecisionInput(
   };
 }
 
+function resolveSaveSavedViewInput(
+  flags: ReadonlyMap<string, string | boolean>,
+): SaveAuditSavedViewInput {
+  const name = getStringFlag(flags, "name");
+
+  if (!name) {
+    throw new Error("audit saved-views save requires --name.");
+  }
+
+  const description = getStringFlag(flags, "description");
+  const auditViewRunId = getStringFlag(flags, "audit-view-run-id");
+  const drilldownRunId = getStringFlag(flags, "drilldown-run-id");
+  const preset = flags.get("preset") === true;
+
+  return {
+    ...(description ? { description } : {}),
+    ...(preset ? { kind: "operator-preset" as const } : {}),
+    name,
+    navigation: {
+      drilldown: resolveCrossRunAuditDrilldownFilters(flags),
+      summary: resolveCrossRunAuditFilters(flags),
+    },
+    refs: {
+      ...(auditViewRunId ? { auditViewRunId } : {}),
+      ...(drilldownRunId ? { drilldownRunId } : {}),
+    },
+  };
+}
+
 function getStringFlag(
   flags: ReadonlyMap<string, string | boolean>,
   name: string,
@@ -336,7 +403,7 @@ function resolveExecutionModeFlag(
     return executionMode;
   }
 
-  throw new Error("audit list only supports --execution-mode inline|queued.");
+  throw new Error("--execution-mode only supports inline|queued.");
 }
 
 function resolveRunStatusFlag(
@@ -361,7 +428,7 @@ function resolveRunStatusFlag(
   }
 
   throw new Error(
-    "audit list only supports --status cancelled|failed|paused|pending|queued|running|succeeded.",
+    "--status only supports cancelled|failed|paused|pending|queued|running|succeeded.",
   );
 }
 
@@ -378,6 +445,10 @@ Commands:
   audit list [--definition-id <id>] [--status <status>] [--execution-mode <inline|queued>] [--tool-name <name>]
   audit drilldown [--run-id <id>] [--approval-id <id>] [--step-id <id>] [--dispatch-job-id <id>] [--worker-id <id>] [--tool-call-id <id>] [--tool-id <id>]
   audit navigate [--definition-id <id>] [--status <status>] [--execution-mode <inline|queued>] [--tool-name <name>] [--run-id <id>] [--approval-id <id>] [--step-id <id>] [--dispatch-job-id <id>] [--worker-id <id>] [--tool-call-id <id>] [--tool-id <id>]
+  audit saved-views list
+  audit saved-views save --name <name> [--description <text>] [--preset] [--definition-id <id>] [--status <status>] [--execution-mode <inline|queued>] [--tool-name <name>] [--run-id <id>] [--approval-id <id>] [--step-id <id>] [--dispatch-job-id <id>] [--worker-id <id>] [--tool-call-id <id>] [--tool-id <id>] [--audit-view-run-id <id>] [--drilldown-run-id <id>]
+  audit saved-views show <saved-view-id>
+  audit saved-views apply <saved-view-id>
   approvals pending
   approvals show <approval-id>
   approvals decide <approval-id> --decision approved|rejected|cancelled [--actor <id>] [--note <text>]
