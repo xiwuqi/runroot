@@ -123,6 +123,13 @@ export async function runCli(
             resolveCrossRunAuditDrilldownFilters(flags),
           ),
         });
+      case "audit:navigate":
+        return writeJson(io.stdout.write, {
+          audit: await service.getAuditNavigation({
+            drilldown: resolveCrossRunAuditDrilldownFilters(flags),
+            summary: resolveCrossRunAuditFilters(flags),
+          }),
+        });
       case "approvals:pending":
         return writeJson(io.stdout.write, {
           approvals: await service.getPendingApprovals(),
@@ -370,6 +377,7 @@ Commands:
   runs audit <run-id>
   audit list [--definition-id <id>] [--status <status>] [--execution-mode <inline|queued>] [--tool-name <name>]
   audit drilldown [--run-id <id>] [--approval-id <id>] [--step-id <id>] [--dispatch-job-id <id>] [--worker-id <id>] [--tool-call-id <id>] [--tool-id <id>]
+  audit navigate [--definition-id <id>] [--status <status>] [--execution-mode <inline|queued>] [--tool-name <name>] [--run-id <id>] [--approval-id <id>] [--step-id <id>] [--dispatch-job-id <id>] [--worker-id <id>] [--tool-call-id <id>] [--tool-id <id>]
   approvals pending
   approvals show <approval-id>
   approvals decide <approval-id> --decision approved|rejected|cancelled [--actor <id>] [--note <text>]

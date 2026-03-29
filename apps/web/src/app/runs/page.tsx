@@ -1,7 +1,6 @@
 import {
   ConsoleShell,
-  CrossRunAuditDrilldownsView,
-  CrossRunAuditResultsView,
+  CrossRunAuditNavigationView,
   ErrorState,
   FlashBanner,
   RunsListView,
@@ -12,8 +11,7 @@ import {
   resolvePageSearchParams,
 } from "../../lib/navigation";
 import {
-  type ApiCrossRunAuditDrilldownFilters,
-  type ApiCrossRunAuditFilters,
+  type ApiAuditNavigationFilters,
   type ApiRun,
   createRunrootApiClient,
   RunrootApiError,
@@ -33,9 +31,11 @@ export default async function RunsPage({
   try {
     const runs = [...(await api.listRuns())].sort(compareRunsByUpdatedAt);
     const auditFilters = readAuditFilters(resolvedSearchParams);
-    const auditResults = await api.listAuditResults(auditFilters);
     const drilldownFilters = readAuditDrilldownFilters(resolvedSearchParams);
-    const drilldownResults = await api.listAuditDrilldowns(drilldownFilters);
+    const navigation = await api.getAuditNavigation({
+      drilldown: drilldownFilters,
+      summary: auditFilters,
+    });
 
     return (
       <ConsoleShell
@@ -43,14 +43,7 @@ export default async function RunsPage({
         title="Runs"
       >
         <FlashBanner message={flash} />
-        <CrossRunAuditResultsView
-          filters={auditFilters}
-          results={auditResults}
-        />
-        <CrossRunAuditDrilldownsView
-          filters={drilldownFilters}
-          results={drilldownResults}
-        />
+        <CrossRunAuditNavigationView navigation={navigation} />
         <RunsListView runs={runs} />
       </ConsoleShell>
     );
@@ -76,7 +69,7 @@ function compareRunsByUpdatedAt(left: ApiRun, right: ApiRun): number {
 
 function readAuditFilters(
   searchParams: PageSearchParams,
-): ApiCrossRunAuditFilters {
+): ApiAuditNavigationFilters["summary"] {
   const definitionId = readFirstSearchParam(searchParams.auditDefinitionId);
   const runStatus = readFirstSearchParam(searchParams.auditStatus);
   const executionMode = readFirstSearchParam(searchParams.auditExecutionMode);
@@ -94,7 +87,7 @@ function readAuditFilters(
 
 function readAuditDrilldownFilters(
   searchParams: PageSearchParams,
-): ApiCrossRunAuditDrilldownFilters {
+): ApiAuditNavigationFilters["drilldown"] {
   const approvalId = readFirstSearchParam(searchParams.drilldownApprovalId);
   const dispatchJobId = readFirstSearchParam(
     searchParams.drilldownDispatchJobId,

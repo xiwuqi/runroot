@@ -224,6 +224,52 @@ export interface ApiCrossRunAuditDrilldownResults {
   readonly totalMatchedEntryCount: number;
 }
 
+export interface ApiAuditNavigationFilters {
+  readonly drilldown: ApiCrossRunAuditDrilldownFilters;
+  readonly summary: ApiCrossRunAuditFilters;
+}
+
+export interface ApiAuditNavigationLink {
+  readonly kind: "audit-drilldown" | "run-audit-view";
+  readonly label: string;
+  readonly runId: string;
+  readonly summary: string;
+}
+
+export interface ApiAuditDrilldownLink extends ApiAuditNavigationLink {
+  readonly filters: ApiCrossRunAuditDrilldownFilters;
+  readonly kind: "audit-drilldown";
+}
+
+export interface ApiRunAuditViewLink extends ApiAuditNavigationLink {
+  readonly kind: "run-audit-view";
+}
+
+export interface ApiAuditNavigationSummary {
+  readonly links: {
+    readonly auditView: ApiRunAuditViewLink;
+    readonly drilldowns: readonly ApiAuditDrilldownLink[];
+  };
+  readonly result: ApiCrossRunAuditResult;
+}
+
+export interface ApiAuditNavigationDrilldown {
+  readonly links: {
+    readonly auditView: ApiRunAuditViewLink;
+  };
+  readonly result: ApiCrossRunAuditDrilldownResult;
+}
+
+export interface ApiAuditNavigationView {
+  readonly drilldowns: readonly ApiAuditNavigationDrilldown[];
+  readonly filters: ApiAuditNavigationFilters;
+  readonly isConstrained: boolean;
+  readonly summaries: readonly ApiAuditNavigationSummary[];
+  readonly totalDrilldownCount: number;
+  readonly totalMatchedEntryCount: number;
+  readonly totalSummaryCount: number;
+}
+
 export interface DecideApprovalRequest {
   readonly actorDisplayName?: string;
   readonly actorId?: string;
@@ -236,6 +282,9 @@ export interface RunrootApiClient {
     approvalId: string,
     input: DecideApprovalRequest,
   ): Promise<ApiApproval>;
+  getAuditNavigation(
+    filters?: Partial<ApiAuditNavigationFilters>,
+  ): Promise<ApiAuditNavigationView>;
   getApprovals(runId: string): Promise<readonly ApiApproval[]>;
   getPendingApprovals(): Promise<readonly PendingApprovalSummary[]>;
   getRun(runId: string): Promise<ApiRun>;
@@ -375,6 +424,18 @@ export function createRunrootApiClient(
       );
 
       return payload.approval;
+    },
+
+    async getAuditNavigation(filters) {
+      const payload = await requestJson<{
+        audit: ApiAuditNavigationView;
+      }>(
+        buildAuditNavigationPath(filters),
+        { method: "GET" },
+        "web.api.getAuditNavigation",
+      );
+
+      return payload.audit;
     },
 
     async getApprovals(runId) {
@@ -547,4 +608,64 @@ function buildCrossRunAuditDrilldownPath(
   const query = params.toString();
 
   return query.length > 0 ? `/audit/drilldowns?${query}` : "/audit/drilldowns";
+}
+
+function buildAuditNavigationPath(
+  filters: Partial<ApiAuditNavigationFilters> | undefined,
+): string {
+  if (!filters) {
+    return "/audit/navigation";
+  }
+
+  const params = new URLSearchParams();
+  const summary = filters.summary ?? {};
+  const drilldown = filters.drilldown ?? {};
+
+  if (summary.definitionId) {
+    params.set("definitionId", summary.definitionId);
+  }
+
+  if (summary.executionMode) {
+    params.set("executionMode", summary.executionMode);
+  }
+
+  if (summary.runStatus) {
+    params.set("runStatus", summary.runStatus);
+  }
+
+  if (summary.toolName) {
+    params.set("toolName", summary.toolName);
+  }
+
+  if (drilldown.approvalId) {
+    params.set("approvalId", drilldown.approvalId);
+  }
+
+  if (drilldown.dispatchJobId) {
+    params.set("dispatchJobId", drilldown.dispatchJobId);
+  }
+
+  if (drilldown.runId) {
+    params.set("runId", drilldown.runId);
+  }
+
+  if (drilldown.stepId) {
+    params.set("stepId", drilldown.stepId);
+  }
+
+  if (drilldown.toolCallId) {
+    params.set("toolCallId", drilldown.toolCallId);
+  }
+
+  if (drilldown.toolId) {
+    params.set("toolId", drilldown.toolId);
+  }
+
+  if (drilldown.workerId) {
+    params.set("workerId", drilldown.workerId);
+  }
+
+  const query = params.toString();
+
+  return query.length > 0 ? `/audit/navigation?${query}` : "/audit/navigation";
 }

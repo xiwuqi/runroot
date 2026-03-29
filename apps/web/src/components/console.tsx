@@ -2,12 +2,16 @@ import type { ReactNode } from "react";
 import type { FlashMessage } from "../lib/navigation";
 import type {
   ApiApproval,
+  ApiAuditDrilldownLink,
+  ApiAuditNavigationFilters,
+  ApiAuditNavigationView,
   ApiAuditView,
   ApiCrossRunAuditDrilldownFilters,
   ApiCrossRunAuditDrilldownResults,
   ApiCrossRunAuditFilters,
   ApiCrossRunAuditResults,
   ApiRun,
+  ApiRunAuditViewLink,
   ApiTimeline,
   ApiToolHistoryEntry,
   PendingApprovalSummary,
@@ -124,6 +128,322 @@ export function RunsListView({
           </div>
         </article>
       ))}
+    </section>
+  );
+}
+
+export function CrossRunAuditNavigationView({
+  navigation,
+}: Readonly<{
+  navigation: ApiAuditNavigationView;
+}>) {
+  const summaryFilters = navigation.filters.summary;
+  const drilldownFilters = navigation.filters.drilldown;
+
+  return (
+    <section className="card">
+      <div className="row spread">
+        <div>
+          <div className="card-eyebrow">Phase 14 / Audit Navigation</div>
+          <h2>Cross-run audit navigation</h2>
+          <p className="empty-copy">
+            Thin linked operator views over summaries, drilldowns, and the
+            existing run-scoped audit seam.
+          </p>
+        </div>
+        <div className="timeline-count">
+          {navigation.totalSummaryCount} summary result(s)
+        </div>
+      </div>
+
+      <form action="/runs" className="decision-form" method="get">
+        <div className="data-grid">
+          <label>
+            <span>Definition ID</span>
+            <input
+              defaultValue={summaryFilters.definitionId ?? ""}
+              name="auditDefinitionId"
+              placeholder="shell-runbook-flow"
+              type="text"
+            />
+          </label>
+          <label>
+            <span>Run status</span>
+            <select
+              defaultValue={summaryFilters.runStatus ?? ""}
+              name="auditStatus"
+            >
+              <option value="">all</option>
+              <option value="pending">pending</option>
+              <option value="queued">queued</option>
+              <option value="running">running</option>
+              <option value="paused">paused</option>
+              <option value="succeeded">succeeded</option>
+              <option value="failed">failed</option>
+              <option value="cancelled">cancelled</option>
+            </select>
+          </label>
+          <label>
+            <span>Execution mode</span>
+            <select
+              defaultValue={summaryFilters.executionMode ?? ""}
+              name="auditExecutionMode"
+            >
+              <option value="">all</option>
+              <option value="inline">inline</option>
+              <option value="queued">queued</option>
+            </select>
+          </label>
+          <label>
+            <span>Tool name</span>
+            <input
+              defaultValue={summaryFilters.toolName ?? ""}
+              name="auditToolName"
+              placeholder="shell.runbook"
+              type="text"
+            />
+          </label>
+        </div>
+        <div className="data-grid">
+          <label>
+            <span>Run ID</span>
+            <input
+              defaultValue={drilldownFilters.runId ?? ""}
+              name="drilldownRunId"
+              placeholder="run_1"
+              type="text"
+            />
+          </label>
+          <label>
+            <span>Approval ID</span>
+            <input
+              defaultValue={drilldownFilters.approvalId ?? ""}
+              name="drilldownApprovalId"
+              placeholder="approval_1"
+              type="text"
+            />
+          </label>
+          <label>
+            <span>Step ID</span>
+            <input
+              defaultValue={drilldownFilters.stepId ?? ""}
+              name="drilldownStepId"
+              placeholder="step_review"
+              type="text"
+            />
+          </label>
+          <label>
+            <span>Dispatch Job ID</span>
+            <input
+              defaultValue={drilldownFilters.dispatchJobId ?? ""}
+              name="drilldownDispatchJobId"
+              placeholder="dispatch_1"
+              type="text"
+            />
+          </label>
+          <label>
+            <span>Worker ID</span>
+            <input
+              defaultValue={drilldownFilters.workerId ?? ""}
+              name="drilldownWorkerId"
+              placeholder="worker_1"
+              type="text"
+            />
+          </label>
+          <label>
+            <span>Tool Call ID</span>
+            <input
+              defaultValue={drilldownFilters.toolCallId ?? ""}
+              name="drilldownToolCallId"
+              placeholder="call_1"
+              type="text"
+            />
+          </label>
+          <label>
+            <span>Tool ID</span>
+            <input
+              defaultValue={drilldownFilters.toolId ?? ""}
+              name="drilldownToolId"
+              placeholder="builtin.shell.runbook"
+              type="text"
+            />
+          </label>
+        </div>
+        <div className="row spread">
+          <div className="decision-actions">
+            <button type="submit">Apply navigation</button>
+            <a className="subtle-link" href="/runs">
+              Clear navigation
+            </a>
+          </div>
+          <div className="timeline-count">
+            {navigation.totalMatchedEntryCount} matched drilldown fact(s)
+          </div>
+        </div>
+      </form>
+
+      {navigation.summaries.length === 0 ? (
+        <p className="empty-copy">
+          No cross-run audit summaries matched the current navigation filters.
+        </p>
+      ) : (
+        <ol className="timeline-list">
+          {navigation.summaries.map((summary) => (
+            <li className="timeline-entry" key={summary.result.runId}>
+              <div className="row spread">
+                <div>
+                  <strong>{summary.result.definitionName}</strong>
+                  <div className="timeline-meta">
+                    run {summary.result.runId}
+                  </div>
+                </div>
+                <StatusBadge status={summary.result.runStatus} />
+              </div>
+              <div className="timeline-meta">
+                updated {formatTimestamp(summary.result.updatedAt)}
+                {summary.result.lastOccurredAt
+                  ? ` · last fact ${formatTimestamp(summary.result.lastOccurredAt)}`
+                  : ""}
+              </div>
+              <div className="timeline-meta">
+                execution {joinOrFallback(summary.result.executionModes, "n/a")}
+                {summary.result.workerIds.length > 0
+                  ? ` · workers ${joinOrFallback(summary.result.workerIds, "n/a")}`
+                  : ""}
+              </div>
+              <p className="empty-copy">{summary.result.summary}</p>
+              <div className="timeline-meta">
+                {summary.links.drilldowns.length > 0 ? (
+                  <>
+                    drilldowns:{" "}
+                    {summary.links.drilldowns.map((link, index) => (
+                      <span key={`${summary.result.runId}:${link.label}`}>
+                        {index > 0 ? " · " : ""}
+                        <a
+                          className="subtle-link"
+                          href={buildNavigationLinkHref(
+                            link,
+                            navigation.filters.summary,
+                          )}
+                          title={link.summary}
+                        >
+                          {link.label}
+                        </a>
+                      </span>
+                    ))}
+                  </>
+                ) : (
+                  "No drilldown pivots available for this summary."
+                )}
+              </div>
+              <div className="row spread">
+                <a
+                  className="link-button"
+                  href={buildNavigationLinkHref(
+                    summary.links.auditView,
+                    navigation.filters.summary,
+                  )}
+                  title={summary.links.auditView.summary}
+                >
+                  Open run audit view
+                </a>
+                <a
+                  className="subtle-link"
+                  href={`/runs/${summary.result.runId}/timeline`}
+                >
+                  Timeline
+                </a>
+              </div>
+            </li>
+          ))}
+        </ol>
+      )}
+
+      {!navigation.isConstrained ? (
+        <p className="empty-copy">
+          Provide at least one stable identifier to materialize linked
+          drilldowns beneath the current summaries.
+        </p>
+      ) : navigation.drilldowns.length === 0 ? (
+        <p className="empty-copy">
+          No identifier-driven drilldowns matched the current navigation state.
+        </p>
+      ) : (
+        <ol className="timeline-list">
+          {navigation.drilldowns.map((drilldown) => (
+            <li className="timeline-entry" key={drilldown.result.runId}>
+              <div className="row spread">
+                <div>
+                  <strong>{drilldown.result.definitionName}</strong>
+                  <div className="timeline-meta">
+                    run {drilldown.result.runId}
+                  </div>
+                </div>
+                <StatusBadge status={drilldown.result.runStatus} />
+              </div>
+              <div className="timeline-meta">
+                matched {drilldown.result.matchedEntryCount} fact(s)
+                {drilldown.result.lastOccurredAt
+                  ? ` · last fact ${formatTimestamp(drilldown.result.lastOccurredAt)}`
+                  : ""}
+              </div>
+              <p className="empty-copy">{drilldown.result.summary}</p>
+              <ol className="timeline-list">
+                {drilldown.result.entries.map((entry) => (
+                  <li
+                    className="timeline-entry"
+                    key={`${drilldown.result.runId}:${readAuditEntryKey(entry)}`}
+                  >
+                    <div className="row spread">
+                      <strong>{entry.summary}</strong>
+                      <span>{formatTimestamp(entry.occurredAt)}</span>
+                    </div>
+                    <div className="timeline-meta">
+                      {entry.kind}
+                      {entry.correlation.stepId
+                        ? ` · step ${entry.correlation.stepId}`
+                        : ""}
+                      {entry.correlation.dispatchJobId
+                        ? ` · dispatch ${entry.correlation.dispatchJobId}`
+                        : ""}
+                      {entry.correlation.workerId
+                        ? ` · worker ${entry.correlation.workerId}`
+                        : ""}
+                      {entry.correlation.approvalId
+                        ? ` · approval ${entry.correlation.approvalId}`
+                        : ""}
+                      {entry.correlation.toolCallId
+                        ? ` · call ${entry.correlation.toolCallId}`
+                        : ""}
+                      {entry.correlation.toolId
+                        ? ` · tool ${entry.correlation.toolId}`
+                        : ""}
+                    </div>
+                  </li>
+                ))}
+              </ol>
+              <div className="row spread">
+                <a
+                  className="link-button"
+                  href={buildNavigationLinkHref(
+                    drilldown.links.auditView,
+                    navigation.filters.summary,
+                  )}
+                  title={drilldown.links.auditView.summary}
+                >
+                  Open run audit view
+                </a>
+                <a
+                  className="subtle-link"
+                  href={`/runs/${drilldown.result.runId}/timeline`}
+                >
+                  Timeline
+                </a>
+              </div>
+            </li>
+          ))}
+        </ol>
+      )}
     </section>
   );
 }
@@ -885,34 +1205,68 @@ function joinOrFallback(values: readonly string[], fallback: string): string {
 function buildAuditDrilldownHref(
   filters: ApiCrossRunAuditDrilldownFilters,
 ): string {
+  return buildAuditNavigationPageHref({}, filters);
+}
+
+function buildNavigationLinkHref(
+  link: ApiAuditDrilldownLink | ApiRunAuditViewLink,
+  summaryFilters: ApiAuditNavigationFilters["summary"],
+): string {
+  if (link.kind === "run-audit-view") {
+    return `/runs/${link.runId}`;
+  }
+
+  return buildAuditNavigationPageHref(summaryFilters, link.filters);
+}
+
+function buildAuditNavigationPageHref(
+  summaryFilters: ApiAuditNavigationFilters["summary"],
+  drilldownFilters: ApiCrossRunAuditDrilldownFilters,
+): string {
   const params = new URLSearchParams();
 
-  if (filters.approvalId) {
-    params.set("drilldownApprovalId", filters.approvalId);
+  if (summaryFilters.definitionId) {
+    params.set("auditDefinitionId", summaryFilters.definitionId);
   }
 
-  if (filters.dispatchJobId) {
-    params.set("drilldownDispatchJobId", filters.dispatchJobId);
+  if (summaryFilters.runStatus) {
+    params.set("auditStatus", summaryFilters.runStatus);
   }
 
-  if (filters.runId) {
-    params.set("drilldownRunId", filters.runId);
+  if (summaryFilters.executionMode) {
+    params.set("auditExecutionMode", summaryFilters.executionMode);
   }
 
-  if (filters.stepId) {
-    params.set("drilldownStepId", filters.stepId);
+  if (summaryFilters.toolName) {
+    params.set("auditToolName", summaryFilters.toolName);
   }
 
-  if (filters.toolCallId) {
-    params.set("drilldownToolCallId", filters.toolCallId);
+  if (drilldownFilters.approvalId) {
+    params.set("drilldownApprovalId", drilldownFilters.approvalId);
   }
 
-  if (filters.toolId) {
-    params.set("drilldownToolId", filters.toolId);
+  if (drilldownFilters.dispatchJobId) {
+    params.set("drilldownDispatchJobId", drilldownFilters.dispatchJobId);
   }
 
-  if (filters.workerId) {
-    params.set("drilldownWorkerId", filters.workerId);
+  if (drilldownFilters.runId) {
+    params.set("drilldownRunId", drilldownFilters.runId);
+  }
+
+  if (drilldownFilters.stepId) {
+    params.set("drilldownStepId", drilldownFilters.stepId);
+  }
+
+  if (drilldownFilters.toolCallId) {
+    params.set("drilldownToolCallId", drilldownFilters.toolCallId);
+  }
+
+  if (drilldownFilters.toolId) {
+    params.set("drilldownToolId", drilldownFilters.toolId);
+  }
+
+  if (drilldownFilters.workerId) {
+    params.set("drilldownWorkerId", drilldownFilters.workerId);
   }
 
   const query = params.toString();

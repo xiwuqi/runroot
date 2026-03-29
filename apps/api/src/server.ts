@@ -164,6 +164,49 @@ export function buildServer(options: BuildServerOptions = {}) {
     }),
   );
 
+  app.get("/audit/navigation", async (request, reply) =>
+    handleOperatorResponse(reply, async () => {
+      const query = request.query as {
+        readonly approvalId?: string;
+        readonly definitionId?: string;
+        readonly dispatchJobId?: string;
+        readonly executionMode?: "inline" | "queued";
+        readonly runId?: string;
+        readonly runStatus?: string;
+        readonly stepId?: string;
+        readonly toolCallId?: string;
+        readonly toolId?: string;
+        readonly toolName?: string;
+        readonly workerId?: string;
+      };
+      const runStatus = readRunStatusQuery(query.runStatus);
+
+      return {
+        audit: await operator.getAuditNavigation({
+          drilldown: {
+            ...(query.approvalId ? { approvalId: query.approvalId } : {}),
+            ...(query.dispatchJobId
+              ? { dispatchJobId: query.dispatchJobId }
+              : {}),
+            ...(query.runId ? { runId: query.runId } : {}),
+            ...(query.stepId ? { stepId: query.stepId } : {}),
+            ...(query.toolCallId ? { toolCallId: query.toolCallId } : {}),
+            ...(query.toolId ? { toolId: query.toolId } : {}),
+            ...(query.workerId ? { workerId: query.workerId } : {}),
+          },
+          summary: {
+            ...(query.definitionId ? { definitionId: query.definitionId } : {}),
+            ...(query.executionMode
+              ? { executionMode: query.executionMode }
+              : {}),
+            ...(runStatus ? { runStatus } : {}),
+            ...(query.toolName ? { toolName: query.toolName } : {}),
+          },
+        }),
+      };
+    }),
+  );
+
   app.post("/runs", async (request, reply) =>
     handleOperatorResponse(reply, async () => {
       const body = request.body as {
