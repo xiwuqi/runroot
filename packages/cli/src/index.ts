@@ -3,7 +3,7 @@
 import { readFile } from "node:fs/promises";
 
 import type { PackageBoundary } from "@runroot/config";
-import type { JsonValue } from "@runroot/domain";
+import type { JsonValue, RunStatus } from "@runroot/domain";
 import {
   createRunrootOperatorService,
   type DecideApprovalInput,
@@ -110,6 +110,12 @@ export async function runCli(
 
         return writeJson(io.stdout.write, {
           audit: await service.getAuditView(subject),
+        });
+      case "audit:list":
+        return writeJson(io.stdout.write, {
+          audit: await service.listAuditResults(
+            resolveCrossRunAuditFilters(flags),
+          ),
         });
       case "approvals:pending":
         return writeJson(io.stdout.write, {
@@ -266,6 +272,64 @@ function getStringFlag(
   return typeof value === "string" ? value : undefined;
 }
 
+function resolveCrossRunAuditFilters(
+  flags: ReadonlyMap<string, string | boolean>,
+) {
+  const definitionId = getStringFlag(flags, "definition-id");
+  const executionMode = resolveExecutionModeFlag(flags);
+  const runStatus = resolveRunStatusFlag(flags);
+  const toolName = getStringFlag(flags, "tool-name");
+
+  return {
+    ...(definitionId ? { definitionId } : {}),
+    ...(executionMode ? { executionMode } : {}),
+    ...(runStatus ? { runStatus } : {}),
+    ...(toolName ? { toolName } : {}),
+  };
+}
+
+function resolveExecutionModeFlag(
+  flags: ReadonlyMap<string, string | boolean>,
+): "inline" | "queued" | undefined {
+  const executionMode = getStringFlag(flags, "execution-mode");
+
+  if (
+    executionMode === undefined ||
+    executionMode === "inline" ||
+    executionMode === "queued"
+  ) {
+    return executionMode;
+  }
+
+  throw new Error("audit list only supports --execution-mode inline|queued.");
+}
+
+function resolveRunStatusFlag(
+  flags: ReadonlyMap<string, string | boolean>,
+): RunStatus | undefined {
+  const status = getStringFlag(flags, "status");
+
+  if (status === undefined) {
+    return undefined;
+  }
+
+  if (
+    status === "cancelled" ||
+    status === "failed" ||
+    status === "paused" ||
+    status === "pending" ||
+    status === "queued" ||
+    status === "running" ||
+    status === "succeeded"
+  ) {
+    return status;
+  }
+
+  throw new Error(
+    "audit list only supports --status cancelled|failed|paused|pending|queued|running|succeeded.",
+  );
+}
+
 function writeHelp(write: (message: string) => void): void {
   write(`Runroot CLI
 
@@ -276,6 +340,7 @@ Commands:
   runs resume <run-id>
   runs timeline <run-id>
   runs audit <run-id>
+  audit list [--definition-id <id>] [--status <status>] [--execution-mode <inline|queued>] [--tool-name <name>]
   approvals pending
   approvals show <approval-id>
   approvals decide <approval-id> --decision approved|rejected|cancelled [--actor <id>] [--note <text>]
