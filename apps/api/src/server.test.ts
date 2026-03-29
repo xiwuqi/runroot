@@ -25,7 +25,7 @@ describe("@runroot/api", () => {
     expect(response.json()).toEqual({
       status: "ok",
       project: "Runroot",
-      phase: 12,
+      phase: 13,
     });
   });
 
@@ -205,5 +205,56 @@ describe("@runroot/api", () => {
           typeof entry.correlation.toolCallId === "string",
       ),
     ).toBe(true);
+  });
+
+  it("exposes cross-run audit drilldowns through the operator API", async () => {
+    const workspaceRoot = await mkdtemp(
+      join(tmpdir(), "runroot-api-drilldown-"),
+    );
+    app = buildServer({
+      operator: createRunrootOperatorService({
+        workspacePath: join(workspaceRoot, "workspace.json"),
+      }),
+    });
+
+    const createResponse = await app.inject({
+      method: "POST",
+      payload: {
+        input: {
+          approvalRequired: false,
+          commandAlias: "print-ready",
+          runbookId: "node-health-check",
+        },
+        templateId: "shell-runbook-flow",
+      },
+      url: "/runs",
+    });
+    const createdPayload = createResponse.json() as {
+      run: {
+        id: string;
+      };
+    };
+    const drilldownResponse = await app.inject({
+      method: "GET",
+      url: `/audit/drilldowns?runId=${createdPayload.run.id}`,
+    });
+    const drilldownPayload = drilldownResponse.json() as {
+      audit: {
+        isConstrained: boolean;
+        results: Array<{
+          matchedEntryCount: number;
+          runId: string;
+        }>;
+        totalCount: number;
+      };
+    };
+
+    expect(drilldownResponse.statusCode).toBe(200);
+    expect(drilldownPayload.audit.isConstrained).toBe(true);
+    expect(drilldownPayload.audit.totalCount).toBe(1);
+    expect(drilldownPayload.audit.results[0]).toMatchObject({
+      matchedEntryCount: expect.any(Number),
+      runId: createdPayload.run.id,
+    });
   });
 });

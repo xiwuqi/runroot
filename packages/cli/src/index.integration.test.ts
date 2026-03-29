@@ -383,4 +383,107 @@ describe("@runroot/cli integration", () => {
       ),
     ).toBe(false);
   });
+
+  it("lists cross-run audit drilldowns through the CLI for inline and queued runs", async () => {
+    const workspaceRoot = await mkdtemp(
+      join(tmpdir(), "runroot-cli-drilldown-"),
+    );
+    const sqlitePath = join(workspaceRoot, "runroot.sqlite");
+    const inputFile = join(workspaceRoot, "shell-runbook.json");
+    await writeFile(
+      inputFile,
+      JSON.stringify({
+        approvalRequired: false,
+        commandAlias: "print-ready",
+        runbookId: "node-health-check",
+      }),
+    );
+    const inlineStartIo = createIo();
+    const queuedStartIo = createIo();
+    const inlineQueryIo = createIo();
+    const queuedQueryIo = createIo();
+
+    await runCli(
+      ["runs", "start", "shell-runbook-flow", "--input-file", inputFile],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: inlineStartIo.io,
+      },
+    );
+    const inlineRun = JSON.parse(inlineStartIo.stdout.join("")) as {
+      run: {
+        id: string;
+      };
+    };
+
+    await runCli(
+      ["runs", "start", "shell-runbook-flow", "--input-file", inputFile],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_EXECUTION_MODE: "queued",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: queuedStartIo.io,
+      },
+    );
+
+    const worker = createRunrootWorkerService({
+      persistenceDriver: "sqlite",
+      sqlitePath,
+      workerId: "worker_cli_drilldown",
+    });
+    await worker.processNextJob();
+
+    const inlineExitCode = await runCli(
+      ["audit", "drilldown", "--run-id", inlineRun.run.id],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: inlineQueryIo.io,
+      },
+    );
+    const queuedExitCode = await runCli(
+      ["audit", "drilldown", "--worker-id", "worker_cli_drilldown"],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: queuedQueryIo.io,
+      },
+    );
+    const inlinePayload = JSON.parse(inlineQueryIo.stdout.join("")) as {
+      audit: {
+        results: Array<{
+          runId: string;
+        }>;
+      };
+    };
+    const queuedPayload = JSON.parse(queuedQueryIo.stdout.join("")) as {
+      audit: {
+        results: Array<{
+          identifiers: {
+            workerIds: string[];
+          };
+        }>;
+      };
+    };
+
+    expect(inlineExitCode).toBe(0);
+    expect(inlinePayload.audit.results[0]?.runId).toBe(inlineRun.run.id);
+    expect(queuedExitCode).toBe(0);
+    expect(queuedPayload.audit.results[0]?.identifiers.workerIds).toContain(
+      "worker_cli_drilldown",
+    );
+  });
 });

@@ -328,4 +328,93 @@ describe("@runroot/sdk operator service integration", () => {
       queuedRun.id,
     ]);
   });
+
+  it("lists cross-run audit drilldowns for inline and queued runs through the operator seam", async () => {
+    const workspaceRoot = await mkdtemp(
+      join(tmpdir(), "runroot-sdk-drilldown-"),
+    );
+    const sqlitePath = join(workspaceRoot, "runroot.sqlite");
+    const now = createClock();
+    const idGenerator = createIdGenerator();
+    const inlineService = createRunrootOperatorService({
+      executionMode: "inline",
+      idGenerator,
+      now,
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+    const queuedService = createRunrootOperatorService({
+      executionMode: "queued",
+      idGenerator,
+      now,
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+    const worker = createRunrootWorkerService({
+      idGenerator,
+      now,
+      persistenceDriver: "sqlite",
+      sqlitePath,
+      workerId: "worker_drilldown",
+    });
+    const queryService = createRunrootOperatorService({
+      idGenerator,
+      now,
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+
+    const inlineRun = await inlineService.startRun({
+      input: {
+        approvalRequired: false,
+        commandAlias: "print-ready",
+        runbookId: "node-health-check",
+      },
+      templateId: "shell-runbook-flow",
+    });
+    const queuedRun = await queuedService.startRun({
+      input: {
+        approvalRequired: false,
+        commandAlias: "print-ready",
+        runbookId: "node-health-check",
+      },
+      templateId: "shell-runbook-flow",
+    });
+
+    await worker.processNextJob();
+
+    const inlineDrilldowns = await queryService.listAuditDrilldowns({
+      runId: inlineRun.id,
+    });
+    const queuedDrilldowns = await queryService.listAuditDrilldowns({
+      workerId: "worker_drilldown",
+    });
+
+    expect(inlineDrilldowns.isConstrained).toBe(true);
+    expect(inlineDrilldowns.results[0]).toMatchObject({
+      runId: inlineRun.id,
+    });
+    expect(
+      inlineDrilldowns.results[0]?.entries.some(
+        (entry) =>
+          entry.kind === "tool-outcome" &&
+          entry.correlation.toolId === "builtin.shell.runbook",
+      ),
+    ).toBe(true);
+    expect(queuedDrilldowns.results).toHaveLength(1);
+    expect(queuedDrilldowns.results[0]).toMatchObject({
+      identifiers: {
+        dispatchJobIds: [expect.any(String)],
+        workerIds: ["worker_drilldown"],
+      },
+      runId: queuedRun.id,
+    });
+    expect(
+      queuedDrilldowns.results[0]?.entries.some(
+        (entry) =>
+          entry.kind === "dispatch-completed" &&
+          entry.correlation.workerId === "worker_drilldown",
+      ),
+    ).toBe(true);
+  });
 });
