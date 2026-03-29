@@ -151,4 +151,20 @@ Status: completed
   presentation rather than a full observability backend, productized dashboard,
   or open-ended search and analytics product
 
-Status: implementation complete on branch
+Status: completed
+
+## Phase 14: Cross-Run Audit Navigation and Linked Operator Views
+
+- add a shared cross-run audit navigation contract over the derived audit facts
+  already exposed through replay, dispatch, worker, and tool-history seams
+- expose minimal linked operator-view paths through the existing seams in SDK,
+  API, CLI, and web
+- keep operator surfaces thin while allowing constrained movement between
+  cross-run summaries, identifier-driven drilldowns, and run-scoped audit views
+- execute against the formal handoff in
+  [docs/architecture/phase-14-handoff.md](./architecture/phase-14-handoff.md)
+- keep the phase focused on audit navigation and linked operator views rather
+  than a full observability backend, productized dashboard, or open-ended
+  search and analytics product
+
+Status: formal handoff defined; implementation not started
