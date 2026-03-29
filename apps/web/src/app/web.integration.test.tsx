@@ -13,6 +13,7 @@ import RunDetailPage from "./runs/[runId]/page";
 import { POST as resumeRun } from "./runs/[runId]/resume/route";
 import RunTimelinePage from "./runs/[runId]/timeline/page";
 import RunsPage from "./runs/page";
+import { POST as saveSavedView } from "./runs/saved-views/route";
 
 let originalApiBaseUrl = process.env.RUNROOT_API_BASE_URL;
 
@@ -225,6 +226,95 @@ describe("@runroot/web integration", () => {
       expect(drilldownMarkup).toContain(queuedRun.id);
       expect(drilldownMarkup).toContain("shell.runbook");
       expect(drilldownMarkup).toContain("Run audit view");
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("renders and applies saved audit views through the existing API surface", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "runroot-web-saved-"));
+    const sqlitePath = join(workspaceRoot, "runroot.sqlite");
+    const inlineOperator = createRunrootOperatorService({
+      executionMode: "inline",
+      persistenceDriver: "sqlite",
+      savedViewIdGenerator: () => "saved_view_web",
+      sqlitePath,
+    });
+    const queuedOperator = createRunrootOperatorService({
+      executionMode: "queued",
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+    const workerService = (
+      await import("@runroot/sdk")
+    ).createRunrootWorkerService({
+      persistenceDriver: "sqlite",
+      sqlitePath,
+      workerId: "worker_web_saved",
+    });
+    const app = buildServer({
+      operator: createRunrootOperatorService({
+        persistenceDriver: "sqlite",
+        sqlitePath,
+      }),
+    });
+
+    try {
+      await inlineOperator.startRun({
+        input: {
+          approvalRequired: false,
+          commandAlias: "print-ready",
+          runbookId: "node-health-check",
+        },
+        templateId: "shell-runbook-flow",
+      });
+      const queuedRun = await queuedOperator.startRun({
+        input: {
+          approvalRequired: false,
+          commandAlias: "print-ready",
+          runbookId: "node-health-check",
+        },
+        templateId: "shell-runbook-flow",
+      });
+
+      await workerService.processNextJob();
+
+      const address = await app.listen({
+        host: "127.0.0.1",
+        port: 0,
+      });
+      process.env.RUNROOT_API_BASE_URL = address;
+
+      const saveForm = new FormData();
+      saveForm.set("name", "Queued worker follow-up");
+      saveForm.set("description", "Saved queued worker investigation");
+      saveForm.set("summaryExecutionMode", "queued");
+      saveForm.set("drilldownWorkerId", "worker_web_saved");
+      saveForm.set("returnTo", "/runs");
+
+      const saveResponse = await saveSavedView(
+        new Request("http://localhost/runs/saved-views", {
+          body: saveForm,
+          method: "POST",
+        }),
+      );
+      const location = saveResponse.headers.get("Location");
+
+      expect(saveResponse.status).toBe(303);
+      expect(location).toContain("savedViewId=saved_view_web");
+
+      const savedViewMarkup = renderToStaticMarkup(
+        await RunsPage({
+          searchParams: Promise.resolve({
+            savedViewId: "saved_view_web",
+          }),
+        }),
+      );
+
+      expect(savedViewMarkup).toContain("Saved audit views");
+      expect(savedViewMarkup).toContain("Queued worker follow-up");
+      expect(savedViewMarkup).toContain("Currently applied");
+      expect(savedViewMarkup).toContain(queuedRun.id);
     } finally {
       await app.close();
     }

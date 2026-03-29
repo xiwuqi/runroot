@@ -659,4 +659,169 @@ describe("@runroot/cli integration", () => {
       },
     });
   });
+
+  it("saves, lists, shows, and applies saved audit views through the CLI", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "runroot-cli-saved-"));
+    const sqlitePath = join(workspaceRoot, "runroot.sqlite");
+    const inputFile = join(workspaceRoot, "shell-runbook.json");
+    await writeFile(
+      inputFile,
+      JSON.stringify({
+        approvalRequired: false,
+        commandAlias: "print-ready",
+        runbookId: "node-health-check",
+      }),
+    );
+    const inlineStartIo = createIo();
+    const queuedStartIo = createIo();
+    const saveIo = createIo();
+    const listIo = createIo();
+    const showIo = createIo();
+    const applyIo = createIo();
+
+    await runCli(
+      ["runs", "start", "shell-runbook-flow", "--input-file", inputFile],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: inlineStartIo.io,
+      },
+    );
+
+    await runCli(
+      ["runs", "start", "shell-runbook-flow", "--input-file", inputFile],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_EXECUTION_MODE: "queued",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: queuedStartIo.io,
+      },
+    );
+    const queuedRun = JSON.parse(queuedStartIo.stdout.join("")) as {
+      run: {
+        id: string;
+      };
+    };
+
+    const worker = createRunrootWorkerService({
+      persistenceDriver: "sqlite",
+      sqlitePath,
+      workerId: "worker_cli_saved",
+    });
+    await worker.processNextJob();
+
+    const saveExitCode = await runCli(
+      [
+        "audit",
+        "saved-views",
+        "save",
+        "--name",
+        "Queued worker follow-up",
+        "--description",
+        "Saved queued worker investigation",
+        "--execution-mode",
+        "queued",
+        "--worker-id",
+        "worker_cli_saved",
+        "--audit-view-run-id",
+        queuedRun.run.id,
+      ],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: saveIo.io,
+      },
+    );
+    const savedViewPayload = JSON.parse(saveIo.stdout.join("")) as {
+      savedView: {
+        id: string;
+      };
+    };
+    const listExitCode = await runCli(["audit", "saved-views", "list"], {
+      cwd: workspaceRoot,
+      env: {
+        RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+        RUNROOT_SQLITE_PATH: sqlitePath,
+      },
+      io: listIo.io,
+    });
+    const showExitCode = await runCli(
+      ["audit", "saved-views", "show", savedViewPayload.savedView.id],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: showIo.io,
+      },
+    );
+    const applyExitCode = await runCli(
+      ["audit", "saved-views", "apply", savedViewPayload.savedView.id],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: applyIo.io,
+      },
+    );
+    const listPayload = JSON.parse(listIo.stdout.join("")) as {
+      savedViews: {
+        items: Array<{
+          id: string;
+        }>;
+        totalCount: number;
+      };
+    };
+    const showPayload = JSON.parse(showIo.stdout.join("")) as {
+      savedView: {
+        refs: {
+          auditViewRunId?: string;
+        };
+      };
+    };
+    const applyPayload = JSON.parse(applyIo.stdout.join("")) as {
+      application: {
+        navigation: {
+          drilldowns: Array<{
+            result: {
+              runId: string;
+            };
+          }>;
+          totalSummaryCount: number;
+        };
+        savedView: {
+          id: string;
+        };
+      };
+    };
+
+    expect(saveExitCode).toBe(0);
+    expect(listExitCode).toBe(0);
+    expect(showExitCode).toBe(0);
+    expect(applyExitCode).toBe(0);
+    expect(listPayload.savedViews.totalCount).toBe(1);
+    expect(listPayload.savedViews.items[0]?.id).toBe(
+      savedViewPayload.savedView.id,
+    );
+    expect(showPayload.savedView.refs.auditViewRunId).toBe(queuedRun.run.id);
+    expect(applyPayload.application.savedView.id).toBe(
+      savedViewPayload.savedView.id,
+    );
+    expect(applyPayload.application.navigation.totalSummaryCount).toBe(1);
+    expect(
+      applyPayload.application.navigation.drilldowns[0]?.result.runId,
+    ).toBe(queuedRun.run.id);
+  });
 });

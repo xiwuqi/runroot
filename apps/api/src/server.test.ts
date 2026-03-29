@@ -25,7 +25,7 @@ describe("@runroot/api", () => {
     expect(response.json()).toEqual({
       status: "ok",
       project: "Runroot",
-      phase: 14,
+      phase: 15,
     });
   });
 
@@ -348,5 +348,104 @@ describe("@runroot/api", () => {
         runId: createdPayload.run.id,
       },
     });
+  });
+
+  it("saves, lists, loads, and applies saved audit views through the operator API", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "runroot-api-saved-"));
+    app = buildServer({
+      operator: createRunrootOperatorService({
+        savedViewIdGenerator: () => "saved_view_api",
+        workspacePath: join(workspaceRoot, "workspace.json"),
+      }),
+    });
+
+    const createResponse = await app.inject({
+      method: "POST",
+      payload: {
+        input: {
+          approvalRequired: false,
+          commandAlias: "print-ready",
+          runbookId: "node-health-check",
+        },
+        templateId: "shell-runbook-flow",
+      },
+      url: "/runs",
+    });
+    const createdPayload = createResponse.json() as {
+      run: {
+        id: string;
+      };
+    };
+    const saveResponse = await app.inject({
+      method: "POST",
+      payload: {
+        name: "Saved run detail",
+        navigation: {
+          drilldown: {
+            runId: createdPayload.run.id,
+          },
+          summary: {
+            definitionId: "shell-runbook-flow",
+          },
+        },
+        refs: {
+          auditViewRunId: createdPayload.run.id,
+        },
+      },
+      url: "/audit/saved-views",
+    });
+    const savedViewPayload = saveResponse.json() as {
+      savedView: {
+        id: string;
+      };
+    };
+    const listResponse = await app.inject({
+      method: "GET",
+      url: "/audit/saved-views",
+    });
+    const listPayload = listResponse.json() as {
+      savedViews: {
+        items: Array<{
+          id: string;
+        }>;
+        totalCount: number;
+      };
+    };
+    const getResponse = await app.inject({
+      method: "GET",
+      url: `/audit/saved-views/${savedViewPayload.savedView.id}`,
+    });
+    const applyResponse = await app.inject({
+      method: "GET",
+      url: `/audit/saved-views/${savedViewPayload.savedView.id}/apply`,
+    });
+    const applyPayload = applyResponse.json() as {
+      application: {
+        navigation: {
+          drilldowns: Array<{
+            result: {
+              runId: string;
+            };
+          }>;
+          totalSummaryCount: number;
+        };
+        savedView: {
+          id: string;
+        };
+      };
+    };
+
+    expect(saveResponse.statusCode).toBe(201);
+    expect(savedViewPayload.savedView.id).toBe("saved_view_api");
+    expect(listResponse.statusCode).toBe(200);
+    expect(listPayload.savedViews.totalCount).toBe(1);
+    expect(listPayload.savedViews.items[0]?.id).toBe("saved_view_api");
+    expect(getResponse.statusCode).toBe(200);
+    expect(applyResponse.statusCode).toBe(200);
+    expect(applyPayload.application.savedView.id).toBe("saved_view_api");
+    expect(applyPayload.application.navigation.totalSummaryCount).toBe(1);
+    expect(
+      applyPayload.application.navigation.drilldowns[0]?.result.runId,
+    ).toBe(createdPayload.run.id);
   });
 });

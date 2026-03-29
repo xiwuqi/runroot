@@ -364,6 +364,7 @@ describe("@runroot/api integration", () => {
     app = buildServer({
       operator: createRunrootOperatorService({
         persistenceDriver: "sqlite",
+        savedViewIdGenerator: () => "saved_view_api",
         sqlitePath,
       }),
     });
@@ -466,6 +467,7 @@ describe("@runroot/api integration", () => {
     app = buildServer({
       operator: createRunrootOperatorService({
         persistenceDriver: "sqlite",
+        savedViewIdGenerator: () => "saved_view_api",
         sqlitePath,
       }),
     });
@@ -554,6 +556,7 @@ describe("@runroot/api integration", () => {
     app = buildServer({
       operator: createRunrootOperatorService({
         persistenceDriver: "sqlite",
+        savedViewIdGenerator: () => "saved_view_api",
         sqlitePath,
       }),
     });
@@ -646,5 +649,138 @@ describe("@runroot/api integration", () => {
         runId: queuedRun.id,
       },
     });
+  });
+
+  it("serves saved audit view save, list, load, and apply paths through the network API", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "runroot-api-saved-"));
+    const sqlitePath = join(workspaceRoot, "runroot.sqlite");
+    const inlineOperator = createRunrootOperatorService({
+      executionMode: "inline",
+      persistenceDriver: "sqlite",
+      savedViewIdGenerator: () => "saved_view_api",
+      sqlitePath,
+    });
+    const queuedOperator = createRunrootOperatorService({
+      executionMode: "queued",
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+    const workerService = (
+      await import("@runroot/sdk")
+    ).createRunrootWorkerService({
+      persistenceDriver: "sqlite",
+      sqlitePath,
+      workerId: "worker_saved_api",
+    });
+
+    await inlineOperator.startRun({
+      input: {
+        approvalRequired: false,
+        commandAlias: "print-ready",
+        runbookId: "node-health-check",
+      },
+      templateId: "shell-runbook-flow",
+    });
+    const queuedRun = await queuedOperator.startRun({
+      input: {
+        approvalRequired: false,
+        commandAlias: "print-ready",
+        runbookId: "node-health-check",
+      },
+      templateId: "shell-runbook-flow",
+    });
+
+    await workerService.processNextJob();
+
+    app = buildServer({
+      operator: createRunrootOperatorService({
+        persistenceDriver: "sqlite",
+        savedViewIdGenerator: () => "saved_view_api",
+        sqlitePath,
+      }),
+    });
+    const address = await app.listen({
+      host: "127.0.0.1",
+      port: 0,
+    });
+
+    const saveResponse = await fetch(`${address}/audit/saved-views`, {
+      body: JSON.stringify({
+        description: "Queued worker investigation",
+        name: "Queued worker follow-up",
+        navigation: {
+          drilldown: {
+            workerId: "worker_saved_api",
+          },
+          summary: {
+            executionMode: "queued",
+          },
+        },
+        refs: {
+          auditViewRunId: queuedRun.id,
+        },
+      }),
+      headers: {
+        "content-type": "application/json",
+      },
+      method: "POST",
+    });
+    const savedViewPayload = (await saveResponse.json()) as {
+      savedView: {
+        id: string;
+      };
+    };
+    const listResponse = await fetch(`${address}/audit/saved-views`);
+    const getResponse = await fetch(
+      `${address}/audit/saved-views/${savedViewPayload.savedView.id}`,
+    );
+    const applyResponse = await fetch(
+      `${address}/audit/saved-views/${savedViewPayload.savedView.id}/apply`,
+    );
+    const listPayload = (await listResponse.json()) as {
+      savedViews: {
+        items: Array<{
+          id: string;
+        }>;
+        totalCount: number;
+      };
+    };
+    const getPayload = (await getResponse.json()) as {
+      savedView: {
+        id: string;
+        refs: {
+          auditViewRunId?: string;
+        };
+      };
+    };
+    const applyPayload = (await applyResponse.json()) as {
+      application: {
+        navigation: {
+          drilldowns: Array<{
+            result: {
+              runId: string;
+            };
+          }>;
+          totalSummaryCount: number;
+        };
+        savedView: {
+          id: string;
+        };
+      };
+    };
+
+    expect(saveResponse.status).toBe(201);
+    expect(savedViewPayload.savedView.id).toBe("saved_view_api");
+    expect(listResponse.status).toBe(200);
+    expect(listPayload.savedViews.totalCount).toBe(1);
+    expect(listPayload.savedViews.items[0]?.id).toBe("saved_view_api");
+    expect(getResponse.status).toBe(200);
+    expect(getPayload.savedView.refs.auditViewRunId).toBe(queuedRun.id);
+    expect(applyResponse.status).toBe(200);
+    expect(applyPayload.application.savedView.id).toBe("saved_view_api");
+    expect(applyPayload.application.navigation.totalSummaryCount).toBe(1);
+    expect(
+      applyPayload.application.navigation.drilldowns[0]?.result.runId,
+    ).toBe(queuedRun.id);
   });
 });
