@@ -134,4 +134,4 @@ Status: completed
   and minimal presentation rather than a full observability backend,
   productized dashboard, or broad analytics product
 
-Status: proposed scope freeze on branch, pending review and merge
+Status: implemented on branch, pending phase review

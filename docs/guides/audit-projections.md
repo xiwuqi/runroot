@@ -2,6 +2,9 @@
 
 Phase 11 adds a minimal correlated audit view for one run at a time.
 
+Phase 12 builds on that baseline with a thin cross-run audit query path. The
+run-scoped audit view remains the per-run source for detailed operator reads.
+
 ## What The Audit View Correlates
 
 The shared audit projection joins additive facts that already exist in other
@@ -40,6 +43,13 @@ The minimum run-scoped audit view is available through the existing seams:
 - CLI: `runs audit <run-id>`
 - Web: run detail page shows a minimal audit section
 
+Cross-run audit queries are introduced separately in Phase 12:
+
+- SDK: `listAuditResults(filters?)`
+- API: `GET /audit/runs`
+- CLI: `audit list`
+- Web: the runs page shows a minimal cross-run audit query section
+
 ## Local Development
 
 Inline execution:
@@ -64,6 +74,6 @@ Still out of scope after Phase 11:
 
 - full observability backend integration
 - productized dashboards and broad analytics UX
-- cross-run audit exploration products
+- open-ended cross-run analytics or search products
 - default persistence of every provider-specific tool payload
 - hosted queue ops, autoscaling, and advanced scheduling

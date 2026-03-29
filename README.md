@@ -16,7 +16,8 @@ Runroot focuses on:
 
 ## Current Status
 
-Phase 11 is complete on this branch. The repository now includes:
+Phase 12 (Cross-Run Audit Queries and Filters) is complete on this branch. The
+repository now includes:
 
 - the Phase 2 runtime core for runs, steps, checkpoints, and retries
 - the Phase 3 tool layer and minimal MCP adapter
@@ -37,12 +38,17 @@ Phase 11 is complete on this branch. The repository now includes:
 - a correlated audit projection that joins replay, approval, dispatch, worker,
   and tool facts through the existing operator seams
 - a minimal operator-facing audit view in SDK, API, CLI, and web
+- shared cross-run audit queries and thin operator-facing filters in SDK, API,
+  CLI, and web
 
 Persisted tool history is additive audit data. It does not become part of the
 shared replay or approval source of truth.
 
 Correlated audit views are also additive. They do not redefine replay or
 approval correctness.
+
+Cross-run audit queries remain derived operator read models. They do not become
+replay, approval, or workflow-state source of truth.
 
 ## Planned Capabilities
 
@@ -110,6 +116,10 @@ Phase 11 adds an eighth rule: correlated audit views stay derived and
 operator-facing. They can join replay facts with additive dispatch, worker, and
 tool-history records, but they do not become a second workflow-state model.
 
+Phase 12 adds a ninth rule: cross-run audit queries stay thin and structured.
+They can filter or summarize derived audit facts across runs, but they do not
+expand into a dashboard, analytics suite, or backend observability platform.
+
 ## Example Use Cases
 
 - GitHub issue triage with optional human approval
@@ -131,6 +141,7 @@ tool-history records, but they do not become a second workflow-state model.
 - [Queued Execution](./docs/guides/queued-execution.md)
 - [Tool Telemetry](./docs/guides/tool-telemetry.md)
 - [Audit Projections](./docs/guides/audit-projections.md)
+- [Audit Queries](./docs/guides/audit-queries.md)
 - [Release Readiness](./docs/guides/release-readiness.md)
 - [Examples](./examples/README.md)
 - [Web Console](./docs/architecture/web-console.md)
