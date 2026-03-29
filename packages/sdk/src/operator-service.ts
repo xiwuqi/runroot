@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import type { ApprovalActor, ApprovalRequest } from "@runroot/approvals";
 import {
   type ExecutionMode,
@@ -17,6 +19,7 @@ import type { RunrootLogger, RunrootTracer } from "@runroot/observability";
 import {
   createConfiguredDispatchQueue,
   createConfiguredRuntimePersistence,
+  createConfiguredSavedAuditViewStore,
   createConfiguredToolHistoryStore,
   type RuntimePersistence,
 } from "@runroot/persistence";
@@ -27,9 +30,17 @@ import {
   type CrossRunAuditNavigationView,
   type CrossRunAuditQueryFilters,
   type CrossRunAuditResults,
+  type CrossRunAuditSavedView,
+  type CrossRunAuditSavedViewApplication,
+  type CrossRunAuditSavedViewCollection,
+  type CrossRunAuditSavedViewKind,
+  type CrossRunAuditSavedViewNavigationRefs,
+  type CrossRunAuditSavedViewStore,
   createCrossRunAuditDrilldownQuery,
   createCrossRunAuditNavigationQuery,
   createCrossRunAuditQuery,
+  createCrossRunAuditSavedView,
+  createCrossRunAuditSavedViewQuery,
   createRunAuditQuery,
   createRunTimelineQuery,
   type RunAuditView,
@@ -76,11 +87,21 @@ export interface PendingApprovalSummary {
   readonly run: WorkflowRun;
 }
 
+export interface SaveAuditSavedViewInput {
+  readonly description?: string;
+  readonly kind?: CrossRunAuditSavedViewKind;
+  readonly name: string;
+  readonly navigation?: Partial<CrossRunAuditNavigationFilters>;
+  readonly refs?: CrossRunAuditSavedViewNavigationRefs;
+}
+
 export interface RunrootOperatorService {
+  applySavedView(id: string): Promise<CrossRunAuditSavedViewApplication>;
   getAuditNavigation(
     filters?: Partial<CrossRunAuditNavigationFilters>,
   ): Promise<CrossRunAuditNavigationView>;
   getAuditView(runId: string): Promise<RunAuditView>;
+  getSavedView(id: string): Promise<CrossRunAuditSavedView>;
   decideApproval(
     approvalId: string,
     input: DecideApprovalInput,
@@ -98,9 +119,13 @@ export interface RunrootOperatorService {
   listAuditResults(
     filters?: CrossRunAuditQueryFilters,
   ): Promise<CrossRunAuditResults>;
+  listSavedViews(): Promise<CrossRunAuditSavedViewCollection>;
   listRuns(): Promise<readonly WorkflowRun[]>;
   listTemplates(): readonly WorkflowTemplateDescriptor[];
   resumeRun(runId: string): Promise<WorkflowRun>;
+  saveSavedView(
+    input: SaveAuditSavedViewInput,
+  ): Promise<CrossRunAuditSavedView>;
   startRun(input: StartTemplateRunInput): Promise<WorkflowRun>;
 }
 
@@ -115,6 +140,8 @@ export interface RunrootOperatorServiceOptions {
   readonly now?: () => string;
   readonly persistence?: RuntimePersistence;
   readonly persistenceDriver?: PersistenceDriver;
+  readonly savedViewIdGenerator?: () => string;
+  readonly savedViewStore?: CrossRunAuditSavedViewStore;
   readonly sqlitePath?: string;
   readonly templates?: TemplateCatalog;
   readonly toolHistory?: ToolHistoryStore;
@@ -126,6 +153,8 @@ export function createRunrootOperatorService(
   options: RunrootOperatorServiceOptions = {},
 ): RunrootOperatorService {
   const now = options.now ?? (() => new Date().toISOString());
+  const createSavedViewId =
+    options.savedViewIdGenerator ?? (() => `saved_view_${randomUUID()}`);
   const persistenceConfig = resolvePersistenceConfig({
     ...(options.databaseUrl ? { databaseUrl: options.databaseUrl } : {}),
     ...(options.env ? { env: options.env } : {}),
@@ -149,6 +178,19 @@ export function createRunrootOperatorService(
   const toolHistory =
     options.toolHistory ??
     createConfiguredToolHistoryStore({
+      ...(options.databaseUrl ? { databaseUrl: options.databaseUrl } : {}),
+      ...(options.env ? { env: options.env } : {}),
+      ...(options.persistenceDriver
+        ? { driver: options.persistenceDriver }
+        : {}),
+      ...(options.sqlitePath ? { sqlitePath: options.sqlitePath } : {}),
+      ...(options.workspacePath
+        ? { workspacePath: options.workspacePath }
+        : {}),
+    });
+  const savedViewStore =
+    options.savedViewStore ??
+    createConfiguredSavedAuditViewStore({
       ...(options.databaseUrl ? { databaseUrl: options.databaseUrl } : {}),
       ...(options.env ? { env: options.env } : {}),
       ...(options.persistenceDriver
@@ -240,9 +282,23 @@ export function createRunrootOperatorService(
     },
     listToolHistoryByRunId: (runId) => toolHistory.listByRunId(runId),
   });
+  const crossRunAuditSavedViews = createCrossRunAuditSavedViewQuery(
+    savedViewStore,
+    crossRunAuditNavigation,
+  );
   const persistenceLocation = persistenceConfig.location;
 
   return {
+    async applySavedView(id) {
+      const application = await crossRunAuditSavedViews.applySavedView(id);
+
+      if (!application) {
+        throw new OperatorNotFoundError("saved view", id);
+      }
+
+      return application;
+    },
+
     async decideApproval(approvalId, input) {
       const approval = await runtime.getApproval(approvalId);
 
@@ -281,6 +337,16 @@ export function createRunrootOperatorService(
       await requireRun(runtime, runId);
 
       return audit.getAuditView(runId);
+    },
+
+    async getSavedView(id) {
+      const savedView = await crossRunAuditSavedViews.getSavedView(id);
+
+      if (!savedView) {
+        throw new OperatorNotFoundError("saved view", id);
+      }
+
+      return savedView;
     },
 
     async getPendingApprovals() {
@@ -329,6 +395,10 @@ export function createRunrootOperatorService(
       return crossRunAudit.listAuditResults(filters);
     },
 
+    async listSavedViews() {
+      return crossRunAuditSavedViews.listSavedViews();
+    },
+
     async listRuns() {
       return runtime.listRuns();
     },
@@ -371,6 +441,31 @@ export function createRunrootOperatorService(
 
         return await runtime.resumeRun(template.definition, runId);
       } catch (error) {
+        throw normalizeOperatorError(error);
+      }
+    },
+
+    async saveSavedView(input) {
+      try {
+        return await crossRunAuditSavedViews.saveSavedView(
+          createCrossRunAuditSavedView({
+            ...(input.description ? { description: input.description } : {}),
+            id: createSavedViewId(),
+            ...(input.kind ? { kind: input.kind } : {}),
+            name: input.name,
+            ...(input.navigation ? { navigation: input.navigation } : {}),
+            ...(input.refs ? { refs: input.refs } : {}),
+            timestamp: now(),
+          }),
+        );
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          error.message.startsWith("Saved audit views require")
+        ) {
+          throw new OperatorInputError(error.message);
+        }
+
         throw normalizeOperatorError(error);
       }
     },

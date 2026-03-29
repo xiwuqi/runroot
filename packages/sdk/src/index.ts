@@ -14,6 +14,7 @@ export {
   type RunrootOperatorService,
   type RunrootOperatorServiceOptions,
   resolveWorkspacePath,
+  type SaveAuditSavedViewInput,
   type StartTemplateRunInput,
 } from "./operator-service";
 export {

@@ -25,7 +25,10 @@ export class OperatorInputError extends OperatorError {
 }
 
 export class OperatorNotFoundError extends OperatorError {
-  constructor(resource: "approval" | "run" | "template", identifier: string) {
+  constructor(
+    resource: "approval" | "run" | "saved view" | "template",
+    identifier: string,
+  ) {
     super(
       `${resource[0]?.toUpperCase() ?? resource}${resource.slice(1)} "${identifier}" was not found.`,
       "operator_not_found",

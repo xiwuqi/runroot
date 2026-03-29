@@ -123,12 +123,15 @@ export function createSqliteDispatchQueue(
   const filePath = resolve(options.filePath);
   const idGenerator = options.idGenerator ?? defaultIdGenerator;
   let accessQueue = Promise.resolve();
+  let schemaReadyPromise: Promise<void> | undefined;
 
   return createDatabaseDispatchQueue({
     ensureSchema() {
-      return migrateSqlitePersistence({
+      schemaReadyPromise ??= migrateSqlitePersistence({
         filePath,
       }).then(() => undefined);
+
+      return schemaReadyPromise;
     },
     idGenerator,
     withReadOnlyClient(task) {
@@ -715,7 +718,11 @@ function clone<TValue>(value: TValue): TValue {
 }
 
 function isExistingFileError(error: unknown): boolean {
-  return error instanceof Error && "code" in error && error.code === "EEXIST";
+  return (
+    error instanceof Error &&
+    "code" in error &&
+    (error.code === "EEXIST" || error.code === "EPERM")
+  );
 }
 
 function isMissingFileError(error: unknown): boolean {

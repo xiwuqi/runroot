@@ -218,6 +218,9 @@ importers:
       '@runroot/events':
         specifier: workspace:*
         version: link:../events
+      '@runroot/replay':
+        specifier: workspace:*
+        version: link:../replay
       '@runroot/tools':
         specifier: workspace:*
         version: link:../tools

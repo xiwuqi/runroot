@@ -5,7 +5,10 @@ import {
   type ResolvePersistenceConfigOptions,
   resolvePersistenceConfig,
 } from "@runroot/config";
-import type { ToolHistoryEntry, ToolHistoryStore } from "@runroot/tools";
+import type {
+  CrossRunAuditSavedView,
+  CrossRunAuditSavedViewStore,
+} from "@runroot/replay";
 import type { Pool, PoolClient } from "pg";
 import type {
   BindParams,
@@ -35,26 +38,26 @@ interface SqlClient {
 
 type PostgresPoolLike = Pick<Pool, "connect">;
 
-export interface InMemoryToolHistoryStoreOptions {
-  readonly entries?: readonly ToolHistoryEntry[];
+export interface InMemorySavedAuditViewStoreOptions {
+  readonly savedViews?: readonly CrossRunAuditSavedView[];
 }
 
-export interface FileToolHistoryStoreOptions {
+export interface FileSavedAuditViewStoreOptions {
   readonly filePath: string;
   readonly lockRetryDelayMs?: number;
   readonly lockTimeoutMs?: number;
 }
 
-export interface PostgresToolHistoryStoreOptions
+export interface PostgresSavedAuditViewStoreOptions
   extends Pick<PostgresRuntimePersistenceOptions, "databaseUrl" | "pool"> {}
 
-export interface SqliteToolHistoryStoreOptions
+export interface SqliteSavedAuditViewStoreOptions
   extends Pick<
     SqliteRuntimePersistenceOptions,
     "filePath" | "lockRetryDelayMs" | "lockTimeoutMs"
   > {}
 
-export interface ConfiguredToolHistoryStoreOptions
+export interface ConfiguredSavedAuditViewStoreOptions
   extends ResolvePersistenceConfigOptions {
   readonly filePath?: string;
   readonly lockRetryDelayMs?: number;
@@ -62,23 +65,23 @@ export interface ConfiguredToolHistoryStoreOptions
   readonly pool?: PostgresPoolLike;
 }
 
-interface ToolHistorySnapshot {
-  readonly entries: readonly ToolHistoryEntry[];
+interface SavedAuditViewSnapshot {
+  readonly savedViews: readonly CrossRunAuditSavedView[];
 }
 
 let sqliteModulePromise: Promise<SqlJsStatic> | undefined;
 
-export function createConfiguredToolHistoryStore(
-  options: ConfiguredToolHistoryStoreOptions = {},
-): ToolHistoryStore {
+export function createConfiguredSavedAuditViewStore(
+  options: ConfiguredSavedAuditViewStoreOptions = {},
+): CrossRunAuditSavedViewStore {
   const resolved = resolvePersistenceConfig(options);
 
   switch (resolved.driver) {
     case "file":
-      return createFileToolHistoryStore({
+      return createFileSavedAuditViewStore({
         filePath:
           options.filePath ??
-          resolveToolHistoryFilePath(
+          resolveSavedAuditViewsFilePath(
             resolved.workspacePath ?? resolved.location,
           ),
         ...(options.lockRetryDelayMs !== undefined
@@ -89,12 +92,12 @@ export function createConfiguredToolHistoryStore(
           : {}),
       });
     case "postgres":
-      return createPostgresToolHistoryStore({
+      return createPostgresSavedAuditViewStore({
         ...(resolved.databaseUrl ? { databaseUrl: resolved.databaseUrl } : {}),
         ...(options.pool ? { pool: options.pool } : {}),
       });
     case "sqlite":
-      return createSqliteToolHistoryStore({
+      return createSqliteSavedAuditViewStore({
         filePath: resolved.sqlitePath ?? resolved.location,
         ...(options.lockRetryDelayMs !== undefined
           ? { lockRetryDelayMs: options.lockRetryDelayMs }
@@ -106,69 +109,89 @@ export function createConfiguredToolHistoryStore(
   }
 }
 
-export function createInMemoryToolHistoryStore(
-  options: InMemoryToolHistoryStoreOptions = {},
-): ToolHistoryStore {
-  const entries = [...(options.entries ?? [])].map((entry) => clone(entry));
+export function createInMemorySavedAuditViewStore(
+  options: InMemorySavedAuditViewStoreOptions = {},
+): CrossRunAuditSavedViewStore {
+  const savedViews = [...(options.savedViews ?? [])].map((savedView) =>
+    clone(savedView),
+  );
 
   return {
-    async listByRunId(runId) {
-      return entries
-        .filter((entry) => entry.runId === runId)
-        .sort(compareToolHistoryEntries)
-        .map((entry) => clone(entry));
+    async getSavedView(id) {
+      const savedView = savedViews.find((candidate) => candidate.id === id);
+
+      return savedView ? clone(savedView) : undefined;
     },
 
-    async save(entry) {
-      const existingIndex = entries.findIndex(
-        (candidate) => candidate.callId === entry.callId,
+    async listSavedViews() {
+      return savedViews
+        .slice()
+        .sort(compareSavedViews)
+        .map((savedView) => clone(savedView));
+    },
+
+    async saveSavedView(savedView) {
+      const existingIndex = savedViews.findIndex(
+        (candidate) => candidate.id === savedView.id,
       );
 
       if (existingIndex >= 0) {
-        entries.splice(existingIndex, 1);
+        savedViews.splice(existingIndex, 1);
       }
 
-      entries.push(clone(entry));
-      entries.sort(compareToolHistoryEntries);
+      savedViews.push(clone(savedView));
+      savedViews.sort(compareSavedViews);
 
-      return clone(entry);
+      return clone(savedView);
     },
   };
 }
 
-export function createFileToolHistoryStore(
-  options: FileToolHistoryStoreOptions,
-): ToolHistoryStore {
+export function createFileSavedAuditViewStore(
+  options: FileSavedAuditViewStoreOptions,
+): CrossRunAuditSavedViewStore {
   const filePath = resolve(options.filePath);
   let accessQueue = Promise.resolve();
 
   return {
-    async listByRunId(runId) {
+    async getSavedView(id) {
+      return enqueueAccess(async () =>
+        withReadOnlySnapshot(filePath, (snapshot) => {
+          const savedView = snapshot.savedViews.find(
+            (candidate) => candidate.id === id,
+          );
+
+          return savedView ? clone(savedView) : undefined;
+        }),
+      );
+    },
+
+    async listSavedViews() {
       return enqueueAccess(async () =>
         withReadOnlySnapshot(filePath, (snapshot) =>
-          snapshot.entries
-            .filter((entry) => entry.runId === runId)
-            .sort(compareToolHistoryEntries)
-            .map((entry) => clone(entry)),
+          snapshot.savedViews
+            .slice()
+            .sort(compareSavedViews)
+            .map((savedView) => clone(savedView)),
         ),
       );
     },
 
-    async save(entry) {
+    async saveSavedView(savedView) {
       return enqueueAccess(async () =>
         withMutableSnapshot(filePath, options, async (snapshot) => {
-          const nextEntries = [
-            ...snapshot.entries.filter(
-              (candidate) => candidate.callId !== entry.callId,
+          const nextSavedViews = [
+            ...snapshot.savedViews.filter(
+              (candidate) => candidate.id !== savedView.id,
             ),
-            clone(entry),
-          ].sort(compareToolHistoryEntries);
+            clone(savedView),
+          ].sort(compareSavedViews);
 
-          await writeToolHistorySnapshot(filePath, {
-            entries: nextEntries,
+          await writeSavedAuditViewSnapshot(filePath, {
+            savedViews: nextSavedViews,
           });
 
-          return clone(entry);
+          return clone(savedView);
         }),
       );
     },
@@ -187,13 +210,13 @@ export function createFileToolHistoryStore(
   }
 }
 
-export function createPostgresToolHistoryStore(
-  options: PostgresToolHistoryStoreOptions = {},
-): ToolHistoryStore {
+export function createPostgresSavedAuditViewStore(
+  options: PostgresSavedAuditViewStoreOptions = {},
+): CrossRunAuditSavedViewStore {
   const pool = options.pool ?? createDefaultPool(options.databaseUrl);
   let schemaReadyPromise: Promise<void> | undefined;
 
-  return createDatabaseToolHistoryStore({
+  return createDatabaseSavedAuditViewStore({
     ensureSchema() {
       schemaReadyPromise ??= migratePostgresPersistence({
         ...(options.databaseUrl ? { databaseUrl: options.databaseUrl } : {}),
@@ -211,14 +234,14 @@ export function createPostgresToolHistoryStore(
   });
 }
 
-export function createSqliteToolHistoryStore(
-  options: SqliteToolHistoryStoreOptions,
-): ToolHistoryStore {
+export function createSqliteSavedAuditViewStore(
+  options: SqliteSavedAuditViewStoreOptions,
+): CrossRunAuditSavedViewStore {
   const filePath = resolve(options.filePath);
   let accessQueue = Promise.resolve();
   let schemaReadyPromise: Promise<void> | undefined;
 
-  return createDatabaseToolHistoryStore({
+  return createDatabaseSavedAuditViewStore({
     ensureSchema() {
       schemaReadyPromise ??= migrateSqlitePersistence({
         filePath,
@@ -265,7 +288,7 @@ export function createSqliteToolHistoryStore(
   }
 }
 
-function createDatabaseToolHistoryStore(options: {
+function createDatabaseSavedAuditViewStore(options: {
   readonly ensureSchema: () => Promise<void>;
   readonly withReadOnlyClient: <TValue>(
     task: (client: SqlClient) => Promise<TValue>,
@@ -273,98 +296,88 @@ function createDatabaseToolHistoryStore(options: {
   readonly withTransaction: <TValue>(
     task: (client: SqlClient) => Promise<TValue>,
   ) => Promise<TValue>;
-}): ToolHistoryStore {
+}): CrossRunAuditSavedViewStore {
   return {
-    async listByRunId(runId) {
+    async getSavedView(id) {
       await options.ensureSchema();
 
       return options.withReadOnlyClient(async (client) => {
         const rows = await client.queryRows<{ data: string }>(
           `SELECT data
-           FROM runroot_tool_history
-           WHERE run_id = ?
-           ORDER BY started_at ASC, call_id ASC`,
-          [runId],
+           FROM runroot_saved_audit_views
+           WHERE id = ?`,
+          [id],
         );
 
-        return rows.map((row) => deserializeRow<ToolHistoryEntry>(row.data));
+        return rows[0]
+          ? deserializeRow<CrossRunAuditSavedView>(rows[0].data)
+          : undefined;
       });
     },
 
-    async save(entry) {
+    async listSavedViews() {
+      await options.ensureSchema();
+
+      return options.withReadOnlyClient(async (client) => {
+        const rows = await client.queryRows<{ data: string }>(
+          `SELECT data
+           FROM runroot_saved_audit_views
+           ORDER BY updated_at DESC, created_at DESC, id ASC`,
+        );
+
+        return rows.map((row) =>
+          deserializeRow<CrossRunAuditSavedView>(row.data),
+        );
+      });
+    },
+
+    async saveSavedView(savedView) {
       await options.ensureSchema();
 
       return options.withTransaction(async (client) => {
         await client.execute(
-          `INSERT INTO runroot_tool_history (
-             call_id,
-             run_id,
-             step_id,
-             dispatch_job_id,
-             worker_id,
-             execution_mode,
-             tool_id,
-             tool_name,
-             tool_source,
-             invocation_source,
-             attempt,
-             outcome,
-             started_at,
-             finished_at,
+          `INSERT INTO runroot_saved_audit_views (
+             id,
+             kind,
+             name,
+             created_at,
+             updated_at,
              data
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-           ON CONFLICT (call_id) DO UPDATE SET
-             run_id = excluded.run_id,
-             step_id = excluded.step_id,
-             dispatch_job_id = excluded.dispatch_job_id,
-             worker_id = excluded.worker_id,
-             execution_mode = excluded.execution_mode,
-             tool_id = excluded.tool_id,
-             tool_name = excluded.tool_name,
-             tool_source = excluded.tool_source,
-             invocation_source = excluded.invocation_source,
-             attempt = excluded.attempt,
-             outcome = excluded.outcome,
-             started_at = excluded.started_at,
-             finished_at = excluded.finished_at,
+           ) VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT (id) DO UPDATE SET
+             kind = excluded.kind,
+             name = excluded.name,
+             created_at = excluded.created_at,
+             updated_at = excluded.updated_at,
              data = excluded.data`,
           [
-            entry.callId,
-            entry.runId ?? null,
-            entry.stepId ?? null,
-            entry.dispatchJobId ?? null,
-            entry.workerId ?? null,
-            entry.executionMode ?? null,
-            entry.toolId,
-            entry.toolName,
-            entry.toolSource,
-            entry.source,
-            entry.attempt ?? null,
-            entry.outcome,
-            entry.startedAt,
-            entry.finishedAt,
-            serializeRow(entry),
+            savedView.id,
+            savedView.kind,
+            savedView.name,
+            savedView.createdAt,
+            savedView.updatedAt,
+            serializeRow(savedView),
           ],
         );
 
-        return clone(entry);
+        return clone(savedView);
       });
     },
   };
 }
 
-export function resolveToolHistoryFilePath(workspacePath: string): string {
+export function resolveSavedAuditViewsFilePath(workspacePath: string): string {
   const resolvedPath = resolve(workspacePath);
   const parsedPath = parse(resolvedPath);
 
-  return join(parsedPath.dir, `${parsedPath.name}.tool-history.json`);
+  return join(parsedPath.dir, `${parsedPath.name}.saved-audit-views.json`);
 }
 
 async function withReadOnlySnapshot<TValue>(
   filePath: string,
-  action: (snapshot: ToolHistorySnapshot) => TValue | Promise<TValue>,
+  action: (snapshot: SavedAuditViewSnapshot) => TValue | Promise<TValue>,
 ): Promise<TValue> {
-  const snapshot = await readToolHistorySnapshot(filePath);
+  const snapshot = await readSavedAuditViewSnapshot(filePath);
 
   return action(snapshot);
 }
@@ -372,32 +385,34 @@ async function withReadOnlySnapshot<TValue>(
 async function withMutableSnapshot<TValue>(
   filePath: string,
   options: Pick<
-    FileToolHistoryStoreOptions,
+    FileSavedAuditViewStoreOptions,
     "lockRetryDelayMs" | "lockTimeoutMs"
   >,
-  action: (snapshot: ToolHistorySnapshot) => Promise<TValue>,
+  action: (snapshot: SavedAuditViewSnapshot) => Promise<TValue>,
 ): Promise<TValue> {
   await ensureParentDirectory(filePath);
 
   return withFileLock(filePath, options, async () =>
-    action(await readToolHistorySnapshot(filePath)),
+    action(await readSavedAuditViewSnapshot(filePath)),
   );
 }
 
-async function readToolHistorySnapshot(
+async function readSavedAuditViewSnapshot(
   filePath: string,
-): Promise<ToolHistorySnapshot> {
+): Promise<SavedAuditViewSnapshot> {
   try {
     const rawSnapshot = await readFile(filePath, "utf8");
-    const parsedSnapshot = JSON.parse(rawSnapshot) as ToolHistorySnapshot;
+    const parsedSnapshot = JSON.parse(rawSnapshot) as SavedAuditViewSnapshot;
 
     return {
-      entries: [...(parsedSnapshot.entries ?? [])].map((entry) => clone(entry)),
+      savedViews: [...(parsedSnapshot.savedViews ?? [])].map((savedView) =>
+        clone(savedView),
+      ),
     };
   } catch (error) {
     if (isMissingFileError(error)) {
       return {
-        entries: [],
+        savedViews: [],
       };
     }
 
@@ -405,9 +420,9 @@ async function readToolHistorySnapshot(
   }
 }
 
-async function writeToolHistorySnapshot(
+async function writeSavedAuditViewSnapshot(
   filePath: string,
-  snapshot: ToolHistorySnapshot,
+  snapshot: SavedAuditViewSnapshot,
 ): Promise<void> {
   const tempPath = `${filePath}.tmp`;
   const backupPath = `${filePath}.bak`;
@@ -614,7 +629,7 @@ class SqliteSqlClient implements SqlClient {
 function createDefaultPool(databaseUrl?: string): PostgresPoolLike {
   if (!databaseUrl) {
     throw new Error(
-      'Postgres tool history requires DATABASE_URL or an explicit "databaseUrl" option.',
+      'Postgres saved audit views require DATABASE_URL or an explicit "databaseUrl" option.',
     );
   }
 
@@ -691,7 +706,7 @@ async function writeBinaryFileAtomically(
 async function withFileLock<TValue>(
   filePath: string,
   options: Pick<
-    FileToolHistoryStoreOptions | SqliteToolHistoryStoreOptions,
+    FileSavedAuditViewStoreOptions | SqliteSavedAuditViewStoreOptions,
     "lockRetryDelayMs" | "lockTimeoutMs"
   >,
   action: () => Promise<TValue>,
@@ -720,7 +735,7 @@ async function withFileLock<TValue>(
 
       if (Date.now() - startedAt >= timeoutMs) {
         throw new Error(
-          `Timed out waiting for tool history lock at "${lockPath}".`,
+          `Timed out waiting for saved audit views lock at "${lockPath}".`,
         );
       }
 
@@ -735,13 +750,14 @@ function delay(durationMs: number): Promise<void> {
   });
 }
 
-function compareToolHistoryEntries(
-  left: ToolHistoryEntry,
-  right: ToolHistoryEntry,
+function compareSavedViews(
+  left: CrossRunAuditSavedView,
+  right: CrossRunAuditSavedView,
 ): number {
   return (
-    left.startedAt.localeCompare(right.startedAt) ||
-    left.callId.localeCompare(right.callId)
+    right.updatedAt.localeCompare(left.updatedAt) ||
+    right.createdAt.localeCompare(left.createdAt) ||
+    left.id.localeCompare(right.id)
   );
 }
 
@@ -758,11 +774,7 @@ function clone<TValue>(value: TValue): TValue {
 }
 
 function isExistingFileError(error: unknown): boolean {
-  return (
-    error instanceof Error &&
-    "code" in error &&
-    (error.code === "EEXIST" || error.code === "EPERM")
-  );
+  return error instanceof Error && "code" in error && error.code === "EEXIST";
 }
 
 function isMissingFileError(error: unknown): boolean {

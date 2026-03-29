@@ -23,6 +23,7 @@
     "@runroot/dispatch": "workspace:*",
     "@runroot/domain": "workspace:*",
     "@runroot/events": "workspace:*",
+    "@runroot/replay": "workspace:*",
     "@runroot/tools": "workspace:*",
     "pg": "^8.20.0",
     "sql.js": "^1.14.1"

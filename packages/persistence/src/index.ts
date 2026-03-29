@@ -38,6 +38,19 @@ export {
   type RuntimeTransitionCommitResult,
 } from "./runtime-store";
 export {
+  type ConfiguredSavedAuditViewStoreOptions,
+  createConfiguredSavedAuditViewStore,
+  createFileSavedAuditViewStore,
+  createInMemorySavedAuditViewStore,
+  createPostgresSavedAuditViewStore,
+  createSqliteSavedAuditViewStore,
+  type FileSavedAuditViewStoreOptions,
+  type InMemorySavedAuditViewStoreOptions,
+  type PostgresSavedAuditViewStoreOptions,
+  resolveSavedAuditViewsFilePath,
+  type SqliteSavedAuditViewStoreOptions,
+} from "./saved-view-store";
+export {
   type ConfiguredToolHistoryStoreOptions,
   createConfiguredToolHistoryStore,
   createFileToolHistoryStore,
@@ -56,12 +69,13 @@ export const persistencePackageBoundary = {
   kind: "package",
   phaseOwned: 2,
   responsibility:
-    "Repository contracts, checkpoint storage, database adapters, dispatch queue persistence seams, and tool-history storage adapters.",
+    "Repository contracts, checkpoint storage, database adapters, dispatch queue persistence seams, tool-history storage adapters, and additive saved-audit-view adapters.",
   publicSurface: [
     "repository interfaces",
     "storage adapters",
     "checkpoint persistence",
     "dispatch queue adapters",
     "tool history adapters",
+    "saved audit view adapters",
   ],
 } as const satisfies PackageBoundary;
