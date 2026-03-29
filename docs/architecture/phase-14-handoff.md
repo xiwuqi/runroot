@@ -1,6 +1,6 @@
 # Phase 14: Cross-Run Audit Navigation and Linked Operator Views
 
-Status: repository-owned scope freeze; implementation not started
+Status: implemented on branch, pending phase review
 
 This document proposes the repository-owned Phase 14 execution contract for
 Runroot. It defines the minimum implementation boundary for thin,

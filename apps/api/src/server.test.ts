@@ -25,7 +25,7 @@ describe("@runroot/api", () => {
     expect(response.json()).toEqual({
       status: "ok",
       project: "Runroot",
-      phase: 13,
+      phase: 14,
     });
   });
 
@@ -255,6 +255,98 @@ describe("@runroot/api", () => {
     expect(drilldownPayload.audit.results[0]).toMatchObject({
       matchedEntryCount: expect.any(Number),
       runId: createdPayload.run.id,
+    });
+  });
+
+  it("exposes linked audit navigation through the operator API", async () => {
+    const workspaceRoot = await mkdtemp(
+      join(tmpdir(), "runroot-api-navigation-"),
+    );
+    app = buildServer({
+      operator: createRunrootOperatorService({
+        workspacePath: join(workspaceRoot, "workspace.json"),
+      }),
+    });
+
+    const createResponse = await app.inject({
+      method: "POST",
+      payload: {
+        input: {
+          approvalRequired: false,
+          commandAlias: "print-ready",
+          runbookId: "node-health-check",
+        },
+        templateId: "shell-runbook-flow",
+      },
+      url: "/runs",
+    });
+    const createdPayload = createResponse.json() as {
+      run: {
+        id: string;
+      };
+    };
+    const navigationResponse = await app.inject({
+      method: "GET",
+      url: `/audit/navigation?runId=${createdPayload.run.id}`,
+    });
+    const navigationPayload = navigationResponse.json() as {
+      audit: {
+        drilldowns: Array<{
+          links: {
+            auditView: {
+              kind: string;
+              runId: string;
+            };
+          };
+          result: {
+            runId: string;
+          };
+        }>;
+        isConstrained: boolean;
+        summaries: Array<{
+          links: {
+            auditView: {
+              kind: string;
+              runId: string;
+            };
+            drilldowns: Array<{
+              filters: {
+                runId?: string;
+              };
+            }>;
+          };
+          result: {
+            runId: string;
+          };
+        }>;
+        totalSummaryCount: number;
+      };
+    };
+
+    expect(navigationResponse.statusCode).toBe(200);
+    expect(navigationPayload.audit.isConstrained).toBe(true);
+    expect(navigationPayload.audit.totalSummaryCount).toBe(1);
+    expect(navigationPayload.audit.summaries[0]?.links.auditView).toMatchObject(
+      {
+        kind: "run-audit-view",
+        runId: createdPayload.run.id,
+      },
+    );
+    expect(
+      navigationPayload.audit.summaries[0]?.links.drilldowns.some(
+        (link) => link.filters.runId === createdPayload.run.id,
+      ),
+    ).toBe(true);
+    expect(navigationPayload.audit.drilldowns[0]).toMatchObject({
+      links: {
+        auditView: {
+          kind: "run-audit-view",
+          runId: createdPayload.run.id,
+        },
+      },
+      result: {
+        runId: createdPayload.run.id,
+      },
     });
   });
 });

@@ -23,9 +23,12 @@ import {
 import {
   type CrossRunAuditDrilldownFilters,
   type CrossRunAuditDrilldownResults,
+  type CrossRunAuditNavigationFilters,
+  type CrossRunAuditNavigationView,
   type CrossRunAuditQueryFilters,
   type CrossRunAuditResults,
   createCrossRunAuditDrilldownQuery,
+  createCrossRunAuditNavigationQuery,
   createCrossRunAuditQuery,
   createRunAuditQuery,
   createRunTimelineQuery,
@@ -74,6 +77,9 @@ export interface PendingApprovalSummary {
 }
 
 export interface RunrootOperatorService {
+  getAuditNavigation(
+    filters?: Partial<CrossRunAuditNavigationFilters>,
+  ): Promise<CrossRunAuditNavigationView>;
   getAuditView(runId: string): Promise<RunAuditView>;
   decideApproval(
     approvalId: string,
@@ -224,6 +230,16 @@ export function createRunrootOperatorService(
     },
     listToolHistoryByRunId: (runId) => toolHistory.listByRunId(runId),
   });
+  const crossRunAuditNavigation = createCrossRunAuditNavigationQuery({
+    listByRunId: (runId) => runtime.getRunEvents(runId),
+    async listDispatchJobsByRunId(runId) {
+      return dispatchReader ? dispatchReader.listByRunId(runId) : [];
+    },
+    async listRuns() {
+      return runtime.listRuns();
+    },
+    listToolHistoryByRunId: (runId) => toolHistory.listByRunId(runId),
+  });
   const persistenceLocation = persistenceConfig.location;
 
   return {
@@ -255,6 +271,10 @@ export function createRunrootOperatorService(
       await requireRun(runtime, runId);
 
       return runtime.getApprovals(runId);
+    },
+
+    async getAuditNavigation(filters) {
+      return crossRunAuditNavigation.getAuditNavigation(filters);
     },
 
     async getAuditView(runId) {

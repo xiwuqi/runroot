@@ -32,10 +32,22 @@ export {
   projectCrossRunAuditDrilldownResult,
 } from "./drilldown";
 export {
+  type CrossRunAuditDrilldownLink,
+  type CrossRunAuditNavigationDrilldown,
+  type CrossRunAuditNavigationFilters,
+  type CrossRunAuditNavigationLink,
+  type CrossRunAuditNavigationSummary,
+  type CrossRunAuditNavigationView,
+  projectCrossRunAuditNavigationView,
+  type RunAuditViewLink,
+} from "./navigation";
+export {
   type CrossRunAuditDrilldownQuery,
+  type CrossRunAuditNavigationQuery,
   type CrossRunAuditQuery,
   type CrossRunAuditReader,
   createCrossRunAuditDrilldownQuery,
+  createCrossRunAuditNavigationQuery,
   createCrossRunAuditQuery,
   createRunAuditQuery,
   createRunTimelineQuery,
