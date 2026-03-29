@@ -11,6 +11,20 @@ export {
   type RunAuditView,
 } from "./audit";
 export {
+  type CrossRunAuditApprovalSummary,
+  type CrossRunAuditDispatchSummary,
+  type CrossRunAuditQueryFilters,
+  type CrossRunAuditResult,
+  type CrossRunAuditResults,
+  type CrossRunAuditToolSummary,
+  compareCrossRunAuditResults,
+  matchesCrossRunAuditFilters,
+  projectCrossRunAuditResult,
+} from "./cross-run";
+export {
+  type CrossRunAuditQuery,
+  type CrossRunAuditReader,
+  createCrossRunAuditQuery,
   createRunAuditQuery,
   createRunTimelineQuery,
   type RunAuditQuery,
