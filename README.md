@@ -16,7 +16,7 @@ Runroot focuses on:
 
 ## Current Status
 
-Phase 13 (Cross-Run Audit Drilldowns and Identifier Queries) is complete on
+Phase 14 (Cross-Run Audit Navigation and Linked Operator Views) is complete on
 this branch. The
 repository now includes:
 
@@ -43,6 +43,8 @@ repository now includes:
   CLI, and web
 - shared cross-run audit drilldowns and identifier-constrained operator reads
   in SDK, API, CLI, and web
+- shared audit navigation that links cross-run summaries, constrained
+  drilldowns, and existing run-scoped audit views through the same seams
 
 Persisted tool history is additive audit data. It does not become part of the
 shared replay or approval source of truth.
@@ -55,6 +57,10 @@ replay, approval, or workflow-state source of truth.
 
 Identifier-driven audit drilldowns remain derived operator read models as well.
 They do not become replay, approval, or workflow-state source of truth.
+
+Audit navigation remains a derived operator read model too. It links existing
+summary, drilldown, and run-audit reads without becoming a second source of
+truth for replay or approvals.
 
 ## Planned Capabilities
 
@@ -130,6 +136,11 @@ Phase 13 adds a tenth rule: identifier-driven drilldowns stay constrained and
 operator-facing. They can narrow derived audit facts by stable identifiers, but
 they do not expand into a dashboard, search product, or analytics platform.
 
+Phase 14 adds an eleventh rule: linked audit navigation stays thin and
+operator-facing. It can connect summaries, drilldowns, and run-scoped audit
+views, but it does not expand into a dashboard, search product, or analytics
+platform.
+
 ## Example Use Cases
 
 - GitHub issue triage with optional human approval
@@ -153,6 +164,7 @@ they do not expand into a dashboard, search product, or analytics platform.
 - [Audit Projections](./docs/guides/audit-projections.md)
 - [Audit Queries](./docs/guides/audit-queries.md)
 - [Audit Drilldowns](./docs/guides/audit-drilldowns.md)
+- [Audit Navigation](./docs/guides/audit-navigation.md)
 - [Release Readiness](./docs/guides/release-readiness.md)
 - [Examples](./examples/README.md)
 - [Web Console](./docs/architecture/web-console.md)

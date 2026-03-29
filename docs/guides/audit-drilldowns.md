@@ -2,7 +2,8 @@
 
 Phase 13 adds a thin, shared cross-run audit drilldown path over the derived
 audit facts already exposed by replay, dispatch, worker, and tool-history
-seams.
+seams. Phase 14 then links those drilldowns to cross-run summaries and the
+existing run-scoped audit view through a shared navigation contract.
 
 ## What The Drilldown Returns
 
@@ -38,8 +39,8 @@ The minimum cross-run drilldown path is available through the existing seams:
 - SDK: `listAuditDrilldowns(filters?)`
 - API: `GET /audit/drilldowns`
 - CLI: `audit drilldown`
-- Web: the runs page shows a minimal drilldown section beside the existing
-  cross-run audit query section
+- Web: the runs page shows constrained drilldowns inside the shared audit
+  navigation section
 
 ## What Stays Unchanged
 
@@ -78,3 +79,7 @@ Still out of scope after Phase 13:
 - open-ended search products
 - default persistence of every provider-specific payload
 - hosted queue ops, autoscaling, and advanced scheduling
+
+Phase 14 builds on this baseline with linked navigation between summaries,
+drilldowns, and run-scoped audit views, but it still avoids a dashboard or
+open-ended analytics surface.
