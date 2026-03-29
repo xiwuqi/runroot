@@ -117,4 +117,21 @@ Status: completed
   presentation rather than a full observability backend or productized
   dashboard
 
-Status: completed on branch, pending review and merge
+Status: completed
+
+## Phase 12: Cross-Run Audit Queries and Filters
+
+- add a shared cross-run audit query or filter contract over the derived audit
+  facts already established in replay, dispatch, worker, and tool-history
+  seams
+- expose minimal cross-run audit list and filter paths through the existing
+  operator seams in SDK, API, CLI, and web
+- keep operator surfaces thin while making inline and queued execution
+  queryable through the same cross-run identifiers
+- execute against the formal handoff in
+  [docs/architecture/phase-12-handoff.md](./architecture/phase-12-handoff.md)
+- keep the phase focused on cross-run audit queries, thin operator filters,
+  and minimal presentation rather than a full observability backend,
+  productized dashboard, or broad analytics product
+
+Status: proposed scope freeze on branch, pending review and merge
