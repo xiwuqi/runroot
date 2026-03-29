@@ -1,6 +1,6 @@
 # Phase 15: Cross-Run Audit Saved Views and Operator Presets
 
-Status: scope freeze proposed on branch
+Status: implemented on branch, pending phase review
 
 This document proposes the repository-owned Phase 15 execution contract for
 Runroot. It defines the minimum implementation boundary for saved audit views
