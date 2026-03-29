@@ -320,4 +320,104 @@ describe("@runroot/api integration", () => {
       timelinePayload.timeline.entries.map((entry) => entry.kind),
     ).toContain("run-succeeded");
   });
+
+  it("serves cross-run audit results for inline and queued runs through the network API", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "runroot-api-audit-"));
+    const sqlitePath = join(workspaceRoot, "runroot.sqlite");
+    const inlineOperator = createRunrootOperatorService({
+      executionMode: "inline",
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+    const queuedOperator = createRunrootOperatorService({
+      executionMode: "queued",
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+    const workerService = (
+      await import("@runroot/sdk")
+    ).createRunrootWorkerService({
+      persistenceDriver: "sqlite",
+      sqlitePath,
+      workerId: "worker_audit_api",
+    });
+
+    await inlineOperator.startRun({
+      input: {
+        approvalRequired: false,
+        commandAlias: "print-ready",
+        runbookId: "node-health-check",
+      },
+      templateId: "shell-runbook-flow",
+    });
+    const queuedRun = await queuedOperator.startRun({
+      input: {
+        approvalRequired: false,
+        commandAlias: "print-ready",
+        runbookId: "node-health-check",
+      },
+      templateId: "shell-runbook-flow",
+    });
+
+    await workerService.processNextJob();
+
+    app = buildServer({
+      operator: createRunrootOperatorService({
+        persistenceDriver: "sqlite",
+        sqlitePath,
+      }),
+    });
+    const address = await app.listen({
+      host: "127.0.0.1",
+      port: 0,
+    });
+
+    const allResultsResponse = await fetch(`${address}/audit/runs`);
+    const queuedResultsResponse = await fetch(
+      `${address}/audit/runs?executionMode=queued`,
+    );
+    const allResultsPayload = (await allResultsResponse.json()) as {
+      audit: {
+        results: Array<{
+          dispatchJobs: Array<{
+            status: string;
+            workerId?: string;
+          }>;
+          executionModes: string[];
+          runId: string;
+        }>;
+        totalCount: number;
+      };
+    };
+    const queuedResultsPayload = (await queuedResultsResponse.json()) as {
+      audit: {
+        results: Array<{
+          runId: string;
+        }>;
+      };
+    };
+
+    expect(allResultsResponse.status).toBe(200);
+    expect(allResultsPayload.audit.totalCount).toBe(2);
+    expect(
+      allResultsPayload.audit.results.some((result) =>
+        result.executionModes.includes("inline"),
+      ),
+    ).toBe(true);
+    expect(
+      allResultsPayload.audit.results.some(
+        (result) =>
+          result.runId === queuedRun.id &&
+          result.executionModes.includes("queued") &&
+          result.dispatchJobs.some(
+            (dispatchJob) =>
+              dispatchJob.status === "completed" &&
+              dispatchJob.workerId === "worker_audit_api",
+          ),
+      ),
+    ).toBe(true);
+    expect(
+      queuedResultsPayload.audit.results.map((result) => result.runId),
+    ).toEqual([queuedRun.id]);
+  });
 });

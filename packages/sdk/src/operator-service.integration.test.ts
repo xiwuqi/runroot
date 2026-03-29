@@ -11,6 +11,7 @@ import { newDb } from "pg-mem";
 import { describe, expect, it } from "vitest";
 
 import { createRunrootOperatorService } from "./operator-service";
+import { createRunrootWorkerService } from "./worker-service";
 
 function createClock() {
   let tick = 0;
@@ -240,5 +241,91 @@ describe("@runroot/sdk operator service integration", () => {
     } finally {
       await pool.end();
     }
+  });
+
+  it("lists cross-run audit results for inline and queued runs through the operator seam", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "runroot-sdk-audit-"));
+    const sqlitePath = join(workspaceRoot, "runroot.sqlite");
+    const now = createClock();
+    const idGenerator = createIdGenerator();
+    const inlineService = createRunrootOperatorService({
+      executionMode: "inline",
+      idGenerator,
+      now,
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+    const queuedService = createRunrootOperatorService({
+      executionMode: "queued",
+      idGenerator,
+      now,
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+    const worker = createRunrootWorkerService({
+      idGenerator,
+      now,
+      persistenceDriver: "sqlite",
+      sqlitePath,
+      workerId: "worker_audit",
+    });
+    const queryService = createRunrootOperatorService({
+      idGenerator,
+      now,
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+
+    const inlineRun = await inlineService.startRun({
+      input: {
+        approvalRequired: false,
+        commandAlias: "print-ready",
+        runbookId: "node-health-check",
+      },
+      templateId: "shell-runbook-flow",
+    });
+    const queuedRun = await queuedService.startRun({
+      input: {
+        approvalRequired: false,
+        commandAlias: "print-ready",
+        runbookId: "node-health-check",
+      },
+      templateId: "shell-runbook-flow",
+    });
+
+    await worker.processNextJob();
+
+    const results = await queryService.listAuditResults();
+    const queuedResults = await queryService.listAuditResults({
+      executionMode: "queued",
+    });
+
+    expect(results.totalCount).toBe(2);
+    expect(results.results.map((result) => result.runId)).toEqual([
+      queuedRun.id,
+      inlineRun.id,
+    ]);
+    expect(
+      results.results.find((result) => result.runId === inlineRun.id),
+    ).toMatchObject({
+      executionModes: ["inline"],
+      runId: inlineRun.id,
+    });
+    expect(
+      results.results.find((result) => result.runId === queuedRun.id),
+    ).toMatchObject({
+      dispatchJobs: [
+        expect.objectContaining({
+          status: "completed",
+          workerId: "worker_audit",
+        }),
+      ],
+      executionModes: ["queued"],
+      runId: queuedRun.id,
+      workerIds: ["worker_audit"],
+    });
+    expect(queuedResults.results.map((result) => result.runId)).toEqual([
+      queuedRun.id,
+    ]);
   });
 });

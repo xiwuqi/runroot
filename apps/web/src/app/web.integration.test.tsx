@@ -67,6 +67,7 @@ describe("@runroot/web integration", () => {
           searchParams: Promise.resolve({}),
         }),
       );
+      expect(runsMarkup).toContain("Cross-run audit queries");
       expect(runsMarkup).toContain(createdPayload.run.id);
       expect(runsMarkup).toContain("Slack approval flow");
 
