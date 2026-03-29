@@ -18,6 +18,11 @@ import {
   hasCrossRunAuditDrilldownFilters,
   projectCrossRunAuditDrilldownResult,
 } from "./drilldown";
+import {
+  type CrossRunAuditNavigationFilters,
+  type CrossRunAuditNavigationView,
+  projectCrossRunAuditNavigationView,
+} from "./navigation";
 import { projectRunTimeline, type RunTimeline } from "./timeline";
 
 export interface RunTimelineReader {
@@ -51,6 +56,12 @@ export interface CrossRunAuditDrilldownQuery {
   listAuditDrilldowns(
     filters?: CrossRunAuditDrilldownFilters,
   ): Promise<CrossRunAuditDrilldownResults>;
+}
+
+export interface CrossRunAuditNavigationQuery {
+  getAuditNavigation(
+    filters?: Partial<CrossRunAuditNavigationFilters>,
+  ): Promise<CrossRunAuditNavigationView>;
 }
 
 export function createRunTimelineQuery(
@@ -174,6 +185,26 @@ export function createCrossRunAuditDrilldownQuery(
           0,
         ),
       };
+    },
+  };
+}
+
+export function createCrossRunAuditNavigationQuery(
+  reader: CrossRunAuditReader,
+): CrossRunAuditNavigationQuery {
+  const crossRunAudit = createCrossRunAuditQuery(reader);
+  const crossRunAuditDrilldowns = createCrossRunAuditDrilldownQuery(reader);
+
+  return {
+    async getAuditNavigation(filters = {}) {
+      const summaryFilters = filters.summary ?? {};
+      const drilldownFilters = filters.drilldown ?? {};
+      const [summaries, drilldowns] = await Promise.all([
+        crossRunAudit.listAuditResults(summaryFilters),
+        crossRunAuditDrilldowns.listAuditDrilldowns(drilldownFilters),
+      ]);
+
+      return projectCrossRunAuditNavigationView(summaries, drilldowns);
     },
   };
 }
