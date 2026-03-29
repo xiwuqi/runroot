@@ -22,8 +22,20 @@ export {
   projectCrossRunAuditResult,
 } from "./cross-run";
 export {
+  type CrossRunAuditDrilldownFilters,
+  type CrossRunAuditDrilldownIdentifiers,
+  type CrossRunAuditDrilldownResult,
+  type CrossRunAuditDrilldownResults,
+  compareCrossRunAuditDrilldownResults,
+  hasCrossRunAuditDrilldownFilters,
+  matchesCrossRunAuditDrilldownFilters,
+  projectCrossRunAuditDrilldownResult,
+} from "./drilldown";
+export {
+  type CrossRunAuditDrilldownQuery,
   type CrossRunAuditQuery,
   type CrossRunAuditReader,
+  createCrossRunAuditDrilldownQuery,
   createCrossRunAuditQuery,
   createRunAuditQuery,
   createRunTimelineQuery,
