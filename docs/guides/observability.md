@@ -12,6 +12,8 @@ Phase 6 introduces minimal observability seams without changing replay semantics
 - run-scoped correlated audit views built from replay, dispatch, worker, and
   tool-history facts
 - cross-run audit query and filter paths over the same derived audit facts
+- cross-run audit drilldowns constrained by stable identifiers over the same
+  derived audit facts
 - correlation attributes for run, step, dispatch job, worker, and tool
   identifiers across inline and queued execution
 
@@ -22,7 +24,7 @@ Phase 6 introduces minimal observability seams without changing replay semantics
 - observability UI platform
 - productized dashboard or analytics suite
 - provider-specific payload persistence by default
-- cross-run audit exploration or broad analytics products
+- broad cross-run audit exploration or open-ended analytics products
 
 ## Current Boundary
 
@@ -37,6 +39,8 @@ Phase 6 introduces minimal observability seams without changing replay semantics
   second workflow-state model
 - cross-run audit queries stay structured and thin instead of becoming a
   dashboard or analytics product
+- identifier-driven drilldowns stay constrained and operator-facing instead of
+  turning into a dashboard, search, or analytics platform
 
 ## Minimal Local Path
 

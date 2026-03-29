@@ -16,7 +16,8 @@ Runroot focuses on:
 
 ## Current Status
 
-Phase 12 (Cross-Run Audit Queries and Filters) is complete on this branch. The
+Phase 13 (Cross-Run Audit Drilldowns and Identifier Queries) is complete on
+this branch. The
 repository now includes:
 
 - the Phase 2 runtime core for runs, steps, checkpoints, and retries
@@ -40,6 +41,8 @@ repository now includes:
 - a minimal operator-facing audit view in SDK, API, CLI, and web
 - shared cross-run audit queries and thin operator-facing filters in SDK, API,
   CLI, and web
+- shared cross-run audit drilldowns and identifier-constrained operator reads
+  in SDK, API, CLI, and web
 
 Persisted tool history is additive audit data. It does not become part of the
 shared replay or approval source of truth.
@@ -49,6 +52,9 @@ approval correctness.
 
 Cross-run audit queries remain derived operator read models. They do not become
 replay, approval, or workflow-state source of truth.
+
+Identifier-driven audit drilldowns remain derived operator read models as well.
+They do not become replay, approval, or workflow-state source of truth.
 
 ## Planned Capabilities
 
@@ -120,6 +126,10 @@ Phase 12 adds a ninth rule: cross-run audit queries stay thin and structured.
 They can filter or summarize derived audit facts across runs, but they do not
 expand into a dashboard, analytics suite, or backend observability platform.
 
+Phase 13 adds a tenth rule: identifier-driven drilldowns stay constrained and
+operator-facing. They can narrow derived audit facts by stable identifiers, but
+they do not expand into a dashboard, search product, or analytics platform.
+
 ## Example Use Cases
 
 - GitHub issue triage with optional human approval
@@ -142,6 +152,7 @@ expand into a dashboard, analytics suite, or backend observability platform.
 - [Tool Telemetry](./docs/guides/tool-telemetry.md)
 - [Audit Projections](./docs/guides/audit-projections.md)
 - [Audit Queries](./docs/guides/audit-queries.md)
+- [Audit Drilldowns](./docs/guides/audit-drilldowns.md)
 - [Release Readiness](./docs/guides/release-readiness.md)
 - [Examples](./examples/README.md)
 - [Web Console](./docs/architecture/web-console.md)

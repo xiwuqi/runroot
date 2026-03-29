@@ -1,6 +1,6 @@
 # Phase 13: Cross-Run Audit Drilldowns and Identifier Queries
 
-Status: suggested freeze version, pending docs-only merge
+Status: formal handoff merged; implementation baseline pending review
 
 This document proposes the repository-owned Phase 13 execution contract for
 Runroot. It defines the minimum implementation boundary for stable,
