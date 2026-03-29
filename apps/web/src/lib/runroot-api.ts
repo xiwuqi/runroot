@@ -80,6 +80,56 @@ export interface ApiToolHistoryEntry {
   readonly workerId?: string;
 }
 
+export interface ApiAuditEntry {
+  readonly correlation: {
+    readonly approvalId?: string;
+    readonly dispatchJobId?: string;
+    readonly runId: string;
+    readonly stepId?: string;
+    readonly toolCallId?: string;
+    readonly toolId?: string;
+    readonly workerId?: string;
+  };
+  readonly detail?: string;
+  readonly fact:
+    | {
+        readonly eventId: string;
+        readonly eventName: string;
+        readonly payload: unknown;
+        readonly sequence: number;
+        readonly sourceOfTruth: "runtime-event";
+      }
+    | {
+        readonly attempts: number;
+        readonly dispatchJobId: string;
+        readonly dispatchKind: string;
+        readonly dispatchStatus: string;
+        readonly sourceOfTruth: "dispatch";
+        readonly workerId?: string;
+      }
+    | {
+        readonly attempt?: number;
+        readonly callId: string;
+        readonly executionMode?: "inline" | "queued";
+        readonly inputSummary: string;
+        readonly outcome: "blocked" | "failed" | "succeeded";
+        readonly outcomeDetail?: string;
+        readonly outputSummary?: string;
+        readonly source: string;
+        readonly sourceOfTruth: "tool-history";
+        readonly toolName: string;
+        readonly toolSource: string;
+      };
+  readonly kind: string;
+  readonly occurredAt: string;
+  readonly summary: string;
+}
+
+export interface ApiAuditView {
+  readonly entries: readonly ApiAuditEntry[];
+  readonly runId: string;
+}
+
 export interface DecideApprovalRequest {
   readonly actorDisplayName?: string;
   readonly actorId?: string;
@@ -95,6 +145,7 @@ export interface RunrootApiClient {
   getApprovals(runId: string): Promise<readonly ApiApproval[]>;
   getPendingApprovals(): Promise<readonly PendingApprovalSummary[]>;
   getRun(runId: string): Promise<ApiRun>;
+  getAuditView(runId: string): Promise<ApiAuditView>;
   getToolHistory(runId: string): Promise<readonly ApiToolHistoryEntry[]>;
   getTimeline(runId: string): Promise<ApiTimeline>;
   listRuns(): Promise<readonly ApiRun[]>;
@@ -254,6 +305,14 @@ export function createRunrootApiClient(
       }>(`/runs/${runId}`, { method: "GET" }, "web.api.getRun");
 
       return payload.run;
+    },
+
+    async getAuditView(runId) {
+      const payload = await requestJson<{
+        audit: ApiAuditView;
+      }>(`/runs/${runId}/audit`, { method: "GET" }, "web.api.getAuditView");
+
+      return payload.audit;
     },
 
     async getToolHistory(runId) {

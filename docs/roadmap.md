@@ -117,4 +117,4 @@ Status: completed
   presentation rather than a full observability backend or productized
   dashboard
 
-Status: suggested freeze, pending review and merge
+Status: completed on branch, pending review and merge

@@ -45,6 +45,9 @@ The minimum read path is available through existing seams:
 - SDK: `getToolHistory(runId)`
 - API: `GET /runs/:runId/tool-history`
 - Web: run detail page shows a minimal persisted tool-history section
+- Audit projection: the Phase 11 correlated audit view joins replay facts with
+  tool history through the existing SDK, API, CLI, and web seams without
+  changing replay source of truth
 
 ## Local Development
 

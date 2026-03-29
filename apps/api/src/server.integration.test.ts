@@ -257,12 +257,30 @@ describe("@runroot/api integration", () => {
     const toolHistoryResponse = await fetch(
       `${address}/runs/${createdRun.run.id}/tool-history`,
     );
+    const auditResponse = await fetch(
+      `${address}/runs/${createdRun.run.id}/audit`,
+    );
     const toolHistoryPayload = (await toolHistoryResponse.json()) as {
       entries: Array<{
         executionMode?: string;
         outcome: string;
         toolName: string;
       }>;
+    };
+    const auditPayload = (await auditResponse.json()) as {
+      audit: {
+        entries: Array<{
+          correlation: {
+            dispatchJobId?: string;
+            runId: string;
+            workerId?: string;
+          };
+          fact: {
+            sourceOfTruth: string;
+          };
+          kind: string;
+        }>;
+      };
     };
 
     expect(worker.getWorkspacePath()).toContain("runroot.sqlite");
@@ -274,6 +292,25 @@ describe("@runroot/api integration", () => {
       toolHistoryPayload.entries.every(
         (entry) =>
           entry.executionMode === "queued" && entry.outcome === "succeeded",
+      ),
+    ).toBe(true);
+    expect(auditResponse.status).toBe(200);
+    expect(
+      auditPayload.audit.entries.some(
+        (entry) =>
+          entry.kind === "dispatch-completed" &&
+          entry.fact.sourceOfTruth === "dispatch" &&
+          entry.correlation.runId === createdRun.run.id &&
+          typeof entry.correlation.dispatchJobId === "string" &&
+          entry.correlation.workerId === "worker_api",
+      ),
+    ).toBe(true);
+    expect(
+      auditPayload.audit.entries.some(
+        (entry) =>
+          entry.kind === "tool-outcome" &&
+          entry.fact.sourceOfTruth === "tool-history" &&
+          entry.correlation.workerId === "worker_api",
       ),
     ).toBe(true);
     expect(

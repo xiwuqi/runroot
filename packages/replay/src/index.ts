@@ -1,7 +1,20 @@
 import type { PackageBoundary } from "@runroot/config";
 
 export {
+  projectRunAuditView,
+  type RunAuditDispatchFact,
+  type RunAuditEntry,
+  type RunAuditEntryCorrelation,
+  type RunAuditEntryKind,
+  type RunAuditEventFact,
+  type RunAuditToolFact,
+  type RunAuditView,
+} from "./audit";
+export {
+  createRunAuditQuery,
   createRunTimelineQuery,
+  type RunAuditQuery,
+  type RunAuditReader,
   type RunTimelineQuery,
   type RunTimelineReader,
 } from "./query";

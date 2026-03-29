@@ -187,6 +187,18 @@ export function buildServer(options: BuildServerOptions = {}) {
     }),
   );
 
+  app.get("/runs/:runId/audit", async (request, reply) =>
+    handleOperatorResponse(reply, async () => {
+      const params = request.params as {
+        readonly runId: string;
+      };
+
+      return {
+        audit: await operator.getAuditView(params.runId),
+      };
+    }),
+  );
+
   app.get("/runs/:runId/tool-history", async (request, reply) =>
     handleOperatorResponse(reply, async () => {
       const params = request.params as {

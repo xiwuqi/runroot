@@ -30,9 +30,10 @@ export default async function RunDetailPage({
   const api = createRunrootApiClient();
 
   try {
-    const [run, approvals, toolHistory, timeline] = await Promise.all([
+    const [run, approvals, audit, toolHistory, timeline] = await Promise.all([
       api.getRun(runId),
       api.getApprovals(runId),
+      api.getAuditView(runId),
       api.getToolHistory(runId),
       api.getTimeline(runId),
     ]);
@@ -49,6 +50,7 @@ export default async function RunDetailPage({
       >
         <FlashBanner message={flash} />
         <RunDetailView
+          audit={audit}
           approvals={approvals}
           run={run}
           toolHistory={toolHistory}

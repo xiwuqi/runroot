@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import type { FlashMessage } from "../lib/navigation";
 import type {
   ApiApproval,
+  ApiAuditView,
   ApiRun,
   ApiTimeline,
   ApiToolHistoryEntry,
@@ -124,11 +125,13 @@ export function RunsListView({
 }
 
 export function RunDetailView({
+  audit,
   approvals,
   run,
   toolHistory,
   timeline,
 }: Readonly<{
+  audit: ApiAuditView;
   approvals: readonly ApiApproval[];
   run: ApiRun;
   toolHistory: readonly ApiToolHistoryEntry[];
@@ -138,6 +141,7 @@ export function RunDetailView({
   const pendingApproval = approvals.find(
     (approval) => approval.status === "pending",
   );
+  const recentAuditEntries = [...audit.entries].slice(-6).reverse();
   const recentEntries = timeline.entries.slice(-5).reverse();
   const recentToolHistory = [...toolHistory].slice(-5).reverse();
 
@@ -261,6 +265,55 @@ export function RunDetailView({
                     2,
                   )}
                 </pre>
+              </li>
+            ))}
+          </ol>
+        )}
+      </article>
+
+      <article className="card">
+        <h3>Audit view</h3>
+        {recentAuditEntries.length === 0 ? (
+          <p className="empty-copy">
+            No correlated audit facts have been projected for this run yet.
+          </p>
+        ) : (
+          <ol className="timeline-list">
+            {recentAuditEntries.map((entry) => (
+              <li className="timeline-entry" key={readAuditEntryKey(entry)}>
+                <div className="row spread">
+                  <strong>{entry.summary}</strong>
+                  <span>{formatTimestamp(entry.occurredAt)}</span>
+                </div>
+                <div className="timeline-meta">
+                  {entry.kind}
+                  {entry.correlation.stepId
+                    ? ` · step ${entry.correlation.stepId}`
+                    : ""}
+                  {entry.correlation.dispatchJobId
+                    ? ` · dispatch ${entry.correlation.dispatchJobId}`
+                    : ""}
+                  {entry.correlation.workerId
+                    ? ` · worker ${entry.correlation.workerId}`
+                    : ""}
+                  {entry.correlation.approvalId
+                    ? ` · approval ${entry.correlation.approvalId}`
+                    : ""}
+                </div>
+                <div className="timeline-meta">
+                  source {entry.fact.sourceOfTruth}
+                  {entry.correlation.toolCallId
+                    ? ` · call ${entry.correlation.toolCallId}`
+                    : ""}
+                  {entry.correlation.toolId
+                    ? ` · tool ${entry.correlation.toolId}`
+                    : ""}
+                </div>
+                {entry.detail ? (
+                  <pre className="payload-preview">
+                    {JSON.stringify({ detail: entry.detail }, null, 2)}
+                  </pre>
+                ) : null}
               </li>
             ))}
           </ol>
@@ -461,4 +514,15 @@ function StatusBadge({
           : "neutral";
 
   return <span className={`status-pill ${tone}`}>{status}</span>;
+}
+
+function readAuditEntryKey(entry: ApiAuditView["entries"][number]): string {
+  switch (entry.fact.sourceOfTruth) {
+    case "dispatch":
+      return `${entry.fact.dispatchJobId}:${entry.kind}`;
+    case "runtime-event":
+      return entry.fact.eventId;
+    case "tool-history":
+      return entry.fact.callId;
+  }
 }

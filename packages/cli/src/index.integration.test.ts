@@ -66,6 +66,7 @@ describe("@runroot/cli integration", () => {
       };
     };
     const timelineIo = createIo();
+    const auditIo = createIo();
 
     const timelineExitCode = await runCli(
       [
@@ -88,11 +89,48 @@ describe("@runroot/cli integration", () => {
         }>;
       };
     };
+    const auditExitCode = await runCli(
+      [
+        "--workspace",
+        join(workspaceRoot, "workspace.json"),
+        "runs",
+        "audit",
+        startedRun.run.id,
+      ],
+      {
+        io: auditIo.io,
+      },
+    );
+    const auditPayload = JSON.parse(auditIo.stdout.join("")) as {
+      audit: {
+        entries: Array<{
+          fact: {
+            sourceOfTruth: string;
+          };
+          kind: string;
+        }>;
+      };
+    };
 
     expect(startedRun.run.status).toBe("succeeded");
     expect(
       timelinePayload.timeline.entries.map((entry) => entry.kind),
     ).toContain("run-succeeded");
+    expect(auditExitCode).toBe(0);
+    expect(
+      auditPayload.audit.entries.some(
+        (entry) =>
+          entry.kind === "replay-event" &&
+          entry.fact.sourceOfTruth === "runtime-event",
+      ),
+    ).toBe(true);
+    expect(
+      auditPayload.audit.entries.some(
+        (entry) =>
+          entry.kind === "tool-outcome" &&
+          entry.fact.sourceOfTruth === "tool-history",
+      ),
+    ).toBe(true);
   });
 
   it("lists pending approvals, decides one, and resumes the run", async () => {

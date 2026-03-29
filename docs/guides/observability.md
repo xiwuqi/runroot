@@ -9,6 +9,8 @@ Phase 6 introduces minimal observability seams without changing replay semantics
 - noop adapters for safe defaults
 - local memory adapters for tests
 - persisted tool-history records behind the shared tool hook seam
+- run-scoped correlated audit views built from replay, dispatch, worker, and
+  tool-history facts
 - correlation attributes for run, step, dispatch job, worker, and tool
   identifiers across inline and queued execution
 
@@ -19,6 +21,7 @@ Phase 6 introduces minimal observability seams without changing replay semantics
 - observability UI platform
 - productized dashboard or analytics suite
 - provider-specific payload persistence by default
+- cross-run audit exploration or broad analytics products
 
 ## Current Boundary
 
@@ -29,6 +32,8 @@ Phase 6 introduces minimal observability seams without changing replay semantics
   for replacing replay
 - inline and queued execution share the same correlation identifiers through the
   existing seams
+- correlated audit views stay derived and operator-facing instead of becoming a
+  second workflow-state model
 
 ## Minimal Local Path
 

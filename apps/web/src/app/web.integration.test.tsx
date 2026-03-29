@@ -143,8 +143,10 @@ describe("@runroot/web integration", () => {
       );
 
       expect(detailMarkup).toContain("succeeded");
+      expect(detailMarkup).toContain("Audit view");
       expect(detailMarkup).toContain("Tool history");
       expect(detailMarkup).toContain("slack.notify");
+      expect(detailMarkup).toContain("source runtime-event");
       expect(timelineMarkup).toContain("waiting-for-approval");
       expect(timelineMarkup).toContain("approval-approved");
       expect(timelineMarkup).toContain("run-resumed");
