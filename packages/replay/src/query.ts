@@ -42,6 +42,18 @@ import {
   compareCrossRunAuditSavedViews,
 } from "./saved-view";
 import { projectRunTimeline, type RunTimeline } from "./timeline";
+import {
+  type CrossRunAuditCatalogVisibility,
+  type CrossRunAuditCatalogVisibilityApplication,
+  type CrossRunAuditCatalogVisibilityCollection,
+  type CrossRunAuditCatalogVisibilityState,
+  type CrossRunAuditCatalogVisibilityStore,
+  type CrossRunAuditCatalogVisibilityView,
+  type CrossRunAuditCatalogVisibilityViewer,
+  compareCrossRunAuditCatalogVisibility,
+  createCrossRunAuditCatalogVisibility,
+  isCrossRunAuditCatalogVisibleToViewer,
+} from "./visibility";
 
 export interface RunTimelineReader {
   listByRunId(runId: RunId): Promise<RuntimeEvent[]>;
@@ -108,6 +120,26 @@ export interface CrossRunAuditCatalogQuery {
   publishCatalogEntry(
     input: PublishCrossRunAuditCatalogEntryInput,
   ): Promise<CrossRunAuditCatalogEntryView>;
+}
+
+export interface CrossRunAuditCatalogVisibilityQuery {
+  applyCatalogEntry(
+    id: string,
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+  ): Promise<CrossRunAuditCatalogVisibilityApplication | undefined>;
+  getCatalogVisibility(
+    id: string,
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+  ): Promise<CrossRunAuditCatalogVisibilityView | undefined>;
+  listVisibleCatalogEntries(
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+  ): Promise<CrossRunAuditCatalogVisibilityCollection>;
+  setCatalogVisibilityState(
+    id: string,
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+    state: CrossRunAuditCatalogVisibilityState,
+    timestamp: string,
+  ): Promise<CrossRunAuditCatalogVisibilityView>;
 }
 
 export function createRunTimelineQuery(
@@ -383,6 +415,111 @@ export function createCrossRunAuditCatalogQuery(
   };
 }
 
+export function createCrossRunAuditCatalogVisibilityQuery(
+  store: CrossRunAuditCatalogVisibilityStore,
+  catalog: CrossRunAuditCatalogQuery,
+): CrossRunAuditCatalogVisibilityQuery {
+  return {
+    async applyCatalogEntry(id, viewer) {
+      const visibility = await resolveCatalogVisibilityView(store, catalog, id);
+
+      if (
+        !visibility ||
+        !isCrossRunAuditCatalogVisibleToViewer(visibility.visibility, viewer)
+      ) {
+        return undefined;
+      }
+
+      const application = await catalog.applyCatalogEntry(id);
+
+      if (!application) {
+        return undefined;
+      }
+
+      return {
+        application,
+        visibility,
+      };
+    },
+
+    async getCatalogVisibility(id, viewer) {
+      const visibility = await resolveCatalogVisibilityView(store, catalog, id);
+
+      if (
+        !visibility ||
+        !isCrossRunAuditCatalogVisibleToViewer(visibility.visibility, viewer)
+      ) {
+        return undefined;
+      }
+
+      return visibility;
+    },
+
+    async listVisibleCatalogEntries(viewer) {
+      const visibilities = [...(await store.listCatalogVisibility())].sort(
+        compareCrossRunAuditCatalogVisibility,
+      );
+      const items = (
+        await Promise.all(
+          visibilities.map(async (visibility) =>
+            resolveCatalogVisibilityFromValue(catalog, visibility),
+          ),
+        )
+      ).filter(
+        (visibility): visibility is CrossRunAuditCatalogVisibilityView =>
+          visibility !== undefined &&
+          isCrossRunAuditCatalogVisibleToViewer(visibility.visibility, viewer),
+      );
+
+      return {
+        items,
+        totalCount: items.length,
+      };
+    },
+
+    async setCatalogVisibilityState(id, viewer, state, timestamp) {
+      const catalogEntry = await catalog.getCatalogEntry(id);
+
+      if (!catalogEntry || catalogEntry.entry.archivedAt) {
+        throw new Error(`Catalog entry "${id}" was not found.`);
+      }
+
+      const existingVisibility = await store.getCatalogVisibility(id);
+
+      if (
+        existingVisibility &&
+        existingVisibility.ownerId !== viewer.operatorId
+      ) {
+        throw new Error(
+          `Catalog visibility for "${id}" can only be updated by owner "${existingVisibility.ownerId}".`,
+        );
+      }
+
+      const visibility = existingVisibility
+        ? {
+            ...existingVisibility,
+            ...(state === "shared" ? { scopeId: viewer.scopeId } : {}),
+            state,
+            updatedAt: timestamp,
+          }
+        : createCrossRunAuditCatalogVisibility({
+            catalogEntryId: id,
+            ownerId: viewer.operatorId,
+            scopeId: viewer.scopeId,
+            state,
+            timestamp,
+          });
+
+      await store.saveCatalogVisibility(visibility);
+
+      return {
+        catalogEntry,
+        visibility,
+      };
+    },
+  };
+}
+
 async function resolveCatalogEntryView(
   store: CrossRunAuditCatalogStore,
   savedViews: CrossRunAuditSavedViewQuery,
@@ -406,5 +543,33 @@ async function resolveCatalogEntryFromValue(
   return {
     entry,
     savedView,
+  };
+}
+
+async function resolveCatalogVisibilityView(
+  store: CrossRunAuditCatalogVisibilityStore,
+  catalog: CrossRunAuditCatalogQuery,
+  id: string,
+): Promise<CrossRunAuditCatalogVisibilityView | undefined> {
+  const visibility = await store.getCatalogVisibility(id);
+
+  return visibility
+    ? resolveCatalogVisibilityFromValue(catalog, visibility)
+    : undefined;
+}
+
+async function resolveCatalogVisibilityFromValue(
+  catalog: CrossRunAuditCatalogQuery,
+  visibility: CrossRunAuditCatalogVisibility,
+): Promise<CrossRunAuditCatalogVisibilityView | undefined> {
+  const catalogEntry = await catalog.getCatalogEntry(visibility.catalogEntryId);
+
+  if (!catalogEntry || catalogEntry.entry.archivedAt) {
+    return undefined;
+  }
+
+  return {
+    catalogEntry,
+    visibility,
   };
 }
