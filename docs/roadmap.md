@@ -218,4 +218,4 @@ Status: completed
 - keep the phase focused on catalog visibility and shared presets rather than
   collaborative comments, multi-user curation, or broad platform work
 
-Status: suggested freeze version
+Status: implemented on branch, pending phase review

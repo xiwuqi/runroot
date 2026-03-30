@@ -4,15 +4,16 @@ import {
   projectMetadata,
   requiredQualityCommands,
   resolveExecutionMode,
+  resolveOperatorIdentity,
   resolvePersistenceConfig,
 } from "./index";
 
 describe("@runroot/config", () => {
   it("exposes phase-aware project metadata", () => {
     expect(projectMetadata.name).toBe("Runroot");
-    expect(projectMetadata.currentPhase).toBe(16);
+    expect(projectMetadata.currentPhase).toBe(17);
     expect(projectMetadata.phaseName).toBe(
-      "Cross-Run Audit View Catalogs and Curated Operator Presets",
+      "Cross-Run Audit Catalog Visibility and Shared Presets",
     );
   });
 
@@ -76,5 +77,44 @@ describe("@runroot/config", () => {
         },
       }),
     ).toBe("queued");
+  });
+
+  it("defaults operator identity to the local workspace operator scope", () => {
+    expect(
+      resolveOperatorIdentity({
+        env: {},
+      }),
+    ).toEqual({
+      operatorId: "operator",
+      scopeId: "workspace",
+    });
+  });
+
+  it("honors operator identity overrides from the environment", () => {
+    expect(
+      resolveOperatorIdentity({
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_oncall",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+        },
+      }),
+    ).toEqual({
+      operatorId: "ops_oncall",
+      scopeId: "ops",
+    });
+  });
+
+  it("falls back to the default operator identity when env values are blank", () => {
+    expect(
+      resolveOperatorIdentity({
+        env: {
+          RUNROOT_OPERATOR_ID: "   ",
+          RUNROOT_OPERATOR_SCOPE: "",
+        },
+      }),
+    ).toEqual({
+      operatorId: "operator",
+      scopeId: "workspace",
+    });
   });
 });

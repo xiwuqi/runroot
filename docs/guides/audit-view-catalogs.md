@@ -2,6 +2,11 @@
 
 Phase 16 adds a thin, shared catalog layer over constrained saved audit views.
 
+Phase 17 adds a separate visibility layer over those catalog entries. Catalog
+publication still defines reusable presets; visibility metadata now determines
+whether those presets stay personal or become shared through the same operator
+seams.
+
 ## What Catalog Entries Record
 
 The shared contract stores:

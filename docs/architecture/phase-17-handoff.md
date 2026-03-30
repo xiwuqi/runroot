@@ -1,6 +1,6 @@
 # Phase 17: Cross-Run Audit Catalog Visibility and Shared Presets
 
-Status: suggested freeze version, pending scope-freeze review
+Status: implemented on branch, pending phase review
 
 This document records the repository-owned suggested execution contract for
 Phase 17. It defines the minimum implementation boundary for a shared catalog
