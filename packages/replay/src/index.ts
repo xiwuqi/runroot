@@ -54,6 +54,7 @@ export {
 } from "./navigation";
 export {
   type CrossRunAuditCatalogQuery,
+  type CrossRunAuditCatalogReviewSignalQuery,
   type CrossRunAuditCatalogVisibilityQuery,
   type CrossRunAuditDrilldownQuery,
   type CrossRunAuditNavigationQuery,
@@ -61,6 +62,7 @@ export {
   type CrossRunAuditReader,
   type CrossRunAuditSavedViewQuery,
   createCrossRunAuditCatalogQuery,
+  createCrossRunAuditCatalogReviewSignalQuery,
   createCrossRunAuditCatalogVisibilityQuery,
   createCrossRunAuditDrilldownQuery,
   createCrossRunAuditNavigationQuery,
@@ -73,6 +75,18 @@ export {
   type RunTimelineQuery,
   type RunTimelineReader,
 } from "./query";
+export {
+  type CreateCrossRunAuditCatalogReviewSignalInput,
+  type CrossRunAuditCatalogReviewSignal,
+  type CrossRunAuditCatalogReviewSignalApplication,
+  type CrossRunAuditCatalogReviewSignalCollection,
+  type CrossRunAuditCatalogReviewSignalStore,
+  type CrossRunAuditCatalogReviewSignalView,
+  type CrossRunAuditCatalogReviewState,
+  compareCrossRunAuditCatalogReviewSignals,
+  createCrossRunAuditCatalogReviewSignal,
+  type UpdateCrossRunAuditCatalogReviewSignalInput,
+} from "./review-signal";
 export {
   type CreateCrossRunAuditSavedViewInput,
   type CrossRunAuditSavedView,

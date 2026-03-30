@@ -35,6 +35,15 @@ import {
   projectCrossRunAuditNavigationView,
 } from "./navigation";
 import {
+  type CrossRunAuditCatalogReviewSignal,
+  type CrossRunAuditCatalogReviewSignalCollection,
+  type CrossRunAuditCatalogReviewSignalStore,
+  type CrossRunAuditCatalogReviewSignalView,
+  compareCrossRunAuditCatalogReviewSignals,
+  createCrossRunAuditCatalogReviewSignal,
+  type UpdateCrossRunAuditCatalogReviewSignalInput,
+} from "./review-signal";
+import {
   type CrossRunAuditSavedView,
   type CrossRunAuditSavedViewApplication,
   type CrossRunAuditSavedViewCollection,
@@ -140,6 +149,26 @@ export interface CrossRunAuditCatalogVisibilityQuery {
     state: CrossRunAuditCatalogVisibilityState,
     timestamp: string,
   ): Promise<CrossRunAuditCatalogVisibilityView>;
+}
+
+export interface CrossRunAuditCatalogReviewSignalQuery {
+  clearCatalogReviewSignal(
+    id: string,
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+  ): Promise<CrossRunAuditCatalogReviewSignalView | undefined>;
+  getCatalogReviewSignal(
+    id: string,
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+  ): Promise<CrossRunAuditCatalogReviewSignalView | undefined>;
+  listReviewedCatalogEntries(
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+  ): Promise<CrossRunAuditCatalogReviewSignalCollection>;
+  setCatalogReviewSignal(
+    id: string,
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+    input: UpdateCrossRunAuditCatalogReviewSignalInput,
+    timestamp: string,
+  ): Promise<CrossRunAuditCatalogReviewSignalView>;
 }
 
 export function createRunTimelineQuery(
@@ -520,6 +549,107 @@ export function createCrossRunAuditCatalogVisibilityQuery(
   };
 }
 
+export function createCrossRunAuditCatalogReviewSignalQuery(
+  store: CrossRunAuditCatalogReviewSignalStore,
+  visibility: CrossRunAuditCatalogVisibilityQuery,
+): CrossRunAuditCatalogReviewSignalQuery {
+  return {
+    async clearCatalogReviewSignal(id, viewer) {
+      const review = await resolveCatalogReviewSignalView(
+        store,
+        visibility,
+        id,
+        viewer,
+      );
+
+      if (!review) {
+        return undefined;
+      }
+
+      await store.deleteCatalogReviewSignal(id);
+
+      return review;
+    },
+
+    async getCatalogReviewSignal(id, viewer) {
+      return resolveCatalogReviewSignalView(store, visibility, id, viewer);
+    },
+
+    async listReviewedCatalogEntries(viewer) {
+      const reviewSignals = [...(await store.listCatalogReviewSignals())].sort(
+        compareCrossRunAuditCatalogReviewSignals,
+      );
+      const items = (
+        await Promise.all(
+          reviewSignals.map(async (reviewSignal) =>
+            resolveCatalogReviewSignalFromValue(
+              visibility,
+              reviewSignal,
+              viewer,
+            ),
+          ),
+        )
+      ).filter(
+        (reviewSignal): reviewSignal is CrossRunAuditCatalogReviewSignalView =>
+          reviewSignal !== undefined,
+      );
+
+      return {
+        items,
+        totalCount: items.length,
+      };
+    },
+
+    async setCatalogReviewSignal(id, viewer, input, timestamp) {
+      const catalogVisibility = await visibility.getCatalogVisibility(
+        id,
+        viewer,
+      );
+
+      if (!catalogVisibility) {
+        throw new Error(
+          `Catalog entry "${id}" is not visible to operator "${viewer.operatorId}".`,
+        );
+      }
+
+      const existingReviewSignal = await store.getCatalogReviewSignal(id);
+      const normalizedNote = input.note?.trim();
+      const reviewSignal = existingReviewSignal
+        ? {
+            ...(input.note !== undefined
+              ? normalizedNote
+                ? { note: normalizedNote }
+                : {}
+              : existingReviewSignal.note
+                ? { note: existingReviewSignal.note }
+                : {}),
+            catalogEntryId: id,
+            createdAt: existingReviewSignal.createdAt,
+            kind: existingReviewSignal.kind,
+            operatorId: viewer.operatorId,
+            scopeId: viewer.scopeId,
+            state: input.state,
+            updatedAt: timestamp,
+          }
+        : createCrossRunAuditCatalogReviewSignal({
+            catalogEntryId: id,
+            ...(normalizedNote ? { note: normalizedNote } : {}),
+            operatorId: viewer.operatorId,
+            scopeId: viewer.scopeId,
+            state: input.state,
+            timestamp,
+          });
+
+      await store.saveCatalogReviewSignal(reviewSignal);
+
+      return {
+        review: reviewSignal,
+        visibility: catalogVisibility,
+      };
+    },
+  };
+}
+
 async function resolveCatalogEntryView(
   store: CrossRunAuditCatalogStore,
   savedViews: CrossRunAuditSavedViewQuery,
@@ -570,6 +700,39 @@ async function resolveCatalogVisibilityFromValue(
 
   return {
     catalogEntry,
+    visibility,
+  };
+}
+
+async function resolveCatalogReviewSignalView(
+  store: CrossRunAuditCatalogReviewSignalStore,
+  visibilityQuery: CrossRunAuditCatalogVisibilityQuery,
+  id: string,
+  viewer: CrossRunAuditCatalogVisibilityViewer,
+): Promise<CrossRunAuditCatalogReviewSignalView | undefined> {
+  const reviewSignal = await store.getCatalogReviewSignal(id);
+
+  return reviewSignal
+    ? resolveCatalogReviewSignalFromValue(visibilityQuery, reviewSignal, viewer)
+    : undefined;
+}
+
+async function resolveCatalogReviewSignalFromValue(
+  visibilityQuery: CrossRunAuditCatalogVisibilityQuery,
+  reviewSignal: CrossRunAuditCatalogReviewSignal,
+  viewer: CrossRunAuditCatalogVisibilityViewer,
+): Promise<CrossRunAuditCatalogReviewSignalView | undefined> {
+  const visibility = await visibilityQuery.getCatalogVisibility(
+    reviewSignal.catalogEntryId,
+    viewer,
+  );
+
+  if (!visibility) {
+    return undefined;
+  }
+
+  return {
+    review: reviewSignal,
     visibility,
   };
 }

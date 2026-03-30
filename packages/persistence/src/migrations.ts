@@ -289,6 +289,43 @@ export const runtimePersistenceMigrations = [
         ON runroot_audit_catalog_visibility (owner_id, updated_at DESC, catalog_entry_id ASC)`,
     ],
   },
+  {
+    id: "0007_audit_catalog_review_signals",
+    postgres: [
+      `CREATE TABLE IF NOT EXISTS runroot_audit_catalog_review_signals (
+        catalog_entry_id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL,
+        operator_id TEXT NOT NULL,
+        scope_id TEXT NOT NULL,
+        review_state TEXT NOT NULL,
+        note TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        data TEXT NOT NULL
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_runroot_audit_catalog_review_signals_scope
+        ON runroot_audit_catalog_review_signals (scope_id, review_state, updated_at DESC, catalog_entry_id ASC)`,
+      `CREATE INDEX IF NOT EXISTS idx_runroot_audit_catalog_review_signals_operator
+        ON runroot_audit_catalog_review_signals (operator_id, updated_at DESC, catalog_entry_id ASC)`,
+    ],
+    sqlite: [
+      `CREATE TABLE IF NOT EXISTS runroot_audit_catalog_review_signals (
+        catalog_entry_id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL,
+        operator_id TEXT NOT NULL,
+        scope_id TEXT NOT NULL,
+        review_state TEXT NOT NULL,
+        note TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        data TEXT NOT NULL
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_runroot_audit_catalog_review_signals_scope
+        ON runroot_audit_catalog_review_signals (scope_id, review_state, updated_at DESC, catalog_entry_id ASC)`,
+      `CREATE INDEX IF NOT EXISTS idx_runroot_audit_catalog_review_signals_operator
+        ON runroot_audit_catalog_review_signals (operator_id, updated_at DESC, catalog_entry_id ASC)`,
+    ],
+  },
 ] as const satisfies readonly PersistenceMigration[];
 
 export function getRuntimePersistenceMigrationStatements(
