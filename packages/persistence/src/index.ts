@@ -1,6 +1,19 @@
 import type { PackageBoundary } from "@runroot/config";
 
 export {
+  type ConfiguredAuditViewCatalogStoreOptions,
+  createConfiguredAuditViewCatalogStore,
+  createFileAuditViewCatalogStore,
+  createInMemoryAuditViewCatalogStore,
+  createPostgresAuditViewCatalogStore,
+  createSqliteAuditViewCatalogStore,
+  type FileAuditViewCatalogStoreOptions,
+  type InMemoryAuditViewCatalogStoreOptions,
+  type PostgresAuditViewCatalogStoreOptions,
+  resolveAuditViewCatalogFilePath,
+  type SqliteAuditViewCatalogStoreOptions,
+} from "./catalog-store";
+export {
   type ConfiguredRuntimePersistenceOptions,
   createConfiguredRuntimePersistence,
   createPostgresRuntimePersistence,
@@ -69,7 +82,7 @@ export const persistencePackageBoundary = {
   kind: "package",
   phaseOwned: 2,
   responsibility:
-    "Repository contracts, checkpoint storage, database adapters, dispatch queue persistence seams, tool-history storage adapters, and additive saved-audit-view adapters.",
+    "Repository contracts, checkpoint storage, database adapters, dispatch queue persistence seams, tool-history storage adapters, additive saved-audit-view adapters, and additive audit-view-catalog adapters.",
   publicSurface: [
     "repository interfaces",
     "storage adapters",
@@ -77,5 +90,6 @@ export const persistencePackageBoundary = {
     "dispatch queue adapters",
     "tool history adapters",
     "saved audit view adapters",
+    "audit view catalog adapters",
   ],
 } as const satisfies PackageBoundary;

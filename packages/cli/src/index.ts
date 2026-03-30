@@ -8,6 +8,7 @@ import {
   createRunrootOperatorService,
   type DecideApprovalInput,
   OperatorError,
+  type PublishAuditViewCatalogEntryInput,
   resolveWorkspacePath,
   type SaveAuditSavedViewInput,
 } from "@runroot/sdk";
@@ -91,6 +92,51 @@ export async function runCli(
 
           return writeJson(io.stdout.write, {
             savedView: await service.getSavedView(detail),
+          });
+        default:
+          throw new Error(
+            `Unknown command "${positionals.join(" ")}". Run "help" to see supported commands.`,
+          );
+      }
+    }
+
+    if (resource === "audit" && action === "catalog") {
+      switch (subject) {
+        case "apply":
+          if (!detail) {
+            throw new Error("audit catalog apply requires a catalog entry id.");
+          }
+
+          return writeJson(io.stdout.write, {
+            application: await service.applyCatalogEntry(detail),
+          });
+        case "archive":
+          if (!detail) {
+            throw new Error(
+              "audit catalog archive requires a catalog entry id.",
+            );
+          }
+
+          return writeJson(io.stdout.write, {
+            catalogEntry: await service.archiveCatalogEntry(detail),
+          });
+        case "list":
+          return writeJson(io.stdout.write, {
+            catalog: await service.listCatalogEntries(),
+          });
+        case "publish":
+          return writeJson(io.stdout.write, {
+            catalogEntry: await service.publishCatalogEntry(
+              resolvePublishAuditCatalogEntryInput(flags, detail),
+            ),
+          });
+        case "show":
+          if (!detail) {
+            throw new Error("audit catalog show requires a catalog entry id.");
+          }
+
+          return writeJson(io.stdout.write, {
+            catalogEntry: await service.getCatalogEntry(detail),
           });
         default:
           throw new Error(
@@ -343,6 +389,29 @@ function resolveSaveSavedViewInput(
   };
 }
 
+function resolvePublishAuditCatalogEntryInput(
+  flags: ReadonlyMap<string, string | boolean>,
+  savedViewIdFromPosition?: string,
+): PublishAuditViewCatalogEntryInput {
+  const savedViewId =
+    savedViewIdFromPosition ?? getStringFlag(flags, "saved-view-id");
+
+  if (!savedViewId) {
+    throw new Error(
+      "audit catalog publish requires a saved view id as a positional argument or --saved-view-id.",
+    );
+  }
+
+  const description = getStringFlag(flags, "description");
+  const name = getStringFlag(flags, "name");
+
+  return {
+    ...(description ? { description } : {}),
+    ...(name ? { name } : {}),
+    savedViewId,
+  };
+}
+
 function getStringFlag(
   flags: ReadonlyMap<string, string | boolean>,
   name: string,
@@ -445,6 +514,11 @@ Commands:
   audit list [--definition-id <id>] [--status <status>] [--execution-mode <inline|queued>] [--tool-name <name>]
   audit drilldown [--run-id <id>] [--approval-id <id>] [--step-id <id>] [--dispatch-job-id <id>] [--worker-id <id>] [--tool-call-id <id>] [--tool-id <id>]
   audit navigate [--definition-id <id>] [--status <status>] [--execution-mode <inline|queued>] [--tool-name <name>] [--run-id <id>] [--approval-id <id>] [--step-id <id>] [--dispatch-job-id <id>] [--worker-id <id>] [--tool-call-id <id>] [--tool-id <id>]
+  audit catalog list
+  audit catalog publish <saved-view-id> [--name <name>] [--description <text>]
+  audit catalog show <catalog-entry-id>
+  audit catalog archive <catalog-entry-id>
+  audit catalog apply <catalog-entry-id>
   audit saved-views list
   audit saved-views save --name <name> [--description <text>] [--preset] [--definition-id <id>] [--status <status>] [--execution-mode <inline|queued>] [--tool-name <name>] [--run-id <id>] [--approval-id <id>] [--step-id <id>] [--dispatch-job-id <id>] [--worker-id <id>] [--tool-call-id <id>] [--tool-id <id>] [--audit-view-run-id <id>] [--drilldown-run-id <id>]
   audit saved-views show <saved-view-id>

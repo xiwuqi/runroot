@@ -1,4 +1,5 @@
 import {
+  AuditViewCatalogsView,
   ConsoleShell,
   CrossRunAuditNavigationView,
   ErrorState,
@@ -12,6 +13,8 @@ import {
   resolvePageSearchParams,
 } from "../../lib/navigation";
 import {
+  type ApiAuditCatalogEntryApplication,
+  type ApiAuditCatalogEntryView,
   type ApiAuditNavigationFilters,
   type ApiAuditNavigationView,
   type ApiAuditSavedView,
@@ -33,24 +36,36 @@ export default async function RunsPage({
   const api = createRunrootApiClient();
 
   try {
+    const catalogEntryId = readFirstSearchParam(
+      resolvedSearchParams.catalogEntryId,
+    );
     const savedViewId = readFirstSearchParam(resolvedSearchParams.savedViewId);
     const auditFilters = readAuditFilters(resolvedSearchParams);
     const drilldownFilters = readAuditDrilldownFilters(resolvedSearchParams);
-    const [runs, savedViews, navigationResult] = await Promise.all([
-      api.listRuns(),
-      api.listSavedAuditViews(),
-      savedViewId
-        ? api.applySavedAuditView(savedViewId)
-        : api.getAuditNavigation({
-            drilldown: drilldownFilters,
-            summary: auditFilters,
-          }),
-    ]);
+    const [runs, catalogEntries, savedViews, navigationResult] =
+      await Promise.all([
+        api.listRuns(),
+        api.listAuditCatalogEntries(),
+        api.listSavedAuditViews(),
+        catalogEntryId
+          ? api.applyAuditCatalogEntry(catalogEntryId)
+          : savedViewId
+            ? api.applySavedAuditView(savedViewId)
+            : api.getAuditNavigation({
+                drilldown: drilldownFilters,
+                summary: auditFilters,
+              }),
+      ]);
     const sortedRuns = [...runs].sort(compareRunsByUpdatedAt);
     let navigation: ApiAuditNavigationView;
+    let activeCatalogEntry: ApiAuditCatalogEntryView | undefined;
     let activeSavedView: ApiAuditSavedView | undefined;
 
-    if (hasSavedViewApplication(navigationResult)) {
+    if (hasCatalogEntryApplication(navigationResult)) {
+      activeCatalogEntry = navigationResult.catalogEntry;
+      activeSavedView = navigationResult.application.savedView;
+      navigation = navigationResult.application.navigation;
+    } else if (hasSavedViewApplication(navigationResult)) {
       navigation = navigationResult.navigation;
       activeSavedView = navigationResult.savedView;
     } else {
@@ -63,6 +78,10 @@ export default async function RunsPage({
         title="Runs"
       >
         <FlashBanner message={flash} />
+        <AuditViewCatalogsView
+          catalogEntries={catalogEntries}
+          {...(activeCatalogEntry ? { activeCatalogEntry } : {})}
+        />
         <SavedAuditViewsView
           navigation={navigation}
           savedViews={savedViews}
@@ -93,9 +112,21 @@ function compareRunsByUpdatedAt(left: ApiRun, right: ApiRun): number {
 }
 
 function hasSavedViewApplication(
-  value: ApiAuditNavigationView | ApiAuditSavedViewApplication,
+  value:
+    | ApiAuditNavigationView
+    | ApiAuditCatalogEntryApplication
+    | ApiAuditSavedViewApplication,
 ): value is ApiAuditSavedViewApplication {
   return "savedView" in value;
+}
+
+function hasCatalogEntryApplication(
+  value:
+    | ApiAuditNavigationView
+    | ApiAuditCatalogEntryApplication
+    | ApiAuditSavedViewApplication,
+): value is ApiAuditCatalogEntryApplication {
+  return "catalogEntry" in value;
 }
 
 function readAuditFilters(

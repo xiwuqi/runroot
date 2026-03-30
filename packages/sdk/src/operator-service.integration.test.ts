@@ -622,4 +622,123 @@ describe("@runroot/sdk operator service integration", () => {
       },
     });
   });
+
+  it("publishes, lists, inspects, archives, and applies audit view catalog entries for inline and queued runs through the operator seam", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "runroot-sdk-catalog-"));
+    const sqlitePath = join(workspaceRoot, "runroot.sqlite");
+    const now = createClock();
+    const idGenerator = createIdGenerator();
+    const inlineService = createRunrootOperatorService({
+      executionMode: "inline",
+      idGenerator,
+      now,
+      persistenceDriver: "sqlite",
+      savedViewIdGenerator: () => "saved_view_catalog_1",
+      sqlitePath,
+    });
+    const queuedService = createRunrootOperatorService({
+      executionMode: "queued",
+      idGenerator,
+      now,
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+    const worker = createRunrootWorkerService({
+      idGenerator,
+      now,
+      persistenceDriver: "sqlite",
+      sqlitePath,
+      workerId: "worker_catalog",
+    });
+    const queryService = createRunrootOperatorService({
+      catalogEntryIdGenerator: () => "catalog_entry_1",
+      idGenerator,
+      now,
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+
+    await inlineService.startRun({
+      input: {
+        approvalRequired: false,
+        commandAlias: "print-ready",
+        runbookId: "node-health-check",
+      },
+      templateId: "shell-runbook-flow",
+    });
+    const queuedRun = await queuedService.startRun({
+      input: {
+        approvalRequired: false,
+        commandAlias: "print-ready",
+        runbookId: "node-health-check",
+      },
+      templateId: "shell-runbook-flow",
+    });
+
+    await worker.processNextJob();
+
+    const savedView = await inlineService.saveSavedView({
+      description: "Queued worker catalog entry",
+      name: "Queued worker preset",
+      navigation: {
+        drilldown: {
+          workerId: "worker_catalog",
+        },
+        summary: {
+          executionMode: "queued",
+        },
+      },
+      refs: {
+        auditViewRunId: queuedRun.id,
+        drilldownRunId: queuedRun.id,
+      },
+    });
+    const publishedEntry = await queryService.publishCatalogEntry({
+      savedViewId: savedView.id,
+    });
+    const listedEntries = await queryService.listCatalogEntries();
+    const inspectedEntry = await queryService.getCatalogEntry(
+      publishedEntry.entry.id,
+    );
+    const appliedEntry = await queryService.applyCatalogEntry(
+      publishedEntry.entry.id,
+    );
+    const archivedEntry = await queryService.archiveCatalogEntry(
+      publishedEntry.entry.id,
+    );
+    const listedAfterArchive = await queryService.listCatalogEntries();
+
+    expect(publishedEntry).toMatchObject({
+      entry: {
+        id: "catalog_entry_1",
+        kind: "catalog-entry",
+        name: "Queued worker preset",
+        savedViewId: savedView.id,
+      },
+      savedView: {
+        id: savedView.id,
+      },
+    });
+    expect(listedEntries.totalCount).toBe(1);
+    expect(listedEntries.items[0]?.entry.id).toBe("catalog_entry_1");
+    expect(inspectedEntry).toMatchObject({
+      entry: {
+        id: "catalog_entry_1",
+      },
+      savedView: {
+        refs: {
+          auditViewRunId: queuedRun.id,
+        },
+      },
+    });
+    expect(appliedEntry.application.savedView.id).toBe(savedView.id);
+    expect(appliedEntry.application.navigation.totalSummaryCount).toBe(1);
+    expect(appliedEntry.application.navigation.drilldowns[0]).toMatchObject({
+      result: {
+        runId: queuedRun.id,
+      },
+    });
+    expect(archivedEntry.entry.archivedAt).toBeTruthy();
+    expect(listedAfterArchive.totalCount).toBe(0);
+  });
 });

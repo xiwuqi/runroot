@@ -11,6 +11,7 @@ export {
   createRunTimelineService,
   type DecideApprovalInput,
   type PendingApprovalSummary,
+  type PublishAuditViewCatalogEntryInput,
   type RunrootOperatorService,
   type RunrootOperatorServiceOptions,
   resolveWorkspacePath,

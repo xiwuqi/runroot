@@ -5,6 +5,17 @@ import type { ToolHistoryEntry } from "@runroot/tools";
 
 import { projectRunAuditView, type RunAuditView } from "./audit";
 import {
+  archiveCrossRunAuditCatalogEntry,
+  type CrossRunAuditCatalogEntry,
+  type CrossRunAuditCatalogEntryApplication,
+  type CrossRunAuditCatalogEntryCollection,
+  type CrossRunAuditCatalogEntryView,
+  type CrossRunAuditCatalogStore,
+  compareCrossRunAuditCatalogEntries,
+  createCrossRunAuditCatalogEntry,
+  type PublishCrossRunAuditCatalogEntryInput,
+} from "./catalog";
+import {
   type CrossRunAuditQueryFilters,
   type CrossRunAuditResults,
   compareCrossRunAuditResults,
@@ -80,6 +91,23 @@ export interface CrossRunAuditSavedViewQuery {
   saveSavedView(
     savedView: CrossRunAuditSavedView,
   ): Promise<CrossRunAuditSavedView>;
+}
+
+export interface CrossRunAuditCatalogQuery {
+  applyCatalogEntry(
+    id: string,
+  ): Promise<CrossRunAuditCatalogEntryApplication | undefined>;
+  archiveCatalogEntry(
+    id: string,
+    timestamp: string,
+  ): Promise<CrossRunAuditCatalogEntryView | undefined>;
+  getCatalogEntry(
+    id: string,
+  ): Promise<CrossRunAuditCatalogEntryView | undefined>;
+  listCatalogEntries(): Promise<CrossRunAuditCatalogEntryCollection>;
+  publishCatalogEntry(
+    input: PublishCrossRunAuditCatalogEntryInput,
+  ): Promise<CrossRunAuditCatalogEntryView>;
 }
 
 export function createRunTimelineQuery(
@@ -263,5 +291,120 @@ export function createCrossRunAuditSavedViewQuery(
     async saveSavedView(savedView) {
       return store.saveSavedView(savedView);
     },
+  };
+}
+
+export function createCrossRunAuditCatalogQuery(
+  store: CrossRunAuditCatalogStore,
+  savedViews: CrossRunAuditSavedViewQuery,
+): CrossRunAuditCatalogQuery {
+  return {
+    async applyCatalogEntry(id) {
+      const catalogEntry = await resolveCatalogEntryView(store, savedViews, id);
+
+      if (!catalogEntry || catalogEntry.entry.archivedAt) {
+        return undefined;
+      }
+
+      const application = await savedViews.applySavedView(
+        catalogEntry.entry.savedViewId,
+      );
+
+      if (!application) {
+        return undefined;
+      }
+
+      return {
+        application,
+        catalogEntry,
+      };
+    },
+
+    async archiveCatalogEntry(id, timestamp) {
+      const entry = await store.getCatalogEntry(id);
+
+      if (!entry) {
+        return undefined;
+      }
+
+      const archivedEntry = archiveCrossRunAuditCatalogEntry(entry, timestamp);
+      await store.saveCatalogEntry(archivedEntry);
+
+      return resolveCatalogEntryView(store, savedViews, id);
+    },
+
+    async getCatalogEntry(id) {
+      return resolveCatalogEntryView(store, savedViews, id);
+    },
+
+    async listCatalogEntries() {
+      const entries = [...(await store.listCatalogEntries())]
+        .filter((entry) => !entry.archivedAt)
+        .sort(compareCrossRunAuditCatalogEntries);
+      const items = (
+        await Promise.all(
+          entries.map(async (entry) =>
+            resolveCatalogEntryFromValue(savedViews, entry),
+          ),
+        )
+      ).filter(
+        (catalogEntry): catalogEntry is CrossRunAuditCatalogEntryView =>
+          catalogEntry !== undefined,
+      );
+
+      return {
+        items,
+        totalCount: items.length,
+      };
+    },
+
+    async publishCatalogEntry(input) {
+      const savedView = await savedViews.getSavedView(input.savedViewId);
+
+      if (!savedView) {
+        throw new Error(`Saved view "${input.savedViewId}" was not found.`);
+      }
+
+      const entry = createCrossRunAuditCatalogEntry({
+        ...(input.description ? { description: input.description } : {}),
+        id: input.id,
+        ...(input.name ? { name: input.name } : {}),
+        savedView,
+        timestamp: input.timestamp,
+      });
+
+      await store.saveCatalogEntry(entry);
+
+      return {
+        entry,
+        savedView,
+      };
+    },
+  };
+}
+
+async function resolveCatalogEntryView(
+  store: CrossRunAuditCatalogStore,
+  savedViews: CrossRunAuditSavedViewQuery,
+  id: string,
+): Promise<CrossRunAuditCatalogEntryView | undefined> {
+  const entry = await store.getCatalogEntry(id);
+
+  return entry ? resolveCatalogEntryFromValue(savedViews, entry) : undefined;
+}
+
+async function resolveCatalogEntryFromValue(
+  savedViews: CrossRunAuditSavedViewQuery,
+  entry: CrossRunAuditCatalogEntry,
+): Promise<CrossRunAuditCatalogEntryView | undefined> {
+  const savedView = await savedViews.getSavedView(entry.savedViewId);
+
+  if (!savedView) {
+    return undefined;
+  }
+
+  return {
+    entry,
+    savedView,
   };
 }

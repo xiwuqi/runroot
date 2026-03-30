@@ -26,7 +26,7 @@ export class OperatorInputError extends OperatorError {
 
 export class OperatorNotFoundError extends OperatorError {
   constructor(
-    resource: "approval" | "run" | "saved view" | "template",
+    resource: "approval" | "catalog entry" | "run" | "saved view" | "template",
     identifier: string,
   ) {
     super(

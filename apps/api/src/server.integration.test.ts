@@ -783,4 +783,180 @@ describe("@runroot/api integration", () => {
       applyPayload.application.navigation.drilldowns[0]?.result.runId,
     ).toBe(queuedRun.id);
   });
+
+  it("serves audit view catalog publish, list, inspect, archive, and apply paths through the network API", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "runroot-api-catalog-"));
+    const sqlitePath = join(workspaceRoot, "runroot.sqlite");
+    const inlineOperator = createRunrootOperatorService({
+      catalogEntryIdGenerator: () => "catalog_entry_api",
+      executionMode: "inline",
+      persistenceDriver: "sqlite",
+      savedViewIdGenerator: () => "saved_view_api",
+      sqlitePath,
+    });
+    const queuedOperator = createRunrootOperatorService({
+      executionMode: "queued",
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+    const workerService = (
+      await import("@runroot/sdk")
+    ).createRunrootWorkerService({
+      persistenceDriver: "sqlite",
+      sqlitePath,
+      workerId: "worker_catalog_api",
+    });
+
+    await inlineOperator.startRun({
+      input: {
+        approvalRequired: false,
+        commandAlias: "print-ready",
+        runbookId: "node-health-check",
+      },
+      templateId: "shell-runbook-flow",
+    });
+    const queuedRun = await queuedOperator.startRun({
+      input: {
+        approvalRequired: false,
+        commandAlias: "print-ready",
+        runbookId: "node-health-check",
+      },
+      templateId: "shell-runbook-flow",
+    });
+
+    await workerService.processNextJob();
+
+    app = buildServer({
+      operator: createRunrootOperatorService({
+        catalogEntryIdGenerator: () => "catalog_entry_api",
+        persistenceDriver: "sqlite",
+        savedViewIdGenerator: () => "saved_view_api",
+        sqlitePath,
+      }),
+    });
+    const address = await app.listen({
+      host: "127.0.0.1",
+      port: 0,
+    });
+
+    const saveResponse = await fetch(`${address}/audit/saved-views`, {
+      body: JSON.stringify({
+        description: "Queued worker catalog preset",
+        name: "Queued worker catalog preset",
+        navigation: {
+          drilldown: {
+            workerId: "worker_catalog_api",
+          },
+          summary: {
+            executionMode: "queued",
+          },
+        },
+        refs: {
+          auditViewRunId: queuedRun.id,
+        },
+      }),
+      headers: {
+        "content-type": "application/json",
+      },
+      method: "POST",
+    });
+    const savedViewPayload = (await saveResponse.json()) as {
+      savedView: {
+        id: string;
+      };
+    };
+    const publishResponse = await fetch(`${address}/audit/catalog`, {
+      body: JSON.stringify({
+        savedViewId: savedViewPayload.savedView.id,
+      }),
+      headers: {
+        "content-type": "application/json",
+      },
+      method: "POST",
+    });
+    const publishedPayload = (await publishResponse.json()) as {
+      catalogEntry: {
+        entry: {
+          id: string;
+        };
+      };
+    };
+    const listResponse = await fetch(`${address}/audit/catalog`);
+    const getResponse = await fetch(
+      `${address}/audit/catalog/${publishedPayload.catalogEntry.entry.id}`,
+    );
+    const applyResponse = await fetch(
+      `${address}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/apply`,
+    );
+    const archiveResponse = await fetch(
+      `${address}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/archive`,
+      {
+        method: "POST",
+      },
+    );
+    const listAfterArchiveResponse = await fetch(`${address}/audit/catalog`);
+    const listPayload = (await listResponse.json()) as {
+      catalog: {
+        items: Array<{
+          entry: {
+            id: string;
+          };
+        }>;
+        totalCount: number;
+      };
+    };
+    const applyPayload = (await applyResponse.json()) as {
+      application: {
+        application: {
+          navigation: {
+            drilldowns: Array<{
+              result: {
+                runId: string;
+              };
+            }>;
+            totalSummaryCount: number;
+          };
+        };
+        catalogEntry: {
+          entry: {
+            id: string;
+          };
+        };
+      };
+    };
+    const archivePayload = (await archiveResponse.json()) as {
+      catalogEntry: {
+        entry: {
+          archivedAt?: string;
+        };
+      };
+    };
+    const listAfterArchivePayload = (await listAfterArchiveResponse.json()) as {
+      catalog: {
+        totalCount: number;
+      };
+    };
+
+    expect(publishResponse.status).toBe(201);
+    expect(publishedPayload.catalogEntry.entry.id).toBe("catalog_entry_api");
+    expect(listResponse.status).toBe(200);
+    expect(listPayload.catalog.totalCount).toBe(1);
+    expect(listPayload.catalog.items[0]?.entry.id).toBe("catalog_entry_api");
+    expect(getResponse.status).toBe(200);
+    expect(applyResponse.status).toBe(200);
+    expect(applyPayload.application.catalogEntry.entry.id).toBe(
+      "catalog_entry_api",
+    );
+    expect(
+      applyPayload.application.application.navigation.totalSummaryCount,
+    ).toBe(1);
+    expect(
+      applyPayload.application.application.navigation.drilldowns[0]?.result
+        .runId,
+    ).toBe(queuedRun.id);
+    expect(archiveResponse.status).toBe(200);
+    expect(archivePayload.catalogEntry.entry.archivedAt).toBeTruthy();
+    expect(listAfterArchiveResponse.status).toBe(200);
+    expect(listAfterArchivePayload.catalog.totalCount).toBe(0);
+  });
 });

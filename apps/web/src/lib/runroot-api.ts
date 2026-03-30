@@ -298,6 +298,38 @@ export interface ApiAuditSavedViewApplication {
   readonly savedView: ApiAuditSavedView;
 }
 
+export interface ApiAuditCatalogEntry {
+  readonly archivedAt?: string;
+  readonly createdAt: string;
+  readonly description?: string;
+  readonly id: string;
+  readonly kind: "catalog-entry";
+  readonly name: string;
+  readonly savedViewId: string;
+  readonly updatedAt: string;
+}
+
+export interface ApiAuditCatalogEntryView {
+  readonly entry: ApiAuditCatalogEntry;
+  readonly savedView: ApiAuditSavedView;
+}
+
+export interface ApiAuditCatalogEntryCollection {
+  readonly items: readonly ApiAuditCatalogEntryView[];
+  readonly totalCount: number;
+}
+
+export interface ApiAuditCatalogEntryApplication {
+  readonly application: ApiAuditSavedViewApplication;
+  readonly catalogEntry: ApiAuditCatalogEntryView;
+}
+
+export interface CreateApiAuditCatalogEntryInput {
+  readonly description?: string;
+  readonly name?: string;
+  readonly savedViewId: string;
+}
+
 export interface CreateApiAuditSavedViewInput {
   readonly description?: string;
   readonly kind?: ApiAuditSavedViewKind;
@@ -314,9 +346,15 @@ export interface DecideApprovalRequest {
 }
 
 export interface RunrootApiClient {
+  applyAuditCatalogEntry(
+    catalogEntryId: string,
+  ): Promise<ApiAuditCatalogEntryApplication>;
   applySavedAuditView(
     savedViewId: string,
   ): Promise<ApiAuditSavedViewApplication>;
+  archiveAuditCatalogEntry(
+    catalogEntryId: string,
+  ): Promise<ApiAuditCatalogEntryView>;
   decideApproval(
     approvalId: string,
     input: DecideApprovalRequest,
@@ -328,7 +366,11 @@ export interface RunrootApiClient {
   getPendingApprovals(): Promise<readonly PendingApprovalSummary[]>;
   getRun(runId: string): Promise<ApiRun>;
   getAuditView(runId: string): Promise<ApiAuditView>;
+  getAuditCatalogEntry(
+    catalogEntryId: string,
+  ): Promise<ApiAuditCatalogEntryView>;
   getSavedAuditView(savedViewId: string): Promise<ApiAuditSavedView>;
+  listAuditCatalogEntries(): Promise<ApiAuditCatalogEntryCollection>;
   listAuditDrilldowns(
     filters?: ApiCrossRunAuditDrilldownFilters,
   ): Promise<ApiCrossRunAuditDrilldownResults>;
@@ -336,6 +378,9 @@ export interface RunrootApiClient {
     filters?: ApiCrossRunAuditFilters,
   ): Promise<ApiCrossRunAuditResults>;
   listSavedAuditViews(): Promise<ApiAuditSavedViewCollection>;
+  publishAuditCatalogEntry(
+    input: CreateApiAuditCatalogEntryInput,
+  ): Promise<ApiAuditCatalogEntryView>;
   saveSavedAuditView(
     input: CreateApiAuditSavedViewInput,
   ): Promise<ApiAuditSavedView>;
@@ -452,6 +497,18 @@ export function createRunrootApiClient(
   }
 
   return {
+    async applyAuditCatalogEntry(catalogEntryId) {
+      const payload = await requestJson<{
+        application: ApiAuditCatalogEntryApplication;
+      }>(
+        `/audit/catalog/${catalogEntryId}/apply`,
+        { method: "GET" },
+        "web.api.applyAuditCatalogEntry",
+      );
+
+      return payload.application;
+    },
+
     async applySavedAuditView(savedViewId) {
       const payload = await requestJson<{
         application: ApiAuditSavedViewApplication;
@@ -462,6 +519,18 @@ export function createRunrootApiClient(
       );
 
       return payload.application;
+    },
+
+    async archiveAuditCatalogEntry(catalogEntryId) {
+      const payload = await requestJson<{
+        catalogEntry: ApiAuditCatalogEntryView;
+      }>(
+        `/audit/catalog/${catalogEntryId}/archive`,
+        { method: "POST" },
+        "web.api.archiveAuditCatalogEntry",
+      );
+
+      return payload.catalogEntry;
     },
 
     async decideApproval(approvalId, input) {
@@ -532,6 +601,18 @@ export function createRunrootApiClient(
       return payload.audit;
     },
 
+    async getAuditCatalogEntry(catalogEntryId) {
+      const payload = await requestJson<{
+        catalogEntry: ApiAuditCatalogEntryView;
+      }>(
+        `/audit/catalog/${catalogEntryId}`,
+        { method: "GET" },
+        "web.api.getAuditCatalogEntry",
+      );
+
+      return payload.catalogEntry;
+    },
+
     async getSavedAuditView(savedViewId) {
       const payload = await requestJson<{
         savedView: ApiAuditSavedView;
@@ -556,6 +637,18 @@ export function createRunrootApiClient(
       return payload.audit;
     },
 
+    async listAuditCatalogEntries() {
+      const payload = await requestJson<{
+        catalog: ApiAuditCatalogEntryCollection;
+      }>(
+        "/audit/catalog",
+        { method: "GET" },
+        "web.api.listAuditCatalogEntries",
+      );
+
+      return payload.catalog;
+    },
+
     async listAuditResults(filters) {
       const payload = await requestJson<{
         audit: ApiCrossRunAuditResults;
@@ -578,6 +671,24 @@ export function createRunrootApiClient(
       );
 
       return payload.savedViews;
+    },
+
+    async publishAuditCatalogEntry(input) {
+      const payload = await requestJson<{
+        catalogEntry: ApiAuditCatalogEntryView;
+      }>(
+        "/audit/catalog",
+        {
+          body: JSON.stringify(input),
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "POST",
+        },
+        "web.api.publishAuditCatalogEntry",
+      );
+
+      return payload.catalogEntry;
     },
 
     async saveSavedAuditView(input) {

@@ -25,7 +25,7 @@ describe("@runroot/api", () => {
     expect(response.json()).toEqual({
       status: "ok",
       project: "Runroot",
-      phase: 15,
+      phase: 16,
     });
   });
 
@@ -475,5 +475,160 @@ describe("@runroot/api", () => {
     expect(saveResponse.body).toContain(
       "Saved audit views require at least one stable summary or drilldown filter",
     );
+  });
+
+  it("publishes, lists, inspects, archives, and applies audit view catalog entries through the operator API", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "runroot-api-catalog-"));
+    app = buildServer({
+      operator: createRunrootOperatorService({
+        catalogEntryIdGenerator: () => "catalog_entry_api",
+        savedViewIdGenerator: () => "saved_view_api",
+        workspacePath: join(workspaceRoot, "workspace.json"),
+      }),
+    });
+
+    const createResponse = await app.inject({
+      method: "POST",
+      payload: {
+        input: {
+          approvalRequired: false,
+          commandAlias: "print-ready",
+          runbookId: "node-health-check",
+        },
+        templateId: "shell-runbook-flow",
+      },
+      url: "/runs",
+    });
+    const createdPayload = createResponse.json() as {
+      run: {
+        id: string;
+      };
+    };
+    const saveResponse = await app.inject({
+      method: "POST",
+      payload: {
+        name: "Saved run detail",
+        navigation: {
+          drilldown: {
+            runId: createdPayload.run.id,
+          },
+          summary: {
+            definitionId: "shell-runbook-flow",
+          },
+        },
+        refs: {
+          auditViewRunId: createdPayload.run.id,
+        },
+      },
+      url: "/audit/saved-views",
+    });
+    const savedViewPayload = saveResponse.json() as {
+      savedView: {
+        id: string;
+      };
+    };
+    const publishResponse = await app.inject({
+      method: "POST",
+      payload: {
+        savedViewId: savedViewPayload.savedView.id,
+      },
+      url: "/audit/catalog",
+    });
+    const publishedPayload = publishResponse.json() as {
+      catalogEntry: {
+        entry: {
+          id: string;
+        };
+      };
+    };
+    const listResponse = await app.inject({
+      method: "GET",
+      url: "/audit/catalog",
+    });
+    const listPayload = listResponse.json() as {
+      catalog: {
+        items: Array<{
+          entry: {
+            id: string;
+          };
+        }>;
+        totalCount: number;
+      };
+    };
+    const getResponse = await app.inject({
+      method: "GET",
+      url: `/audit/catalog/${publishedPayload.catalogEntry.entry.id}`,
+    });
+    const applyResponse = await app.inject({
+      method: "GET",
+      url: `/audit/catalog/${publishedPayload.catalogEntry.entry.id}/apply`,
+    });
+    const archiveResponse = await app.inject({
+      method: "POST",
+      url: `/audit/catalog/${publishedPayload.catalogEntry.entry.id}/archive`,
+    });
+    const listArchivedResponse = await app.inject({
+      method: "GET",
+      url: "/audit/catalog",
+    });
+    const applyPayload = applyResponse.json() as {
+      application: {
+        application: {
+          navigation: {
+            drilldowns: Array<{
+              result: {
+                runId: string;
+              };
+            }>;
+            totalSummaryCount: number;
+          };
+          savedView: {
+            id: string;
+          };
+        };
+        catalogEntry: {
+          entry: {
+            id: string;
+          };
+        };
+      };
+    };
+    const archivePayload = archiveResponse.json() as {
+      catalogEntry: {
+        entry: {
+          archivedAt?: string;
+        };
+      };
+    };
+    const archivedListPayload = listArchivedResponse.json() as {
+      catalog: {
+        totalCount: number;
+      };
+    };
+
+    expect(publishResponse.statusCode).toBe(201);
+    expect(publishedPayload.catalogEntry.entry.id).toBe("catalog_entry_api");
+    expect(listResponse.statusCode).toBe(200);
+    expect(listPayload.catalog.totalCount).toBe(1);
+    expect(listPayload.catalog.items[0]?.entry.id).toBe("catalog_entry_api");
+    expect(getResponse.statusCode).toBe(200);
+    expect(applyResponse.statusCode).toBe(200);
+    expect(applyPayload.application.catalogEntry.entry.id).toBe(
+      "catalog_entry_api",
+    );
+    expect(applyPayload.application.application.savedView.id).toBe(
+      savedViewPayload.savedView.id,
+    );
+    expect(
+      applyPayload.application.application.navigation.totalSummaryCount,
+    ).toBe(1);
+    expect(
+      applyPayload.application.application.navigation.drilldowns[0]?.result
+        .runId,
+    ).toBe(createdPayload.run.id);
+    expect(archiveResponse.statusCode).toBe(200);
+    expect(archivePayload.catalogEntry.entry.archivedAt).toBeTruthy();
+    expect(listArchivedResponse.statusCode).toBe(200);
+    expect(archivedListPayload.catalog.totalCount).toBe(0);
   });
 });
