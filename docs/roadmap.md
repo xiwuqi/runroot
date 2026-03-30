@@ -218,4 +218,22 @@ Status: completed
 - keep the phase focused on catalog visibility and shared presets rather than
   collaborative comments, multi-user curation, or broad platform work
 
-Status: implemented on branch, pending phase review
+Status: completed
+
+## Phase 18: Cross-Run Audit Catalog Review Signals and Shared Notes
+
+- add a shared audit-catalog review-signal contract over the existing catalog
+  visibility path rather than introducing a full collaboration or approval
+  product
+- expose minimal review, list-reviewed, inspect-review, clear-review, and
+  apply paths through the existing seams in SDK, API, CLI, and web
+- keep operator surfaces thin while allowing shared presets to carry light
+  review cues and notes without expanding into fine-grained RBAC,
+  multi-tenant access, dashboard, search, or analytics products
+- execute against the formal handoff in
+  [docs/architecture/phase-18-handoff.md](./architecture/phase-18-handoff.md)
+- keep the phase focused on review signals and shared notes rather than
+  threaded collaboration, SaaS catalogs, or broad observability and analytics
+  platform work
+
+Status: scope frozen on branch, pending docs PR
