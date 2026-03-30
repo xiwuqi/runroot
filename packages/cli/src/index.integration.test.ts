@@ -824,4 +824,241 @@ describe("@runroot/cli integration", () => {
       applyPayload.application.navigation.drilldowns[0]?.result.runId,
     ).toBe(queuedRun.run.id);
   });
+
+  it("publishes, lists, shows, archives, and applies audit view catalog entries through the CLI", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "runroot-cli-catalog-"));
+    const sqlitePath = join(workspaceRoot, "runroot.sqlite");
+    const inputFile = join(workspaceRoot, "shell-runbook.json");
+    await writeFile(
+      inputFile,
+      JSON.stringify({
+        approvalRequired: false,
+        commandAlias: "print-ready",
+        runbookId: "node-health-check",
+      }),
+    );
+    const inlineStartIo = createIo();
+    const queuedStartIo = createIo();
+    const saveIo = createIo();
+    const publishIo = createIo();
+    const listIo = createIo();
+    const showIo = createIo();
+    const applyIo = createIo();
+    const archiveIo = createIo();
+    const listAfterArchiveIo = createIo();
+
+    await runCli(
+      ["runs", "start", "shell-runbook-flow", "--input-file", inputFile],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: inlineStartIo.io,
+      },
+    );
+
+    await runCli(
+      ["runs", "start", "shell-runbook-flow", "--input-file", inputFile],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_EXECUTION_MODE: "queued",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: queuedStartIo.io,
+      },
+    );
+    const queuedRun = JSON.parse(queuedStartIo.stdout.join("")) as {
+      run: {
+        id: string;
+      };
+    };
+
+    const worker = createRunrootWorkerService({
+      persistenceDriver: "sqlite",
+      sqlitePath,
+      workerId: "worker_cli_catalog",
+    });
+    await worker.processNextJob();
+
+    await runCli(
+      [
+        "audit",
+        "saved-views",
+        "save",
+        "--name",
+        "Queued worker preset",
+        "--description",
+        "Saved queued worker investigation",
+        "--execution-mode",
+        "queued",
+        "--worker-id",
+        "worker_cli_catalog",
+        "--audit-view-run-id",
+        queuedRun.run.id,
+      ],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: saveIo.io,
+      },
+    );
+    const savedViewPayload = JSON.parse(saveIo.stdout.join("")) as {
+      savedView: {
+        id: string;
+      };
+    };
+
+    const publishExitCode = await runCli(
+      ["audit", "catalog", "publish", savedViewPayload.savedView.id],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: publishIo.io,
+      },
+    );
+    const publishedPayload = JSON.parse(publishIo.stdout.join("")) as {
+      catalogEntry: {
+        entry: {
+          id: string;
+        };
+      };
+    };
+    const listExitCode = await runCli(["audit", "catalog", "list"], {
+      cwd: workspaceRoot,
+      env: {
+        RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+        RUNROOT_SQLITE_PATH: sqlitePath,
+      },
+      io: listIo.io,
+    });
+    const showExitCode = await runCli(
+      ["audit", "catalog", "show", publishedPayload.catalogEntry.entry.id],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: showIo.io,
+      },
+    );
+    const applyExitCode = await runCli(
+      ["audit", "catalog", "apply", publishedPayload.catalogEntry.entry.id],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: applyIo.io,
+      },
+    );
+    const archiveExitCode = await runCli(
+      ["audit", "catalog", "archive", publishedPayload.catalogEntry.entry.id],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: archiveIo.io,
+      },
+    );
+    const listAfterArchiveExitCode = await runCli(
+      ["audit", "catalog", "list"],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: listAfterArchiveIo.io,
+      },
+    );
+    const listPayload = JSON.parse(listIo.stdout.join("")) as {
+      catalog: {
+        items: Array<{
+          entry: {
+            id: string;
+          };
+        }>;
+        totalCount: number;
+      };
+    };
+    const showPayload = JSON.parse(showIo.stdout.join("")) as {
+      catalogEntry: {
+        savedView: {
+          refs: {
+            auditViewRunId?: string;
+          };
+        };
+      };
+    };
+    const applyPayload = JSON.parse(applyIo.stdout.join("")) as {
+      application: {
+        application: {
+          navigation: {
+            drilldowns: Array<{
+              result: {
+                runId: string;
+              };
+            }>;
+            totalSummaryCount: number;
+          };
+        };
+        catalogEntry: {
+          entry: {
+            id: string;
+          };
+        };
+      };
+    };
+    const archivePayload = JSON.parse(archiveIo.stdout.join("")) as {
+      catalogEntry: {
+        entry: {
+          archivedAt?: string;
+        };
+      };
+    };
+    const listAfterArchivePayload = JSON.parse(
+      listAfterArchiveIo.stdout.join(""),
+    ) as {
+      catalog: {
+        totalCount: number;
+      };
+    };
+
+    expect(publishExitCode).toBe(0);
+    expect(listExitCode).toBe(0);
+    expect(showExitCode).toBe(0);
+    expect(applyExitCode).toBe(0);
+    expect(archiveExitCode).toBe(0);
+    expect(listAfterArchiveExitCode).toBe(0);
+    expect(listPayload.catalog.totalCount).toBe(1);
+    expect(showPayload.catalogEntry.savedView.refs.auditViewRunId).toBe(
+      queuedRun.run.id,
+    );
+    expect(applyPayload.application.catalogEntry.entry.id).toBe(
+      publishedPayload.catalogEntry.entry.id,
+    );
+    expect(
+      applyPayload.application.application.navigation.totalSummaryCount,
+    ).toBe(1);
+    expect(
+      applyPayload.application.application.navigation.drilldowns[0]?.result
+        .runId,
+    ).toBe(queuedRun.run.id);
+    expect(archivePayload.catalogEntry.entry.archivedAt).toBeTruthy();
+    expect(listAfterArchivePayload.catalog.totalCount).toBe(0);
+  });
 });

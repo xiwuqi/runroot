@@ -12,6 +12,7 @@ import ApprovalsPage from "./approvals/page";
 import RunDetailPage from "./runs/[runId]/page";
 import { POST as resumeRun } from "./runs/[runId]/resume/route";
 import RunTimelinePage from "./runs/[runId]/timeline/page";
+import { POST as mutateCatalog } from "./runs/catalog/route";
 import RunsPage from "./runs/page";
 import { POST as saveSavedView } from "./runs/saved-views/route";
 
@@ -315,6 +316,135 @@ describe("@runroot/web integration", () => {
       expect(savedViewMarkup).toContain("Queued worker follow-up");
       expect(savedViewMarkup).toContain("Currently applied");
       expect(savedViewMarkup).toContain(queuedRun.id);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("renders, publishes, archives, and applies audit view catalogs through the existing API surface", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "runroot-web-catalog-"));
+    const sqlitePath = join(workspaceRoot, "runroot.sqlite");
+    const inlineOperator = createRunrootOperatorService({
+      catalogEntryIdGenerator: () => "catalog_entry_web",
+      executionMode: "inline",
+      persistenceDriver: "sqlite",
+      savedViewIdGenerator: () => "saved_view_web",
+      sqlitePath,
+    });
+    const queuedOperator = createRunrootOperatorService({
+      executionMode: "queued",
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+    const workerService = (
+      await import("@runroot/sdk")
+    ).createRunrootWorkerService({
+      persistenceDriver: "sqlite",
+      sqlitePath,
+      workerId: "worker_web_catalog",
+    });
+    const app = buildServer({
+      operator: createRunrootOperatorService({
+        catalogEntryIdGenerator: () => "catalog_entry_web",
+        persistenceDriver: "sqlite",
+        savedViewIdGenerator: () => "saved_view_web",
+        sqlitePath,
+      }),
+    });
+
+    try {
+      await inlineOperator.startRun({
+        input: {
+          approvalRequired: false,
+          commandAlias: "print-ready",
+          runbookId: "node-health-check",
+        },
+        templateId: "shell-runbook-flow",
+      });
+      const queuedRun = await queuedOperator.startRun({
+        input: {
+          approvalRequired: false,
+          commandAlias: "print-ready",
+          runbookId: "node-health-check",
+        },
+        templateId: "shell-runbook-flow",
+      });
+
+      await workerService.processNextJob();
+
+      const address = await app.listen({
+        host: "127.0.0.1",
+        port: 0,
+      });
+      process.env.RUNROOT_API_BASE_URL = address;
+
+      const saveForm = new FormData();
+      saveForm.set("name", "Queued worker follow-up");
+      saveForm.set("description", "Saved queued worker investigation");
+      saveForm.set("summaryExecutionMode", "queued");
+      saveForm.set("drilldownWorkerId", "worker_web_catalog");
+      saveForm.set("returnTo", "/runs");
+
+      const saveResponse = await saveSavedView(
+        new Request("http://localhost/runs/saved-views", {
+          body: saveForm,
+          method: "POST",
+        }),
+      );
+      const savedViewLocation = saveResponse.headers.get("Location");
+
+      expect(saveResponse.status).toBe(303);
+      expect(savedViewLocation).toContain("savedViewId=saved_view_web");
+
+      const publishForm = new FormData();
+      publishForm.set("intent", "publish");
+      publishForm.set("savedViewId", "saved_view_web");
+
+      const publishResponse = await mutateCatalog(
+        new Request("http://localhost/runs/catalog", {
+          body: publishForm,
+          method: "POST",
+        }),
+      );
+      const publishLocation = publishResponse.headers.get("Location");
+
+      expect(publishResponse.status).toBe(303);
+      expect(publishLocation).toContain("catalogEntryId=catalog_entry_web");
+
+      const catalogMarkup = renderToStaticMarkup(
+        await RunsPage({
+          searchParams: Promise.resolve({
+            catalogEntryId: "catalog_entry_web",
+          }),
+        }),
+      );
+
+      expect(catalogMarkup).toContain("Audit view catalogs");
+      expect(catalogMarkup).toContain("Queued worker follow-up");
+      expect(catalogMarkup).toContain("Currently applied");
+      expect(catalogMarkup).toContain(queuedRun.id);
+
+      const archiveForm = new FormData();
+      archiveForm.set("catalogEntryId", "catalog_entry_web");
+      archiveForm.set("intent", "archive");
+
+      const archiveResponse = await mutateCatalog(
+        new Request("http://localhost/runs/catalog", {
+          body: archiveForm,
+          method: "POST",
+        }),
+      );
+
+      expect(archiveResponse.status).toBe(303);
+
+      const archivedMarkup = renderToStaticMarkup(
+        await RunsPage({
+          searchParams: Promise.resolve({}),
+        }),
+      );
+
+      expect(archivedMarkup).toContain("Audit view catalogs");
+      expect(archivedMarkup).not.toContain("catalog_entry_web");
     } finally {
       await app.close();
     }

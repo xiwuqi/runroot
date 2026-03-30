@@ -10,9 +10,9 @@ import {
 describe("@runroot/config", () => {
   it("exposes phase-aware project metadata", () => {
     expect(projectMetadata.name).toBe("Runroot");
-    expect(projectMetadata.currentPhase).toBe(15);
+    expect(projectMetadata.currentPhase).toBe(16);
     expect(projectMetadata.phaseName).toBe(
-      "Cross-Run Audit Saved Views and Operator Presets",
+      "Cross-Run Audit View Catalogs and Curated Operator Presets",
     );
   });
 
