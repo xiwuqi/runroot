@@ -213,6 +213,12 @@ export function buildServer(options: BuildServerOptions = {}) {
     })),
   );
 
+  app.get("/audit/catalog", async (_request, reply) =>
+    handleOperatorResponse(reply, async () => ({
+      catalog: await operator.listCatalogEntries(),
+    })),
+  );
+
   app.post("/audit/saved-views", async (request, reply) =>
     handleOperatorResponse(reply, async () => {
       const body = request.body as {
@@ -268,6 +274,32 @@ export function buildServer(options: BuildServerOptions = {}) {
     }),
   );
 
+  app.post("/audit/catalog", async (request, reply) =>
+    handleOperatorResponse(reply, async () => {
+      const body = request.body as {
+        readonly description?: string;
+        readonly name?: string;
+        readonly savedViewId?: string;
+      };
+
+      if (!body?.savedViewId) {
+        throw new OperatorInputError("savedViewId is required.");
+      }
+
+      const catalogEntry = await operator.publishCatalogEntry({
+        ...(body.description ? { description: body.description } : {}),
+        ...(body.name ? { name: body.name } : {}),
+        savedViewId: body.savedViewId,
+      });
+
+      reply.code(201);
+
+      return {
+        catalogEntry,
+      };
+    }),
+  );
+
   app.get("/audit/saved-views/:savedViewId", async (request, reply) =>
     handleOperatorResponse(reply, async () => {
       const params = request.params as {
@@ -280,6 +312,18 @@ export function buildServer(options: BuildServerOptions = {}) {
     }),
   );
 
+  app.get("/audit/catalog/:catalogEntryId", async (request, reply) =>
+    handleOperatorResponse(reply, async () => {
+      const params = request.params as {
+        readonly catalogEntryId: string;
+      };
+
+      return {
+        catalogEntry: await operator.getCatalogEntry(params.catalogEntryId),
+      };
+    }),
+  );
+
   app.get("/audit/saved-views/:savedViewId/apply", async (request, reply) =>
     handleOperatorResponse(reply, async () => {
       const params = request.params as {
@@ -288,6 +332,30 @@ export function buildServer(options: BuildServerOptions = {}) {
 
       return {
         application: await operator.applySavedView(params.savedViewId),
+      };
+    }),
+  );
+
+  app.post("/audit/catalog/:catalogEntryId/archive", async (request, reply) =>
+    handleOperatorResponse(reply, async () => {
+      const params = request.params as {
+        readonly catalogEntryId: string;
+      };
+
+      return {
+        catalogEntry: await operator.archiveCatalogEntry(params.catalogEntryId),
+      };
+    }),
+  );
+
+  app.get("/audit/catalog/:catalogEntryId/apply", async (request, reply) =>
+    handleOperatorResponse(reply, async () => {
+      const params = request.params as {
+        readonly catalogEntryId: string;
+      };
+
+      return {
+        application: await operator.applyCatalogEntry(params.catalogEntryId),
       };
     }),
   );

@@ -17,6 +17,7 @@ import type { DispatchQueue } from "@runroot/dispatch";
 import type { JsonValue, WorkflowRun } from "@runroot/domain";
 import type { RunrootLogger, RunrootTracer } from "@runroot/observability";
 import {
+  createConfiguredAuditViewCatalogStore,
   createConfiguredDispatchQueue,
   createConfiguredRuntimePersistence,
   createConfiguredSavedAuditViewStore,
@@ -24,6 +25,10 @@ import {
   type RuntimePersistence,
 } from "@runroot/persistence";
 import {
+  type CrossRunAuditCatalogEntryApplication,
+  type CrossRunAuditCatalogEntryCollection,
+  type CrossRunAuditCatalogEntryView,
+  type CrossRunAuditCatalogStore,
   type CrossRunAuditDrilldownFilters,
   type CrossRunAuditDrilldownResults,
   type CrossRunAuditNavigationFilters,
@@ -36,6 +41,7 @@ import {
   type CrossRunAuditSavedViewKind,
   type CrossRunAuditSavedViewNavigationRefs,
   type CrossRunAuditSavedViewStore,
+  createCrossRunAuditCatalogQuery,
   createCrossRunAuditDrilldownQuery,
   createCrossRunAuditNavigationQuery,
   createCrossRunAuditQuery,
@@ -95,8 +101,17 @@ export interface SaveAuditSavedViewInput {
   readonly refs?: CrossRunAuditSavedViewNavigationRefs;
 }
 
+export interface PublishAuditViewCatalogEntryInput {
+  readonly description?: string;
+  readonly name?: string;
+  readonly savedViewId: string;
+}
+
 export interface RunrootOperatorService {
+  applyCatalogEntry(id: string): Promise<CrossRunAuditCatalogEntryApplication>;
   applySavedView(id: string): Promise<CrossRunAuditSavedViewApplication>;
+  archiveCatalogEntry(id: string): Promise<CrossRunAuditCatalogEntryView>;
+  getCatalogEntry(id: string): Promise<CrossRunAuditCatalogEntryView>;
   getAuditNavigation(
     filters?: Partial<CrossRunAuditNavigationFilters>,
   ): Promise<CrossRunAuditNavigationView>;
@@ -116,12 +131,16 @@ export interface RunrootOperatorService {
   listAuditDrilldowns(
     filters?: CrossRunAuditDrilldownFilters,
   ): Promise<CrossRunAuditDrilldownResults>;
+  listCatalogEntries(): Promise<CrossRunAuditCatalogEntryCollection>;
   listAuditResults(
     filters?: CrossRunAuditQueryFilters,
   ): Promise<CrossRunAuditResults>;
   listSavedViews(): Promise<CrossRunAuditSavedViewCollection>;
   listRuns(): Promise<readonly WorkflowRun[]>;
   listTemplates(): readonly WorkflowTemplateDescriptor[];
+  publishCatalogEntry(
+    input: PublishAuditViewCatalogEntryInput,
+  ): Promise<CrossRunAuditCatalogEntryView>;
   resumeRun(runId: string): Promise<WorkflowRun>;
   saveSavedView(
     input: SaveAuditSavedViewInput,
@@ -131,6 +150,8 @@ export interface RunrootOperatorService {
 
 export interface RunrootOperatorServiceOptions {
   readonly approvalIdGenerator?: () => string;
+  readonly catalogEntryIdGenerator?: () => string;
+  readonly catalogStore?: CrossRunAuditCatalogStore;
   readonly databaseUrl?: string;
   readonly dispatchQueue?: DispatchQueue;
   readonly env?: Readonly<Record<string, string | undefined>>;
@@ -153,6 +174,8 @@ export function createRunrootOperatorService(
   options: RunrootOperatorServiceOptions = {},
 ): RunrootOperatorService {
   const now = options.now ?? (() => new Date().toISOString());
+  const createCatalogEntryId =
+    options.catalogEntryIdGenerator ?? (() => `catalog_entry_${randomUUID()}`);
   const createSavedViewId =
     options.savedViewIdGenerator ?? (() => `saved_view_${randomUUID()}`);
   const persistenceConfig = resolvePersistenceConfig({
@@ -191,6 +214,19 @@ export function createRunrootOperatorService(
   const savedViewStore =
     options.savedViewStore ??
     createConfiguredSavedAuditViewStore({
+      ...(options.databaseUrl ? { databaseUrl: options.databaseUrl } : {}),
+      ...(options.env ? { env: options.env } : {}),
+      ...(options.persistenceDriver
+        ? { driver: options.persistenceDriver }
+        : {}),
+      ...(options.sqlitePath ? { sqlitePath: options.sqlitePath } : {}),
+      ...(options.workspacePath
+        ? { workspacePath: options.workspacePath }
+        : {}),
+    });
+  const catalogStore =
+    options.catalogStore ??
+    createConfiguredAuditViewCatalogStore({
       ...(options.databaseUrl ? { databaseUrl: options.databaseUrl } : {}),
       ...(options.env ? { env: options.env } : {}),
       ...(options.persistenceDriver
@@ -286,9 +322,23 @@ export function createRunrootOperatorService(
     savedViewStore,
     crossRunAuditNavigation,
   );
+  const crossRunAuditCatalog = createCrossRunAuditCatalogQuery(
+    catalogStore,
+    crossRunAuditSavedViews,
+  );
   const persistenceLocation = persistenceConfig.location;
 
   return {
+    async applyCatalogEntry(id) {
+      const application = await crossRunAuditCatalog.applyCatalogEntry(id);
+
+      if (!application) {
+        throw new OperatorNotFoundError("catalog entry", id);
+      }
+
+      return application;
+    },
+
     async applySavedView(id) {
       const application = await crossRunAuditSavedViews.applySavedView(id);
 
@@ -297,6 +347,19 @@ export function createRunrootOperatorService(
       }
 
       return application;
+    },
+
+    async archiveCatalogEntry(id) {
+      const catalogEntry = await crossRunAuditCatalog.archiveCatalogEntry(
+        id,
+        now(),
+      );
+
+      if (!catalogEntry) {
+        throw new OperatorNotFoundError("catalog entry", id);
+      }
+
+      return catalogEntry;
     },
 
     async decideApproval(approvalId, input) {
@@ -337,6 +400,16 @@ export function createRunrootOperatorService(
       await requireRun(runtime, runId);
 
       return audit.getAuditView(runId);
+    },
+
+    async getCatalogEntry(id) {
+      const catalogEntry = await crossRunAuditCatalog.getCatalogEntry(id);
+
+      if (!catalogEntry) {
+        throw new OperatorNotFoundError("catalog entry", id);
+      }
+
+      return catalogEntry;
     },
 
     async getSavedView(id) {
@@ -391,6 +464,10 @@ export function createRunrootOperatorService(
       return crossRunAuditDrilldowns.listAuditDrilldowns(filters);
     },
 
+    async listCatalogEntries() {
+      return crossRunAuditCatalog.listCatalogEntries();
+    },
+
     async listAuditResults(filters) {
       return crossRunAudit.listAuditResults(filters);
     },
@@ -405,6 +482,35 @@ export function createRunrootOperatorService(
 
     listTemplates() {
       return templates.list().map((template) => template.descriptor);
+    },
+
+    async publishCatalogEntry(input) {
+      const savedView = await crossRunAuditSavedViews.getSavedView(
+        input.savedViewId,
+      );
+
+      if (!savedView) {
+        throw new OperatorNotFoundError("saved view", input.savedViewId);
+      }
+
+      try {
+        return await crossRunAuditCatalog.publishCatalogEntry({
+          ...(input.description ? { description: input.description } : {}),
+          id: createCatalogEntryId(),
+          ...(input.name ? { name: input.name } : {}),
+          savedViewId: savedView.id,
+          timestamp: now(),
+        });
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          error.message.startsWith("Catalog entries require")
+        ) {
+          throw new OperatorInputError(error.message);
+        }
+
+        throw normalizeOperatorError(error);
+      }
     },
 
     async resumeRun(runId) {
