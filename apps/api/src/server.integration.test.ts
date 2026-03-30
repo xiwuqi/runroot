@@ -784,7 +784,7 @@ describe("@runroot/api integration", () => {
     ).toBe(queuedRun.id);
   });
 
-  it("serves audit view catalog publish, list, inspect, archive, and apply paths through the network API", async () => {
+  it("serves audit view catalog publish, share, list-visible, inspect, unshare, archive, and apply paths through the network API", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "runroot-api-catalog-"));
     const sqlitePath = join(workspaceRoot, "runroot.sqlite");
     const inlineOperator = createRunrootOperatorService({
@@ -882,11 +882,27 @@ describe("@runroot/api integration", () => {
       };
     };
     const listResponse = await fetch(`${address}/audit/catalog`);
+    const visibleResponse = await fetch(`${address}/audit/catalog/visible`);
+    const inspectResponse = await fetch(
+      `${address}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/visibility`,
+    );
+    const shareResponse = await fetch(
+      `${address}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/share`,
+      {
+        method: "POST",
+      },
+    );
     const getResponse = await fetch(
       `${address}/audit/catalog/${publishedPayload.catalogEntry.entry.id}`,
     );
     const applyResponse = await fetch(
       `${address}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/apply`,
+    );
+    const unshareResponse = await fetch(
+      `${address}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/unshare`,
+      {
+        method: "POST",
+      },
     );
     const archiveResponse = await fetch(
       `${address}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/archive`,
@@ -903,6 +919,31 @@ describe("@runroot/api integration", () => {
           };
         }>;
         totalCount: number;
+      };
+    };
+    const visiblePayload = (await visibleResponse.json()) as {
+      visibility: {
+        items: Array<{
+          visibility: {
+            state: "personal" | "shared";
+          };
+        }>;
+        totalCount: number;
+      };
+    };
+    const inspectPayload = (await inspectResponse.json()) as {
+      visibility: {
+        visibility: {
+          state: "personal" | "shared";
+        };
+      };
+    };
+    const sharePayload = (await shareResponse.json()) as {
+      visibility: {
+        visibility: {
+          scopeId: string;
+          state: "personal" | "shared";
+        };
       };
     };
     const applyPayload = (await applyResponse.json()) as {
@@ -924,6 +965,14 @@ describe("@runroot/api integration", () => {
         };
       };
     };
+    const unsharePayload = (await unshareResponse.json()) as {
+      visibility: {
+        visibility: {
+          ownerId: string;
+          state: "personal" | "shared";
+        };
+      };
+    };
     const archivePayload = (await archiveResponse.json()) as {
       catalogEntry: {
         entry: {
@@ -940,8 +989,18 @@ describe("@runroot/api integration", () => {
     expect(publishResponse.status).toBe(201);
     expect(publishedPayload.catalogEntry.entry.id).toBe("catalog_entry_api");
     expect(listResponse.status).toBe(200);
+    expect(visibleResponse.status).toBe(200);
     expect(listPayload.catalog.totalCount).toBe(1);
     expect(listPayload.catalog.items[0]?.entry.id).toBe("catalog_entry_api");
+    expect(visiblePayload.visibility.totalCount).toBe(1);
+    expect(visiblePayload.visibility.items[0]?.visibility.state).toBe(
+      "personal",
+    );
+    expect(inspectResponse.status).toBe(200);
+    expect(inspectPayload.visibility.visibility.state).toBe("personal");
+    expect(shareResponse.status).toBe(200);
+    expect(sharePayload.visibility.visibility.state).toBe("shared");
+    expect(sharePayload.visibility.visibility.scopeId).toBe("workspace");
     expect(getResponse.status).toBe(200);
     expect(applyResponse.status).toBe(200);
     expect(applyPayload.application.catalogEntry.entry.id).toBe(
@@ -954,6 +1013,9 @@ describe("@runroot/api integration", () => {
       applyPayload.application.application.navigation.drilldowns[0]?.result
         .runId,
     ).toBe(queuedRun.id);
+    expect(unshareResponse.status).toBe(200);
+    expect(unsharePayload.visibility.visibility.state).toBe("personal");
+    expect(unsharePayload.visibility.visibility.ownerId).toBe("operator");
     expect(archiveResponse.status).toBe(200);
     expect(archivePayload.catalogEntry.entry.archivedAt).toBeTruthy();
     expect(listAfterArchiveResponse.status).toBe(200);

@@ -321,7 +321,7 @@ describe("@runroot/web integration", () => {
     }
   });
 
-  it("renders, publishes, archives, and applies audit view catalogs through the existing API surface", async () => {
+  it("renders, publishes, shares, unshares, archives, and applies audit view catalogs through the existing API surface", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "runroot-web-catalog-"));
     const sqlitePath = join(workspaceRoot, "runroot.sqlite");
     const inlineOperator = createRunrootOperatorService({
@@ -419,10 +419,58 @@ describe("@runroot/web integration", () => {
         }),
       );
 
-      expect(catalogMarkup).toContain("Audit view catalogs");
+      expect(catalogMarkup).toContain("Catalog visibility");
       expect(catalogMarkup).toContain("Queued worker follow-up");
       expect(catalogMarkup).toContain("Currently applied");
+      expect(catalogMarkup).toContain("personal");
       expect(catalogMarkup).toContain(queuedRun.id);
+
+      const shareForm = new FormData();
+      shareForm.set("catalogEntryId", "catalog_entry_web");
+      shareForm.set("intent", "share");
+
+      const shareResponse = await mutateCatalog(
+        new Request("http://localhost/runs/catalog", {
+          body: shareForm,
+          method: "POST",
+        }),
+      );
+
+      expect(shareResponse.status).toBe(303);
+
+      const sharedMarkup = renderToStaticMarkup(
+        await RunsPage({
+          searchParams: Promise.resolve({
+            catalogEntryId: "catalog_entry_web",
+          }),
+        }),
+      );
+
+      expect(sharedMarkup).toContain("shared");
+      expect(sharedMarkup).toContain("Make personal");
+
+      const unshareForm = new FormData();
+      unshareForm.set("catalogEntryId", "catalog_entry_web");
+      unshareForm.set("intent", "unshare");
+
+      const unshareResponse = await mutateCatalog(
+        new Request("http://localhost/runs/catalog", {
+          body: unshareForm,
+          method: "POST",
+        }),
+      );
+
+      expect(unshareResponse.status).toBe(303);
+
+      const unsharedMarkup = renderToStaticMarkup(
+        await RunsPage({
+          searchParams: Promise.resolve({
+            catalogEntryId: "catalog_entry_web",
+          }),
+        }),
+      );
+
+      expect(unsharedMarkup).toContain("personal");
 
       const archiveForm = new FormData();
       archiveForm.set("catalogEntryId", "catalog_entry_web");
@@ -443,7 +491,7 @@ describe("@runroot/web integration", () => {
         }),
       );
 
-      expect(archivedMarkup).toContain("Audit view catalogs");
+      expect(archivedMarkup).toContain("Catalog visibility");
       expect(archivedMarkup).not.toContain("catalog_entry_web");
     } finally {
       await app.close();

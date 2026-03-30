@@ -825,7 +825,7 @@ describe("@runroot/cli integration", () => {
     ).toBe(queuedRun.run.id);
   });
 
-  it("publishes, lists, shows, archives, and applies audit view catalog entries through the CLI", async () => {
+  it("publishes, shares, lists-visible, inspects, unshares, archives, and applies audit view catalog entries through the CLI", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "runroot-cli-catalog-"));
     const sqlitePath = join(workspaceRoot, "runroot.sqlite");
     const inputFile = join(workspaceRoot, "shell-runbook.json");
@@ -842,8 +842,12 @@ describe("@runroot/cli integration", () => {
     const saveIo = createIo();
     const publishIo = createIo();
     const listIo = createIo();
+    const visibleIo = createIo();
+    const inspectIo = createIo();
+    const shareIo = createIo();
     const showIo = createIo();
     const applyIo = createIo();
+    const unshareIo = createIo();
     const archiveIo = createIo();
     const listAfterArchiveIo = createIo();
 
@@ -941,6 +945,36 @@ describe("@runroot/cli integration", () => {
       },
       io: listIo.io,
     });
+    const visibleExitCode = await runCli(["audit", "catalog", "visible"], {
+      cwd: workspaceRoot,
+      env: {
+        RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+        RUNROOT_SQLITE_PATH: sqlitePath,
+      },
+      io: visibleIo.io,
+    });
+    const inspectExitCode = await runCli(
+      ["audit", "catalog", "inspect", publishedPayload.catalogEntry.entry.id],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: inspectIo.io,
+      },
+    );
+    const shareExitCode = await runCli(
+      ["audit", "catalog", "share", publishedPayload.catalogEntry.entry.id],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: shareIo.io,
+      },
+    );
     const showExitCode = await runCli(
       ["audit", "catalog", "show", publishedPayload.catalogEntry.entry.id],
       {
@@ -961,6 +995,17 @@ describe("@runroot/cli integration", () => {
           RUNROOT_SQLITE_PATH: sqlitePath,
         },
         io: applyIo.io,
+      },
+    );
+    const unshareExitCode = await runCli(
+      ["audit", "catalog", "unshare", publishedPayload.catalogEntry.entry.id],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: unshareIo.io,
       },
     );
     const archiveExitCode = await runCli(
@@ -995,6 +1040,31 @@ describe("@runroot/cli integration", () => {
         totalCount: number;
       };
     };
+    const visiblePayload = JSON.parse(visibleIo.stdout.join("")) as {
+      visibility: {
+        items: Array<{
+          visibility: {
+            state: "personal" | "shared";
+          };
+        }>;
+        totalCount: number;
+      };
+    };
+    const inspectPayload = JSON.parse(inspectIo.stdout.join("")) as {
+      visibility: {
+        visibility: {
+          state: "personal" | "shared";
+        };
+      };
+    };
+    const sharePayload = JSON.parse(shareIo.stdout.join("")) as {
+      visibility: {
+        visibility: {
+          scopeId: string;
+          state: "personal" | "shared";
+        };
+      };
+    };
     const showPayload = JSON.parse(showIo.stdout.join("")) as {
       catalogEntry: {
         savedView: {
@@ -1023,6 +1093,14 @@ describe("@runroot/cli integration", () => {
         };
       };
     };
+    const unsharePayload = JSON.parse(unshareIo.stdout.join("")) as {
+      visibility: {
+        visibility: {
+          ownerId: string;
+          state: "personal" | "shared";
+        };
+      };
+    };
     const archivePayload = JSON.parse(archiveIo.stdout.join("")) as {
       catalogEntry: {
         entry: {
@@ -1040,11 +1118,22 @@ describe("@runroot/cli integration", () => {
 
     expect(publishExitCode).toBe(0);
     expect(listExitCode).toBe(0);
+    expect(visibleExitCode).toBe(0);
+    expect(inspectExitCode).toBe(0);
+    expect(shareExitCode).toBe(0);
     expect(showExitCode).toBe(0);
     expect(applyExitCode).toBe(0);
+    expect(unshareExitCode).toBe(0);
     expect(archiveExitCode).toBe(0);
     expect(listAfterArchiveExitCode).toBe(0);
     expect(listPayload.catalog.totalCount).toBe(1);
+    expect(visiblePayload.visibility.totalCount).toBe(1);
+    expect(visiblePayload.visibility.items[0]?.visibility.state).toBe(
+      "personal",
+    );
+    expect(inspectPayload.visibility.visibility.state).toBe("personal");
+    expect(sharePayload.visibility.visibility.state).toBe("shared");
+    expect(sharePayload.visibility.visibility.scopeId).toBe("workspace");
     expect(showPayload.catalogEntry.savedView.refs.auditViewRunId).toBe(
       queuedRun.run.id,
     );
@@ -1058,6 +1147,8 @@ describe("@runroot/cli integration", () => {
       applyPayload.application.application.navigation.drilldowns[0]?.result
         .runId,
     ).toBe(queuedRun.run.id);
+    expect(unsharePayload.visibility.visibility.state).toBe("personal");
+    expect(unsharePayload.visibility.visibility.ownerId).toBe("operator");
     expect(archivePayload.catalogEntry.entry.archivedAt).toBeTruthy();
     expect(listAfterArchivePayload.catalog.totalCount).toBe(0);
   });
