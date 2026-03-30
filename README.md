@@ -16,7 +16,7 @@ Runroot focuses on:
 
 ## Current Status
 
-Phase 15 (Cross-Run Audit Saved Views and Operator Presets) is complete on
+Phase 16 (Cross-Run Audit View Catalogs and Curated Operator Presets) is complete on
 this branch. The
 repository now includes:
 
@@ -47,6 +47,8 @@ repository now includes:
   drilldowns, and existing run-scoped audit views through the same seams
 - shared saved audit views that preserve constrained navigation state and
   reopen it through the same SDK, API, CLI, and web seams
+- shared audit view catalogs that publish constrained saved views into curated
+  reusable presets through the same SDK, API, CLI, and web seams
 
 Persisted tool history is additive audit data. It does not become part of the
 shared replay or approval source of truth.
@@ -67,6 +69,11 @@ truth for replay or approvals.
 Saved audit views remain derived operator state as well. They store stable
 filters and navigation references without snapshotting audit facts or becoming
 workflow-state source of truth.
+
+Audit view catalogs remain a derived operator layer too. They publish
+constrained saved views through stable metadata and references without becoming
+workflow-state source of truth, a collaborative catalog product, or a
+dashboard/search surface.
 
 ## Planned Capabilities
 
@@ -152,6 +159,11 @@ can persist constrained navigation state and reopen it through existing seams,
 but they do not expand into a catalog, dashboard, analytics suite, or replay
 replacement.
 
+Phase 16 adds a thirteenth rule: audit view catalogs stay thin and
+operator-facing. They can publish curated presets over existing saved views,
+but they do not expand into a collaborative catalog, dashboard, search
+product, or analytics platform.
+
 ## Example Use Cases
 
 - GitHub issue triage with optional human approval
@@ -177,6 +189,7 @@ replacement.
 - [Audit Drilldowns](./docs/guides/audit-drilldowns.md)
 - [Audit Navigation](./docs/guides/audit-navigation.md)
 - [Audit Saved Views](./docs/guides/audit-saved-views.md)
+- [Audit View Catalogs](./docs/guides/audit-view-catalogs.md)
 - [Release Readiness](./docs/guides/release-readiness.md)
 - [Examples](./examples/README.md)
 - [Web Console](./docs/architecture/web-console.md)

@@ -201,4 +201,4 @@ Status: completed
   than collaborative sharing, RBAC, SaaS catalogs, or broad observability and
   analytics platform work
 
-Status: scope frozen
+Status: completed

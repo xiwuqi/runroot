@@ -1,8 +1,8 @@
 # Phase 16: Cross-Run Audit View Catalogs and Curated Operator Presets
 
-Status: proposed for scope freeze, implementation not started
+Status: implemented on branch, pending phase review
 
-This document proposes the repository-owned Phase 16 execution contract for
+This document records the repository-owned Phase 16 execution contract for
 Runroot. It defines the minimum implementation boundary for a shared audit-view
 catalog over the existing saved-view, navigation, drilldown, and run-scoped
 audit seams that already exist through the shared operator surfaces.
@@ -20,11 +20,13 @@ Primary source material:
 - [docs/architecture/adr-0013-cross-run-audit-drilldowns-and-identifier-queries.md](./adr-0013-cross-run-audit-drilldowns-and-identifier-queries.md)
 - [docs/architecture/adr-0014-cross-run-audit-navigation-and-linked-operator-views.md](./adr-0014-cross-run-audit-navigation-and-linked-operator-views.md)
 - [docs/architecture/adr-0015-cross-run-audit-saved-views-and-operator-presets.md](./adr-0015-cross-run-audit-saved-views-and-operator-presets.md)
+- [docs/architecture/adr-0016-cross-run-audit-view-catalogs-and-curated-operator-presets.md](./adr-0016-cross-run-audit-view-catalogs-and-curated-operator-presets.md)
 - [docs/architecture/phase-15-handoff.md](./phase-15-handoff.md)
 - [docs/guides/audit-queries.md](../guides/audit-queries.md)
 - [docs/guides/audit-drilldowns.md](../guides/audit-drilldowns.md)
 - [docs/guides/audit-navigation.md](../guides/audit-navigation.md)
 - [docs/guides/audit-saved-views.md](../guides/audit-saved-views.md)
+- [docs/guides/audit-view-catalogs.md](../guides/audit-view-catalogs.md)
 - [docs/guides/observability.md](../guides/observability.md)
 - [docs/roadmap.md](../roadmap.md)
 - [README.md](../../README.md)

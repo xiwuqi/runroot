@@ -18,6 +18,8 @@ Phase 6 introduces minimal observability seams without changing replay semantics
   run-scoped audit views through the same seams
 - saved audit views that persist constrained navigation state without
   snapshotting replay or approval data
+- audit view catalogs that publish constrained saved views into reusable
+  operator presets without becoming a collaborative catalog product
 - correlation attributes for run, step, dispatch job, worker, and tool
   identifiers across inline and queued execution
 
@@ -29,6 +31,7 @@ Phase 6 introduces minimal observability seams without changing replay semantics
 - productized dashboard or analytics suite
 - provider-specific payload persistence by default
 - broad cross-run audit exploration or open-ended analytics products
+- collaborative catalog, RBAC, or multi-user curation products
 
 ## Current Boundary
 
@@ -49,6 +52,8 @@ Phase 6 introduces minimal observability seams without changing replay semantics
   into a dashboard, search, or analytics platform
 - saved audit views stay thin and operator-facing instead of turning into a
   catalog, dashboard, search, or analytics platform
+- audit view catalogs stay thin and operator-facing instead of turning into a
+  collaborative catalog, dashboard, search, or analytics platform
 
 ## Minimal Local Path
 
