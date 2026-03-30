@@ -11,6 +11,17 @@ export {
   type RunAuditView,
 } from "./audit";
 export {
+  archiveCrossRunAuditCatalogEntry,
+  type CrossRunAuditCatalogEntry,
+  type CrossRunAuditCatalogEntryApplication,
+  type CrossRunAuditCatalogEntryCollection,
+  type CrossRunAuditCatalogEntryView,
+  type CrossRunAuditCatalogStore,
+  compareCrossRunAuditCatalogEntries,
+  createCrossRunAuditCatalogEntry,
+  type PublishCrossRunAuditCatalogEntryInput,
+} from "./catalog";
+export {
   type CrossRunAuditApprovalSummary,
   type CrossRunAuditDispatchSummary,
   type CrossRunAuditQueryFilters,
@@ -42,11 +53,13 @@ export {
   type RunAuditViewLink,
 } from "./navigation";
 export {
+  type CrossRunAuditCatalogQuery,
   type CrossRunAuditDrilldownQuery,
   type CrossRunAuditNavigationQuery,
   type CrossRunAuditQuery,
   type CrossRunAuditReader,
   type CrossRunAuditSavedViewQuery,
+  createCrossRunAuditCatalogQuery,
   createCrossRunAuditDrilldownQuery,
   createCrossRunAuditNavigationQuery,
   createCrossRunAuditQuery,

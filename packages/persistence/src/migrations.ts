@@ -225,6 +225,35 @@ export const runtimePersistenceMigrations = [
         ON runroot_saved_audit_views (updated_at DESC, created_at DESC, id ASC)`,
     ],
   },
+  {
+    id: "0005_audit_view_catalog_entries",
+    postgres: [
+      `CREATE TABLE IF NOT EXISTS runroot_audit_view_catalog_entries (
+        id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL,
+        name TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        archived_at TEXT,
+        data TEXT NOT NULL
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_runroot_audit_view_catalog_entries_updated
+        ON runroot_audit_view_catalog_entries (archived_at, updated_at DESC, created_at DESC, id ASC)`,
+    ],
+    sqlite: [
+      `CREATE TABLE IF NOT EXISTS runroot_audit_view_catalog_entries (
+        id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL,
+        name TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        archived_at TEXT,
+        data TEXT NOT NULL
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_runroot_audit_view_catalog_entries_updated
+        ON runroot_audit_view_catalog_entries (archived_at, updated_at DESC, created_at DESC, id ASC)`,
+    ],
+  },
 ] as const satisfies readonly PersistenceMigration[];
 
 export function getRuntimePersistenceMigrationStatements(
