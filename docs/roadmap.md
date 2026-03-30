@@ -185,3 +185,20 @@ Status: completed
   and analytics product
 
 Status: completed
+
+## Phase 16: Cross-Run Audit View Catalogs and Curated Operator Presets
+
+- add a shared audit-view catalog contract over the existing saved-view path
+  rather than snapshotting audit facts into a second source of truth
+- expose minimal publish, list, inspect, archive, and apply paths through the
+  existing seams in SDK, API, CLI, and web
+- keep operator surfaces thin while making curated audit presets discoverable
+  across surfaces without expanding into a full dashboard, search, or analytics
+  product
+- execute against the formal handoff in
+  [docs/architecture/phase-16-handoff.md](./architecture/phase-16-handoff.md)
+- keep the phase focused on catalog entries and curated operator presets rather
+  than collaborative sharing, RBAC, SaaS catalogs, or broad observability and
+  analytics platform work
+
+Status: scope frozen
