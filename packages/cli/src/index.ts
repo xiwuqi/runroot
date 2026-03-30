@@ -120,6 +120,16 @@ export async function runCli(
           return writeJson(io.stdout.write, {
             catalogEntry: await service.archiveCatalogEntry(detail),
           });
+        case "clear-review":
+          if (!detail) {
+            throw new Error(
+              "audit catalog clear-review requires a catalog entry id.",
+            );
+          }
+
+          return writeJson(io.stdout.write, {
+            review: await service.clearCatalogReviewSignal(detail),
+          });
         case "inspect":
           if (!detail) {
             throw new Error(
@@ -130,6 +140,16 @@ export async function runCli(
           return writeJson(io.stdout.write, {
             visibility: await service.getCatalogVisibility(detail),
           });
+        case "inspect-review":
+          if (!detail) {
+            throw new Error(
+              "audit catalog inspect-review requires a catalog entry id.",
+            );
+          }
+
+          return writeJson(io.stdout.write, {
+            review: await service.getCatalogReviewSignal(detail),
+          });
         case "list":
           return writeJson(io.stdout.write, {
             catalog: await service.listCatalogEntries(),
@@ -138,6 +158,19 @@ export async function runCli(
           return writeJson(io.stdout.write, {
             catalogEntry: await service.publishCatalogEntry(
               resolvePublishAuditCatalogEntryInput(flags, detail),
+            ),
+          });
+        case "review":
+          if (!detail) {
+            throw new Error(
+              "audit catalog review requires a catalog entry id.",
+            );
+          }
+
+          return writeJson(io.stdout.write, {
+            review: await service.reviewCatalogEntry(
+              detail,
+              resolveReviewAuditCatalogEntryInput(flags),
             ),
           });
         case "share":
@@ -169,6 +202,10 @@ export async function runCli(
         case "visible":
           return writeJson(io.stdout.write, {
             visibility: await service.listVisibleCatalogEntries(),
+          });
+        case "reviewed":
+          return writeJson(io.stdout.write, {
+            reviewed: await service.listReviewedCatalogEntries(),
           });
         default:
           throw new Error(
@@ -444,6 +481,27 @@ function resolvePublishAuditCatalogEntryInput(
   };
 }
 
+function resolveReviewAuditCatalogEntryInput(
+  flags: ReadonlyMap<string, string | boolean>,
+): {
+  readonly note?: string;
+  readonly state: "recommended" | "reviewed";
+} {
+  const state = getStringFlag(flags, "state");
+  const note = getStringFlag(flags, "note");
+
+  if (state !== "recommended" && state !== "reviewed") {
+    throw new Error(
+      "audit catalog review requires --state recommended|reviewed.",
+    );
+  }
+
+  return {
+    ...(note !== undefined ? { note } : {}),
+    state,
+  };
+}
+
 function getStringFlag(
   flags: ReadonlyMap<string, string | boolean>,
   name: string,
@@ -548,9 +606,13 @@ Commands:
   audit navigate [--definition-id <id>] [--status <status>] [--execution-mode <inline|queued>] [--tool-name <name>] [--run-id <id>] [--approval-id <id>] [--step-id <id>] [--dispatch-job-id <id>] [--worker-id <id>] [--tool-call-id <id>] [--tool-id <id>]
   audit catalog list
   audit catalog visible
+  audit catalog reviewed
   audit catalog publish <saved-view-id> [--name <name>] [--description <text>]
   audit catalog show <catalog-entry-id>
   audit catalog inspect <catalog-entry-id>
+  audit catalog inspect-review <catalog-entry-id>
+  audit catalog review <catalog-entry-id> --state <recommended|reviewed> [--note <text>]
+  audit catalog clear-review <catalog-entry-id>
   audit catalog share <catalog-entry-id>
   audit catalog unshare <catalog-entry-id>
   audit catalog archive <catalog-entry-id>

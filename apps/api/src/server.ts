@@ -225,6 +225,12 @@ export function buildServer(options: BuildServerOptions = {}) {
     })),
   );
 
+  app.get("/audit/catalog/reviewed", async (_request, reply) =>
+    handleOperatorResponse(reply, async () => ({
+      reviewed: await operator.listReviewedCatalogEntries(),
+    })),
+  );
+
   app.post("/audit/saved-views", async (request, reply) =>
     handleOperatorResponse(reply, async () => {
       const body = request.body as {
@@ -330,6 +336,18 @@ export function buildServer(options: BuildServerOptions = {}) {
     }),
   );
 
+  app.get("/audit/catalog/:catalogEntryId/review", async (request, reply) =>
+    handleOperatorResponse(reply, async () => {
+      const params = request.params as {
+        readonly catalogEntryId: string;
+      };
+
+      return {
+        review: await operator.getCatalogReviewSignal(params.catalogEntryId),
+      };
+    }),
+  );
+
   app.get("/audit/catalog/:catalogEntryId", async (request, reply) =>
     handleOperatorResponse(reply, async () => {
       const params = request.params as {
@@ -364,6 +382,45 @@ export function buildServer(options: BuildServerOptions = {}) {
         visibility: await operator.unshareCatalogEntry(params.catalogEntryId),
       };
     }),
+  );
+
+  app.post("/audit/catalog/:catalogEntryId/review", async (request, reply) =>
+    handleOperatorResponse(reply, async () => {
+      const params = request.params as {
+        readonly catalogEntryId: string;
+      };
+      const body = request.body as {
+        readonly note?: string;
+        readonly state?: string;
+      };
+
+      if (!body?.state) {
+        throw new OperatorInputError("state is required.");
+      }
+
+      return {
+        review: await operator.reviewCatalogEntry(params.catalogEntryId, {
+          ...(body.note !== undefined ? { note: body.note } : {}),
+          state: readCatalogReviewState(body.state),
+        }),
+      };
+    }),
+  );
+
+  app.post(
+    "/audit/catalog/:catalogEntryId/review/clear",
+    async (request, reply) =>
+      handleOperatorResponse(reply, async () => {
+        const params = request.params as {
+          readonly catalogEntryId: string;
+        };
+
+        return {
+          review: await operator.clearCatalogReviewSignal(
+            params.catalogEntryId,
+          ),
+        };
+      }),
   );
 
   app.get("/audit/saved-views/:savedViewId/apply", async (request, reply) =>
@@ -704,4 +761,16 @@ function readSavedViewRefs(input: {
     ...(input.auditViewRunId ? { auditViewRunId: input.auditViewRunId } : {}),
     ...(input.drilldownRunId ? { drilldownRunId: input.drilldownRunId } : {}),
   };
+}
+
+function readCatalogReviewState(value: string): "recommended" | "reviewed" {
+  switch (value) {
+    case "recommended":
+    case "reviewed":
+      return value;
+    default:
+      throw new OperatorInputError(
+        "state must be one of recommended|reviewed.",
+      );
+  }
 }

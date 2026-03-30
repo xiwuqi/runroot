@@ -346,10 +346,38 @@ export interface ApiAuditCatalogVisibilityCollection {
   readonly totalCount: number;
 }
 
+export type ApiAuditCatalogReviewState = "recommended" | "reviewed";
+
+export interface ApiAuditCatalogReviewSignal {
+  readonly catalogEntryId: string;
+  readonly createdAt: string;
+  readonly kind: "catalog-review-signal";
+  readonly note?: string;
+  readonly operatorId: string;
+  readonly scopeId: string;
+  readonly state: ApiAuditCatalogReviewState;
+  readonly updatedAt: string;
+}
+
+export interface ApiAuditCatalogReviewSignalView {
+  readonly review: ApiAuditCatalogReviewSignal;
+  readonly visibility: ApiAuditCatalogVisibilityView;
+}
+
+export interface ApiAuditCatalogReviewSignalCollection {
+  readonly items: readonly ApiAuditCatalogReviewSignalView[];
+  readonly totalCount: number;
+}
+
 export interface CreateApiAuditCatalogEntryInput {
   readonly description?: string;
   readonly name?: string;
   readonly savedViewId: string;
+}
+
+export interface UpdateApiAuditCatalogReviewSignalInput {
+  readonly note?: string;
+  readonly state: ApiAuditCatalogReviewState;
 }
 
 export interface CreateApiAuditSavedViewInput {
@@ -377,9 +405,15 @@ export interface RunrootApiClient {
   archiveAuditCatalogEntry(
     catalogEntryId: string,
   ): Promise<ApiAuditCatalogEntryView>;
+  clearAuditCatalogReviewSignal(
+    catalogEntryId: string,
+  ): Promise<ApiAuditCatalogReviewSignalView>;
   getAuditCatalogVisibility(
     catalogEntryId: string,
   ): Promise<ApiAuditCatalogVisibilityView>;
+  getAuditCatalogReviewSignal(
+    catalogEntryId: string,
+  ): Promise<ApiAuditCatalogReviewSignalView>;
   decideApproval(
     approvalId: string,
     input: DecideApprovalRequest,
@@ -396,6 +430,7 @@ export interface RunrootApiClient {
   ): Promise<ApiAuditCatalogEntryView>;
   getSavedAuditView(savedViewId: string): Promise<ApiAuditSavedView>;
   listAuditCatalogEntries(): Promise<ApiAuditCatalogEntryCollection>;
+  listReviewedAuditCatalogEntries(): Promise<ApiAuditCatalogReviewSignalCollection>;
   listVisibleAuditCatalogEntries(): Promise<ApiAuditCatalogVisibilityCollection>;
   listAuditDrilldowns(
     filters?: ApiCrossRunAuditDrilldownFilters,
@@ -407,6 +442,10 @@ export interface RunrootApiClient {
   publishAuditCatalogEntry(
     input: CreateApiAuditCatalogEntryInput,
   ): Promise<ApiAuditCatalogEntryView>;
+  reviewAuditCatalogEntry(
+    catalogEntryId: string,
+    input: UpdateApiAuditCatalogReviewSignalInput,
+  ): Promise<ApiAuditCatalogReviewSignalView>;
   shareAuditCatalogEntry(
     catalogEntryId: string,
   ): Promise<ApiAuditCatalogVisibilityView>;
@@ -565,6 +604,18 @@ export function createRunrootApiClient(
       return payload.catalogEntry;
     },
 
+    async clearAuditCatalogReviewSignal(catalogEntryId) {
+      const payload = await requestJson<{
+        review: ApiAuditCatalogReviewSignalView;
+      }>(
+        `/audit/catalog/${catalogEntryId}/review/clear`,
+        { method: "POST" },
+        "web.api.clearAuditCatalogReviewSignal",
+      );
+
+      return payload.review;
+    },
+
     async getAuditCatalogVisibility(catalogEntryId) {
       const payload = await requestJson<{
         visibility: ApiAuditCatalogVisibilityView;
@@ -575,6 +626,18 @@ export function createRunrootApiClient(
       );
 
       return payload.visibility;
+    },
+
+    async getAuditCatalogReviewSignal(catalogEntryId) {
+      const payload = await requestJson<{
+        review: ApiAuditCatalogReviewSignalView;
+      }>(
+        `/audit/catalog/${catalogEntryId}/review`,
+        { method: "GET" },
+        "web.api.getAuditCatalogReviewSignal",
+      );
+
+      return payload.review;
     },
 
     async decideApproval(approvalId, input) {
@@ -693,6 +756,18 @@ export function createRunrootApiClient(
       return payload.catalog;
     },
 
+    async listReviewedAuditCatalogEntries() {
+      const payload = await requestJson<{
+        reviewed: ApiAuditCatalogReviewSignalCollection;
+      }>(
+        "/audit/catalog/reviewed",
+        { method: "GET" },
+        "web.api.listReviewedAuditCatalogEntries",
+      );
+
+      return payload.reviewed;
+    },
+
     async listVisibleAuditCatalogEntries() {
       const payload = await requestJson<{
         visibility: ApiAuditCatalogVisibilityCollection;
@@ -745,6 +820,24 @@ export function createRunrootApiClient(
       );
 
       return payload.catalogEntry;
+    },
+
+    async reviewAuditCatalogEntry(catalogEntryId, input) {
+      const payload = await requestJson<{
+        review: ApiAuditCatalogReviewSignalView;
+      }>(
+        `/audit/catalog/${catalogEntryId}/review`,
+        {
+          body: JSON.stringify(input),
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "POST",
+        },
+        "web.api.reviewAuditCatalogEntry",
+      );
+
+      return payload.review;
     },
 
     async shareAuditCatalogEntry(catalogEntryId) {

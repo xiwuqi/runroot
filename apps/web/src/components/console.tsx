@@ -2,6 +2,8 @@ import type { ReactNode } from "react";
 import type { FlashMessage } from "../lib/navigation";
 import type {
   ApiApproval,
+  ApiAuditCatalogReviewSignalCollection,
+  ApiAuditCatalogReviewSignalView,
   ApiAuditCatalogVisibilityCollection,
   ApiAuditCatalogVisibilityView,
   ApiAuditDrilldownLink,
@@ -136,13 +138,128 @@ export function RunsListView({
   );
 }
 
+export function CatalogReviewSignalsView({
+  activeCatalogReviewSignal,
+  reviewedEntries,
+}: Readonly<{
+  activeCatalogReviewSignal?: ApiAuditCatalogReviewSignalView;
+  reviewedEntries: ApiAuditCatalogReviewSignalCollection;
+}>) {
+  return (
+    <section className="card">
+      <div className="row spread">
+        <div>
+          <div className="card-eyebrow">Phase 18 / Catalog Review Signals</div>
+          <h2>Catalog review signals</h2>
+          <p className="empty-copy">
+            Add thin review state and shared notes to visible presets without
+            turning the web console into a threaded collaboration or discovery
+            product.
+          </p>
+        </div>
+        <div className="timeline-count">
+          {reviewedEntries.totalCount} reviewed preset(s)
+        </div>
+      </div>
+
+      {activeCatalogReviewSignal ? (
+        <div className="inline-note">
+          Active review signal:{" "}
+          <strong>
+            {activeCatalogReviewSignal.visibility.catalogEntry.entry.name}
+          </strong>
+          {" · "}
+          {activeCatalogReviewSignal.review.state}
+          {activeCatalogReviewSignal.review.note
+            ? ` · ${activeCatalogReviewSignal.review.note}`
+            : ""}
+        </div>
+      ) : null}
+
+      {reviewedEntries.items.length === 0 ? (
+        <p className="empty-copy">
+          No review signals yet. Review a visible preset to publish a thin
+          recommendation or note through the shared operator seam.
+        </p>
+      ) : (
+        <ol className="timeline-list">
+          {reviewedEntries.items.map((reviewSignal) => (
+            <li
+              className="timeline-entry"
+              key={reviewSignal.visibility.catalogEntry.entry.id}
+            >
+              <div className="row spread">
+                <div>
+                  <strong>
+                    {reviewSignal.visibility.catalogEntry.entry.name}
+                  </strong>
+                  <div className="timeline-meta">
+                    {reviewSignal.review.state} ·{" "}
+                    {reviewSignal.visibility.visibility.state}
+                  </div>
+                </div>
+                <span>{formatTimestamp(reviewSignal.review.updatedAt)}</span>
+              </div>
+              {reviewSignal.review.note ? (
+                <p className="empty-copy">{reviewSignal.review.note}</p>
+              ) : null}
+              <div className="timeline-meta">
+                reviewer {reviewSignal.review.operatorId} · scope{" "}
+                {reviewSignal.review.scopeId}
+              </div>
+              <div className="row spread">
+                <a
+                  className="link-button"
+                  href={buildCatalogEntryHref(
+                    reviewSignal.visibility.catalogEntry.entry.id,
+                  )}
+                >
+                  Apply reviewed preset
+                </a>
+                <form
+                  action="/runs/catalog"
+                  className="action-form"
+                  method="post"
+                >
+                  <input
+                    name="returnTo"
+                    type="hidden"
+                    value={buildCatalogEntryHref(
+                      reviewSignal.visibility.catalogEntry.entry.id,
+                    )}
+                  />
+                  <input name="intent" type="hidden" value="clear-review" />
+                  <input
+                    name="catalogEntryId"
+                    type="hidden"
+                    value={reviewSignal.visibility.catalogEntry.entry.id}
+                  />
+                  <button type="submit">Clear review</button>
+                </form>
+              </div>
+            </li>
+          ))}
+        </ol>
+      )}
+    </section>
+  );
+}
+
 export function AuditViewCatalogsView({
   activeCatalogEntry,
   catalogEntries,
+  reviewedEntries,
 }: Readonly<{
   activeCatalogEntry?: ApiAuditCatalogVisibilityView;
   catalogEntries: ApiAuditCatalogVisibilityCollection;
+  reviewedEntries: ApiAuditCatalogReviewSignalCollection;
 }>) {
+  const reviewSignalsByCatalogEntryId = new Map(
+    reviewedEntries.items.map(
+      (item) => [item.visibility.catalogEntry.entry.id, item] as const,
+    ),
+  );
+
   return (
     <section className="card">
       <div className="row spread">
@@ -182,114 +299,208 @@ export function AuditViewCatalogsView({
               className="timeline-entry"
               key={catalogEntry.catalogEntry.entry.id}
             >
-              <div className="row spread">
-                <div>
-                  <strong>{catalogEntry.catalogEntry.entry.name}</strong>
-                  <div className="timeline-meta">
-                    {catalogEntry.catalogEntry.entry.kind} ·{" "}
-                    {catalogEntry.visibility.state}
-                  </div>
-                </div>
-                <span>
-                  {formatTimestamp(catalogEntry.visibility.updatedAt)}
-                </span>
-              </div>
-              {catalogEntry.catalogEntry.entry.description ? (
-                <p className="empty-copy">
-                  {catalogEntry.catalogEntry.entry.description}
-                </p>
-              ) : null}
-              <div className="timeline-meta">
-                saved view {catalogEntry.catalogEntry.savedView.id}
-                {catalogEntry.catalogEntry.savedView.refs.auditViewRunId
-                  ? ` · audit view ${catalogEntry.catalogEntry.savedView.refs.auditViewRunId}`
-                  : ""}
-                {catalogEntry.catalogEntry.savedView.refs.drilldownRunId
-                  ? ` · drilldown ${catalogEntry.catalogEntry.savedView.refs.drilldownRunId}`
-                  : ""}
-              </div>
-              <div className="timeline-meta">
-                owner {catalogEntry.visibility.ownerId} · scope{" "}
-                {catalogEntry.visibility.scopeId}
-              </div>
-              <div className="timeline-meta">
-                summary filters{" "}
-                {countSavedViewSummaryFilters(
-                  catalogEntry.catalogEntry.savedView.navigation.summary,
-                )}
-                {" · "}drilldown filters{" "}
-                {countSavedViewDrilldownFilters(
-                  catalogEntry.catalogEntry.savedView.navigation.drilldown,
-                )}
-              </div>
-              <div className="row spread">
-                <a
-                  className="link-button"
-                  href={buildCatalogEntryHref(
-                    catalogEntry.catalogEntry.entry.id,
-                  )}
-                >
-                  Apply catalog entry
-                </a>
-                <div className="row">
-                  <form
-                    action="/runs/catalog"
-                    className="action-form"
-                    method="post"
-                  >
-                    <input
-                      name="returnTo"
-                      type="hidden"
-                      value={buildCatalogEntryHref(
-                        catalogEntry.catalogEntry.entry.id,
+              {(() => {
+                const reviewSignal = reviewSignalsByCatalogEntryId.get(
+                  catalogEntry.catalogEntry.entry.id,
+                );
+
+                return (
+                  <>
+                    <div className="row spread">
+                      <div>
+                        <strong>{catalogEntry.catalogEntry.entry.name}</strong>
+                        <div className="timeline-meta">
+                          {catalogEntry.catalogEntry.entry.kind} ·{" "}
+                          {catalogEntry.visibility.state}
+                          {reviewSignal
+                            ? ` · ${reviewSignal.review.state}`
+                            : ""}
+                        </div>
+                      </div>
+                      <span>
+                        {formatTimestamp(catalogEntry.visibility.updatedAt)}
+                      </span>
+                    </div>
+                    {catalogEntry.catalogEntry.entry.description ? (
+                      <p className="empty-copy">
+                        {catalogEntry.catalogEntry.entry.description}
+                      </p>
+                    ) : null}
+                    {reviewSignal?.review.note ? (
+                      <p className="empty-copy">{reviewSignal.review.note}</p>
+                    ) : null}
+                    <div className="timeline-meta">
+                      saved view {catalogEntry.catalogEntry.savedView.id}
+                      {catalogEntry.catalogEntry.savedView.refs.auditViewRunId
+                        ? ` · audit view ${catalogEntry.catalogEntry.savedView.refs.auditViewRunId}`
+                        : ""}
+                      {catalogEntry.catalogEntry.savedView.refs.drilldownRunId
+                        ? ` · drilldown ${catalogEntry.catalogEntry.savedView.refs.drilldownRunId}`
+                        : ""}
+                    </div>
+                    <div className="timeline-meta">
+                      owner {catalogEntry.visibility.ownerId} · scope{" "}
+                      {catalogEntry.visibility.scopeId}
+                      {reviewSignal
+                        ? ` · reviewer ${reviewSignal.review.operatorId}`
+                        : ""}
+                    </div>
+                    <div className="timeline-meta">
+                      summary filters{" "}
+                      {countSavedViewSummaryFilters(
+                        catalogEntry.catalogEntry.savedView.navigation.summary,
                       )}
-                    />
-                    <input
-                      name="catalogEntryId"
-                      type="hidden"
-                      value={catalogEntry.catalogEntry.entry.id}
-                    />
-                    <input
-                      name="intent"
-                      type="hidden"
-                      value={
-                        catalogEntry.visibility.state === "shared"
-                          ? "unshare"
-                          : "share"
-                      }
-                    />
-                    <button type="submit">
-                      {catalogEntry.visibility.state === "shared"
-                        ? "Make personal"
-                        : "Share in scope"}
-                    </button>
-                  </form>
-                  <form
-                    action="/runs/catalog"
-                    className="action-form"
-                    method="post"
-                  >
-                    <input
-                      name="returnTo"
-                      type="hidden"
-                      value={buildCatalogEntryHref(
-                        catalogEntry.catalogEntry.entry.id,
+                      {" · "}drilldown filters{" "}
+                      {countSavedViewDrilldownFilters(
+                        catalogEntry.catalogEntry.savedView.navigation
+                          .drilldown,
                       )}
-                    />
-                    <input name="intent" type="hidden" value="archive" />
-                    <input
-                      name="catalogEntryId"
-                      type="hidden"
-                      value={catalogEntry.catalogEntry.entry.id}
-                    />
-                    <button type="submit">Archive</button>
-                  </form>
-                </div>
-              </div>
-              {activeCatalogEntry?.catalogEntry.entry.id ===
-              catalogEntry.catalogEntry.entry.id ? (
-                <div className="timeline-meta">Currently applied</div>
-              ) : null}
+                    </div>
+                    <form
+                      action="/runs/catalog"
+                      className="decision-form"
+                      method="post"
+                    >
+                      <input
+                        name="returnTo"
+                        type="hidden"
+                        value={buildCatalogEntryHref(
+                          catalogEntry.catalogEntry.entry.id,
+                        )}
+                      />
+                      <input name="intent" type="hidden" value="review" />
+                      <input
+                        name="catalogEntryId"
+                        type="hidden"
+                        value={catalogEntry.catalogEntry.entry.id}
+                      />
+                      <div className="data-grid">
+                        <label>
+                          <span>Review state</span>
+                          <select
+                            defaultValue={
+                              reviewSignal?.review.state ?? "recommended"
+                            }
+                            name="reviewState"
+                          >
+                            <option value="recommended">recommended</option>
+                            <option value="reviewed">reviewed</option>
+                          </select>
+                        </label>
+                        <label>
+                          <span>Shared note</span>
+                          <input
+                            defaultValue={reviewSignal?.review.note ?? ""}
+                            name="note"
+                            placeholder="Optional thin note"
+                            type="text"
+                          />
+                        </label>
+                      </div>
+                      <div className="row spread">
+                        <div />
+                        <button type="submit">
+                          {reviewSignal ? "Update review" : "Save review"}
+                        </button>
+                      </div>
+                    </form>
+                    <div className="row spread">
+                      <a
+                        className="link-button"
+                        href={buildCatalogEntryHref(
+                          catalogEntry.catalogEntry.entry.id,
+                        )}
+                      >
+                        Apply catalog entry
+                      </a>
+                      <div className="row">
+                        {reviewSignal ? (
+                          <form
+                            action="/runs/catalog"
+                            className="action-form"
+                            method="post"
+                          >
+                            <input
+                              name="returnTo"
+                              type="hidden"
+                              value={buildCatalogEntryHref(
+                                catalogEntry.catalogEntry.entry.id,
+                              )}
+                            />
+                            <input
+                              name="intent"
+                              type="hidden"
+                              value="clear-review"
+                            />
+                            <input
+                              name="catalogEntryId"
+                              type="hidden"
+                              value={catalogEntry.catalogEntry.entry.id}
+                            />
+                            <button type="submit">Clear review</button>
+                          </form>
+                        ) : null}
+                        <form
+                          action="/runs/catalog"
+                          className="action-form"
+                          method="post"
+                        >
+                          <input
+                            name="returnTo"
+                            type="hidden"
+                            value={buildCatalogEntryHref(
+                              catalogEntry.catalogEntry.entry.id,
+                            )}
+                          />
+                          <input
+                            name="catalogEntryId"
+                            type="hidden"
+                            value={catalogEntry.catalogEntry.entry.id}
+                          />
+                          <input
+                            name="intent"
+                            type="hidden"
+                            value={
+                              catalogEntry.visibility.state === "shared"
+                                ? "unshare"
+                                : "share"
+                            }
+                          />
+                          <button type="submit">
+                            {catalogEntry.visibility.state === "shared"
+                              ? "Make personal"
+                              : "Share in scope"}
+                          </button>
+                        </form>
+                        <form
+                          action="/runs/catalog"
+                          className="action-form"
+                          method="post"
+                        >
+                          <input
+                            name="returnTo"
+                            type="hidden"
+                            value={buildCatalogEntryHref(
+                              catalogEntry.catalogEntry.entry.id,
+                            )}
+                          />
+                          <input name="intent" type="hidden" value="archive" />
+                          <input
+                            name="catalogEntryId"
+                            type="hidden"
+                            value={catalogEntry.catalogEntry.entry.id}
+                          />
+                          <button type="submit">Archive</button>
+                        </form>
+                      </div>
+                    </div>
+                    {activeCatalogEntry?.catalogEntry.entry.id ===
+                    catalogEntry.catalogEntry.entry.id ? (
+                      <div className="timeline-meta">Currently applied</div>
+                    ) : null}
+                  </>
+                );
+              })()}
             </li>
           ))}
         </ol>

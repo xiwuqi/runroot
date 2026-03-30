@@ -12,6 +12,7 @@ export {
   type DecideApprovalInput,
   type PendingApprovalSummary,
   type PublishAuditViewCatalogEntryInput,
+  type ReviewAuditCatalogEntryInput,
   type RunrootOperatorService,
   type RunrootOperatorServiceOptions,
   resolveWorkspacePath,
