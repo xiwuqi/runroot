@@ -202,3 +202,20 @@ Status: completed
   analytics platform work
 
 Status: completed
+
+## Phase 17: Cross-Run Audit Catalog Visibility and Shared Presets
+
+- add a shared catalog-visibility contract over the existing audit-view catalog
+  path rather than introducing a standalone collaboration product or workflow
+  state model
+- expose minimal share, list-visible, inspect, unshare, and apply paths
+  through the existing seams in SDK, API, CLI, and web
+- keep operator surfaces thin while making curated presets visible across
+  operators without expanding into fine-grained RBAC, SaaS catalogs, search,
+  dashboards, or analytics products
+- execute against the formal handoff in
+  [docs/architecture/phase-17-handoff.md](./architecture/phase-17-handoff.md)
+- keep the phase focused on catalog visibility and shared presets rather than
+  collaborative comments, multi-user curation, or broad platform work
+
+Status: suggested freeze version
