@@ -16,7 +16,8 @@ export type DeliveryPhase =
   | 13
   | 14
   | 15
-  | 16;
+  | 16
+  | 17;
 
 export type ExecutionMode = "inline" | "queued";
 
@@ -43,6 +44,17 @@ export interface ResolvedPersistenceConfig {
   readonly workspacePath?: string;
 }
 
+export interface ResolveOperatorIdentityOptions {
+  readonly env?: Readonly<Record<string, string | undefined>>;
+  readonly operatorId?: string;
+  readonly scopeId?: string;
+}
+
+export interface ResolvedOperatorIdentity {
+  readonly operatorId: string;
+  readonly scopeId: string;
+}
+
 export interface BoundaryDescriptor {
   readonly name: `@runroot/${string}`;
   readonly kind: "app" | "package";
@@ -63,8 +75,8 @@ export const projectMetadata = {
   name: "Runroot",
   description:
     "MCP-native runtime and orchestration for durable developer and ops workflows.",
-  currentPhase: 16,
-  phaseName: "Cross-Run Audit View Catalogs and Curated Operator Presets",
+  currentPhase: 17,
+  phaseName: "Cross-Run Audit Catalog Visibility and Shared Presets",
 } as const;
 
 export const requiredQualityCommands = [
@@ -173,6 +185,27 @@ export function resolveExecutionMode(
   const envMode = readExecutionMode(env.RUNROOT_EXECUTION_MODE);
 
   return envMode ?? "inline";
+}
+
+export function resolveOperatorIdentity(
+  options: ResolveOperatorIdentityOptions = {},
+): ResolvedOperatorIdentity {
+  const env = options.env ?? process.env;
+  const resolvedOperatorId = (
+    options.operatorId ??
+    env.RUNROOT_OPERATOR_ID ??
+    "operator"
+  ).trim();
+  const resolvedScopeId = (
+    options.scopeId ??
+    env.RUNROOT_OPERATOR_SCOPE ??
+    "workspace"
+  ).trim();
+
+  return {
+    operatorId: resolvedOperatorId.length > 0 ? resolvedOperatorId : "operator",
+    scopeId: resolvedScopeId.length > 0 ? resolvedScopeId : "workspace",
+  };
 }
 
 function resolvePersistenceConfigForDriver(

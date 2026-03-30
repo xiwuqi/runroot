@@ -5,6 +5,7 @@ import {
   type ExecutionMode,
   type PersistenceDriver,
   resolveExecutionMode,
+  resolveOperatorIdentity,
   resolvePersistenceConfig,
   resolveWorkspacePath,
 } from "@runroot/config";
@@ -17,6 +18,7 @@ import type { DispatchQueue } from "@runroot/dispatch";
 import type { JsonValue, WorkflowRun } from "@runroot/domain";
 import type { RunrootLogger, RunrootTracer } from "@runroot/observability";
 import {
+  createConfiguredAuditCatalogVisibilityStore,
   createConfiguredAuditViewCatalogStore,
   createConfiguredDispatchQueue,
   createConfiguredRuntimePersistence,
@@ -29,6 +31,9 @@ import {
   type CrossRunAuditCatalogEntryCollection,
   type CrossRunAuditCatalogEntryView,
   type CrossRunAuditCatalogStore,
+  type CrossRunAuditCatalogVisibilityCollection,
+  type CrossRunAuditCatalogVisibilityStore,
+  type CrossRunAuditCatalogVisibilityView,
   type CrossRunAuditDrilldownFilters,
   type CrossRunAuditDrilldownResults,
   type CrossRunAuditNavigationFilters,
@@ -42,6 +47,7 @@ import {
   type CrossRunAuditSavedViewNavigationRefs,
   type CrossRunAuditSavedViewStore,
   createCrossRunAuditCatalogQuery,
+  createCrossRunAuditCatalogVisibilityQuery,
   createCrossRunAuditDrilldownQuery,
   createCrossRunAuditNavigationQuery,
   createCrossRunAuditQuery,
@@ -112,6 +118,7 @@ export interface RunrootOperatorService {
   applySavedView(id: string): Promise<CrossRunAuditSavedViewApplication>;
   archiveCatalogEntry(id: string): Promise<CrossRunAuditCatalogEntryView>;
   getCatalogEntry(id: string): Promise<CrossRunAuditCatalogEntryView>;
+  getCatalogVisibility(id: string): Promise<CrossRunAuditCatalogVisibilityView>;
   getAuditNavigation(
     filters?: Partial<CrossRunAuditNavigationFilters>,
   ): Promise<CrossRunAuditNavigationView>;
@@ -132,6 +139,7 @@ export interface RunrootOperatorService {
     filters?: CrossRunAuditDrilldownFilters,
   ): Promise<CrossRunAuditDrilldownResults>;
   listCatalogEntries(): Promise<CrossRunAuditCatalogEntryCollection>;
+  listVisibleCatalogEntries(): Promise<CrossRunAuditCatalogVisibilityCollection>;
   listAuditResults(
     filters?: CrossRunAuditQueryFilters,
   ): Promise<CrossRunAuditResults>;
@@ -145,13 +153,16 @@ export interface RunrootOperatorService {
   saveSavedView(
     input: SaveAuditSavedViewInput,
   ): Promise<CrossRunAuditSavedView>;
+  shareCatalogEntry(id: string): Promise<CrossRunAuditCatalogVisibilityView>;
   startRun(input: StartTemplateRunInput): Promise<WorkflowRun>;
+  unshareCatalogEntry(id: string): Promise<CrossRunAuditCatalogVisibilityView>;
 }
 
 export interface RunrootOperatorServiceOptions {
   readonly approvalIdGenerator?: () => string;
   readonly catalogEntryIdGenerator?: () => string;
   readonly catalogStore?: CrossRunAuditCatalogStore;
+  readonly catalogVisibilityStore?: CrossRunAuditCatalogVisibilityStore;
   readonly databaseUrl?: string;
   readonly dispatchQueue?: DispatchQueue;
   readonly env?: Readonly<Record<string, string | undefined>>;
@@ -159,6 +170,8 @@ export interface RunrootOperatorServiceOptions {
   readonly idGenerator?: (prefix: "run" | "step") => string;
   readonly logger?: RunrootLogger;
   readonly now?: () => string;
+  readonly operatorId?: string;
+  readonly operatorScopeId?: string;
   readonly persistence?: RuntimePersistence;
   readonly persistenceDriver?: PersistenceDriver;
   readonly savedViewIdGenerator?: () => string;
@@ -178,6 +191,11 @@ export function createRunrootOperatorService(
     options.catalogEntryIdGenerator ?? (() => `catalog_entry_${randomUUID()}`);
   const createSavedViewId =
     options.savedViewIdGenerator ?? (() => `saved_view_${randomUUID()}`);
+  const operatorIdentity = resolveOperatorIdentity({
+    ...(options.env ? { env: options.env } : {}),
+    ...(options.operatorId ? { operatorId: options.operatorId } : {}),
+    ...(options.operatorScopeId ? { scopeId: options.operatorScopeId } : {}),
+  });
   const persistenceConfig = resolvePersistenceConfig({
     ...(options.databaseUrl ? { databaseUrl: options.databaseUrl } : {}),
     ...(options.env ? { env: options.env } : {}),
@@ -227,6 +245,19 @@ export function createRunrootOperatorService(
   const catalogStore =
     options.catalogStore ??
     createConfiguredAuditViewCatalogStore({
+      ...(options.databaseUrl ? { databaseUrl: options.databaseUrl } : {}),
+      ...(options.env ? { env: options.env } : {}),
+      ...(options.persistenceDriver
+        ? { driver: options.persistenceDriver }
+        : {}),
+      ...(options.sqlitePath ? { sqlitePath: options.sqlitePath } : {}),
+      ...(options.workspacePath
+        ? { workspacePath: options.workspacePath }
+        : {}),
+    });
+  const catalogVisibilityStore =
+    options.catalogVisibilityStore ??
+    createConfiguredAuditCatalogVisibilityStore({
       ...(options.databaseUrl ? { databaseUrl: options.databaseUrl } : {}),
       ...(options.env ? { env: options.env } : {}),
       ...(options.persistenceDriver
@@ -326,17 +357,26 @@ export function createRunrootOperatorService(
     catalogStore,
     crossRunAuditSavedViews,
   );
+  const crossRunAuditCatalogVisibility =
+    createCrossRunAuditCatalogVisibilityQuery(
+      catalogVisibilityStore,
+      crossRunAuditCatalog,
+    );
   const persistenceLocation = persistenceConfig.location;
 
   return {
     async applyCatalogEntry(id) {
-      const application = await crossRunAuditCatalog.applyCatalogEntry(id);
+      const application =
+        await crossRunAuditCatalogVisibility.applyCatalogEntry(
+          id,
+          operatorIdentity,
+        );
 
       if (!application) {
         throw new OperatorNotFoundError("catalog entry", id);
       }
 
-      return application;
+      return application.application;
     },
 
     async applySavedView(id) {
@@ -350,8 +390,13 @@ export function createRunrootOperatorService(
     },
 
     async archiveCatalogEntry(id) {
-      const catalogEntry = await crossRunAuditCatalog.archiveCatalogEntry(
+      const visibility = await requireOwnedCatalogVisibility(
         id,
+        operatorIdentity.operatorId,
+        catalogVisibilityStore,
+      );
+      const catalogEntry = await crossRunAuditCatalog.archiveCatalogEntry(
+        visibility.catalogEntryId,
         now(),
       );
 
@@ -403,13 +448,31 @@ export function createRunrootOperatorService(
     },
 
     async getCatalogEntry(id) {
-      const catalogEntry = await crossRunAuditCatalog.getCatalogEntry(id);
+      const catalogVisibility =
+        await crossRunAuditCatalogVisibility.getCatalogVisibility(
+          id,
+          operatorIdentity,
+        );
 
-      if (!catalogEntry) {
+      if (!catalogVisibility) {
         throw new OperatorNotFoundError("catalog entry", id);
       }
 
-      return catalogEntry;
+      return catalogVisibility.catalogEntry;
+    },
+
+    async getCatalogVisibility(id) {
+      const catalogVisibility =
+        await crossRunAuditCatalogVisibility.getCatalogVisibility(
+          id,
+          operatorIdentity,
+        );
+
+      if (!catalogVisibility) {
+        throw new OperatorNotFoundError("catalog visibility", id);
+      }
+
+      return catalogVisibility;
     },
 
     async getSavedView(id) {
@@ -465,7 +528,21 @@ export function createRunrootOperatorService(
     },
 
     async listCatalogEntries() {
-      return crossRunAuditCatalog.listCatalogEntries();
+      const visibleCatalogEntries =
+        await crossRunAuditCatalogVisibility.listVisibleCatalogEntries(
+          operatorIdentity,
+        );
+
+      return {
+        items: visibleCatalogEntries.items.map((item) => item.catalogEntry),
+        totalCount: visibleCatalogEntries.totalCount,
+      };
+    },
+
+    async listVisibleCatalogEntries() {
+      return crossRunAuditCatalogVisibility.listVisibleCatalogEntries(
+        operatorIdentity,
+      );
     },
 
     async listAuditResults(filters) {
@@ -494,13 +571,22 @@ export function createRunrootOperatorService(
       }
 
       try {
-        return await crossRunAuditCatalog.publishCatalogEntry({
+        const catalogEntry = await crossRunAuditCatalog.publishCatalogEntry({
           ...(input.description ? { description: input.description } : {}),
           id: createCatalogEntryId(),
           ...(input.name ? { name: input.name } : {}),
           savedViewId: savedView.id,
           timestamp: now(),
         });
+
+        await crossRunAuditCatalogVisibility.setCatalogVisibilityState(
+          catalogEntry.entry.id,
+          operatorIdentity,
+          "personal",
+          catalogEntry.entry.createdAt,
+        );
+
+        return catalogEntry;
       } catch (error) {
         if (
           error instanceof Error &&
@@ -576,6 +662,19 @@ export function createRunrootOperatorService(
       }
     },
 
+    async shareCatalogEntry(id) {
+      try {
+        return await crossRunAuditCatalogVisibility.setCatalogVisibilityState(
+          id,
+          operatorIdentity,
+          "shared",
+          now(),
+        );
+      } catch (error) {
+        throw normalizeCatalogVisibilityError(error, id);
+      }
+    },
+
     async startRun(input) {
       const template = requireTemplate(templates, input.templateId);
       assertValidTemplateInput(template, input.input);
@@ -598,6 +697,19 @@ export function createRunrootOperatorService(
       }
 
       return runtime.executeRun(template.definition, run.id);
+    },
+
+    async unshareCatalogEntry(id) {
+      try {
+        return await crossRunAuditCatalogVisibility.setCatalogVisibilityState(
+          id,
+          operatorIdentity,
+          "personal",
+          now(),
+        );
+      } catch (error) {
+        throw normalizeCatalogVisibilityError(error, id);
+      }
     },
   };
 }
@@ -657,8 +769,58 @@ async function requireRun(
   return run;
 }
 
+async function requireOwnedCatalogVisibility(
+  catalogEntryId: string,
+  operatorId: string,
+  store: CrossRunAuditCatalogVisibilityStore,
+): Promise<CrossRunAuditCatalogVisibilityView["visibility"]> {
+  const visibility = await store.getCatalogVisibility(catalogEntryId);
+
+  if (!visibility) {
+    throw new OperatorNotFoundError("catalog visibility", catalogEntryId);
+  }
+
+  if (visibility.ownerId !== operatorId) {
+    throw new OperatorConflictError(
+      `Catalog entry "${catalogEntryId}" is owned by "${visibility.ownerId}" and cannot be archived by "${operatorId}".`,
+    );
+  }
+
+  return visibility;
+}
+
+function normalizeCatalogVisibilityError(
+  error: unknown,
+  catalogEntryId: string,
+): Error {
+  if (
+    error instanceof OperatorConflictError ||
+    error instanceof OperatorInputError ||
+    error instanceof OperatorNotFoundError
+  ) {
+    return error;
+  }
+
+  if (
+    error instanceof Error &&
+    error.message.startsWith(`Catalog entry "${catalogEntryId}" was not found.`)
+  ) {
+    return new OperatorNotFoundError("catalog entry", catalogEntryId);
+  }
+
+  if (
+    error instanceof Error &&
+    error.message.includes("can only be updated by owner")
+  ) {
+    return new OperatorConflictError(error.message);
+  }
+
+  return normalizeOperatorError(error);
+}
+
 function normalizeOperatorError(error: unknown): Error {
   if (
+    error instanceof OperatorConflictError ||
     error instanceof OperatorInputError ||
     error instanceof OperatorNotFoundError
   ) {

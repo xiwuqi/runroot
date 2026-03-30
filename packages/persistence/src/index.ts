@@ -14,6 +14,19 @@ export {
   type SqliteAuditViewCatalogStoreOptions,
 } from "./catalog-store";
 export {
+  type ConfiguredAuditCatalogVisibilityStoreOptions,
+  createConfiguredAuditCatalogVisibilityStore,
+  createFileAuditCatalogVisibilityStore,
+  createInMemoryAuditCatalogVisibilityStore,
+  createPostgresAuditCatalogVisibilityStore,
+  createSqliteAuditCatalogVisibilityStore,
+  type FileAuditCatalogVisibilityStoreOptions,
+  type InMemoryAuditCatalogVisibilityStoreOptions,
+  type PostgresAuditCatalogVisibilityStoreOptions,
+  resolveAuditCatalogVisibilityFilePath,
+  type SqliteAuditCatalogVisibilityStoreOptions,
+} from "./catalog-visibility-store";
+export {
   type ConfiguredRuntimePersistenceOptions,
   createConfiguredRuntimePersistence,
   createPostgresRuntimePersistence,
@@ -82,7 +95,7 @@ export const persistencePackageBoundary = {
   kind: "package",
   phaseOwned: 2,
   responsibility:
-    "Repository contracts, checkpoint storage, database adapters, dispatch queue persistence seams, tool-history storage adapters, additive saved-audit-view adapters, and additive audit-view-catalog adapters.",
+    "Repository contracts, checkpoint storage, database adapters, dispatch queue persistence seams, tool-history storage adapters, additive saved-audit-view adapters, additive audit-view-catalog adapters, and additive catalog-visibility adapters.",
   publicSurface: [
     "repository interfaces",
     "storage adapters",
@@ -91,5 +104,6 @@ export const persistencePackageBoundary = {
     "tool history adapters",
     "saved audit view adapters",
     "audit view catalog adapters",
+    "catalog visibility adapters",
   ],
 } as const satisfies PackageBoundary;

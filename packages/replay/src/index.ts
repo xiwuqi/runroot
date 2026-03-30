@@ -54,12 +54,14 @@ export {
 } from "./navigation";
 export {
   type CrossRunAuditCatalogQuery,
+  type CrossRunAuditCatalogVisibilityQuery,
   type CrossRunAuditDrilldownQuery,
   type CrossRunAuditNavigationQuery,
   type CrossRunAuditQuery,
   type CrossRunAuditReader,
   type CrossRunAuditSavedViewQuery,
   createCrossRunAuditCatalogQuery,
+  createCrossRunAuditCatalogVisibilityQuery,
   createCrossRunAuditDrilldownQuery,
   createCrossRunAuditNavigationQuery,
   createCrossRunAuditQuery,
@@ -90,6 +92,18 @@ export {
   type RunTimelineEntry,
   type RunTimelineEntryKind,
 } from "./timeline";
+export {
+  type CrossRunAuditCatalogVisibility,
+  type CrossRunAuditCatalogVisibilityApplication,
+  type CrossRunAuditCatalogVisibilityCollection,
+  type CrossRunAuditCatalogVisibilityState,
+  type CrossRunAuditCatalogVisibilityStore,
+  type CrossRunAuditCatalogVisibilityView,
+  type CrossRunAuditCatalogVisibilityViewer,
+  compareCrossRunAuditCatalogVisibility,
+  createCrossRunAuditCatalogVisibility,
+  isCrossRunAuditCatalogVisibleToViewer,
+} from "./visibility";
 
 export const replayPackageBoundary = {
   name: "@runroot/replay",

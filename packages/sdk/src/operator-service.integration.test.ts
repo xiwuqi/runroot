@@ -623,7 +623,7 @@ describe("@runroot/sdk operator service integration", () => {
     });
   });
 
-  it("publishes, lists, inspects, archives, and applies audit view catalog entries for inline and queued runs through the operator seam", async () => {
+  it("publishes, shares, lists, inspects, unshares, archives, and applies audit view catalog entries for inline and queued runs through the operator seam", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "runroot-sdk-catalog-"));
     const sqlitePath = join(workspaceRoot, "runroot.sqlite");
     const now = createClock();
@@ -654,6 +654,16 @@ describe("@runroot/sdk operator service integration", () => {
       catalogEntryIdGenerator: () => "catalog_entry_1",
       idGenerator,
       now,
+      operatorId: "ops_oncall",
+      operatorScopeId: "ops",
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+    const peerService = createRunrootOperatorService({
+      idGenerator,
+      now,
+      operatorId: "ops_backup",
+      operatorScopeId: "ops",
       persistenceDriver: "sqlite",
       sqlitePath,
     });
@@ -697,12 +707,30 @@ describe("@runroot/sdk operator service integration", () => {
       savedViewId: savedView.id,
     });
     const listedEntries = await queryService.listCatalogEntries();
+    const visibleEntries = await queryService.listVisibleCatalogEntries();
+    const peerVisibleBeforeShare =
+      await peerService.listVisibleCatalogEntries();
+    const ownerVisibility = await queryService.getCatalogVisibility(
+      publishedEntry.entry.id,
+    );
+    const sharedVisibility = await queryService.shareCatalogEntry(
+      publishedEntry.entry.id,
+    );
+    const peerVisibleAfterShare = await peerService.listVisibleCatalogEntries();
+    const peerInspection = await peerService.getCatalogVisibility(
+      publishedEntry.entry.id,
+    );
     const inspectedEntry = await queryService.getCatalogEntry(
       publishedEntry.entry.id,
     );
-    const appliedEntry = await queryService.applyCatalogEntry(
+    const appliedEntry = await peerService.applyCatalogEntry(
       publishedEntry.entry.id,
     );
+    const unsharedVisibility = await queryService.unshareCatalogEntry(
+      publishedEntry.entry.id,
+    );
+    const peerVisibleAfterUnshare =
+      await peerService.listVisibleCatalogEntries();
     const archivedEntry = await queryService.archiveCatalogEntry(
       publishedEntry.entry.id,
     );
@@ -721,6 +749,17 @@ describe("@runroot/sdk operator service integration", () => {
     });
     expect(listedEntries.totalCount).toBe(1);
     expect(listedEntries.items[0]?.entry.id).toBe("catalog_entry_1");
+    expect(visibleEntries.totalCount).toBe(1);
+    expect(visibleEntries.items[0]?.visibility.state).toBe("personal");
+    expect(peerVisibleBeforeShare.totalCount).toBe(0);
+    expect(ownerVisibility.visibility).toMatchObject({
+      ownerId: "ops_oncall",
+      scopeId: "ops",
+      state: "personal",
+    });
+    expect(sharedVisibility.visibility.state).toBe("shared");
+    expect(peerVisibleAfterShare.totalCount).toBe(1);
+    expect(peerInspection.visibility.state).toBe("shared");
     expect(inspectedEntry).toMatchObject({
       entry: {
         id: "catalog_entry_1",
@@ -738,6 +777,8 @@ describe("@runroot/sdk operator service integration", () => {
         runId: queuedRun.id,
       },
     });
+    expect(unsharedVisibility.visibility.state).toBe("personal");
+    expect(peerVisibleAfterUnshare.totalCount).toBe(0);
     expect(archivedEntry.entry.archivedAt).toBeTruthy();
     expect(listedAfterArchive.totalCount).toBe(0);
   });

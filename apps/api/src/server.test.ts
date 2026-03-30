@@ -25,7 +25,7 @@ describe("@runroot/api", () => {
     expect(response.json()).toEqual({
       status: "ok",
       project: "Runroot",
-      phase: 16,
+      phase: 17,
     });
   });
 
@@ -477,7 +477,7 @@ describe("@runroot/api", () => {
     );
   });
 
-  it("publishes, lists, inspects, archives, and applies audit view catalog entries through the operator API", async () => {
+  it("publishes, shares, lists, inspects, unshares, archives, and applies audit view catalog entries through the operator API", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "runroot-api-catalog-"));
     app = buildServer({
       operator: createRunrootOperatorService({
@@ -545,6 +545,10 @@ describe("@runroot/api", () => {
       method: "GET",
       url: "/audit/catalog",
     });
+    const visibleResponse = await app.inject({
+      method: "GET",
+      url: "/audit/catalog/visible",
+    });
     const listPayload = listResponse.json() as {
       catalog: {
         items: Array<{
@@ -555,6 +559,24 @@ describe("@runroot/api", () => {
         totalCount: number;
       };
     };
+    const visiblePayload = visibleResponse.json() as {
+      visibility: {
+        items: Array<{
+          visibility: {
+            state: "personal" | "shared";
+          };
+        }>;
+        totalCount: number;
+      };
+    };
+    const inspectResponse = await app.inject({
+      method: "GET",
+      url: `/audit/catalog/${publishedPayload.catalogEntry.entry.id}/visibility`,
+    });
+    const shareResponse = await app.inject({
+      method: "POST",
+      url: `/audit/catalog/${publishedPayload.catalogEntry.entry.id}/share`,
+    });
     const getResponse = await app.inject({
       method: "GET",
       url: `/audit/catalog/${publishedPayload.catalogEntry.entry.id}`,
@@ -562,6 +584,10 @@ describe("@runroot/api", () => {
     const applyResponse = await app.inject({
       method: "GET",
       url: `/audit/catalog/${publishedPayload.catalogEntry.entry.id}/apply`,
+    });
+    const unshareResponse = await app.inject({
+      method: "POST",
+      url: `/audit/catalog/${publishedPayload.catalogEntry.entry.id}/unshare`,
     });
     const archiveResponse = await app.inject({
       method: "POST",
@@ -600,6 +626,29 @@ describe("@runroot/api", () => {
         };
       };
     };
+    const inspectPayload = inspectResponse.json() as {
+      visibility: {
+        visibility: {
+          state: "personal" | "shared";
+        };
+      };
+    };
+    const sharePayload = shareResponse.json() as {
+      visibility: {
+        visibility: {
+          scopeId: string;
+          state: "personal" | "shared";
+        };
+      };
+    };
+    const unsharePayload = unshareResponse.json() as {
+      visibility: {
+        visibility: {
+          ownerId: string;
+          state: "personal" | "shared";
+        };
+      };
+    };
     const archivedListPayload = listArchivedResponse.json() as {
       catalog: {
         totalCount: number;
@@ -609,8 +658,18 @@ describe("@runroot/api", () => {
     expect(publishResponse.statusCode).toBe(201);
     expect(publishedPayload.catalogEntry.entry.id).toBe("catalog_entry_api");
     expect(listResponse.statusCode).toBe(200);
+    expect(visibleResponse.statusCode).toBe(200);
     expect(listPayload.catalog.totalCount).toBe(1);
     expect(listPayload.catalog.items[0]?.entry.id).toBe("catalog_entry_api");
+    expect(visiblePayload.visibility.totalCount).toBe(1);
+    expect(visiblePayload.visibility.items[0]?.visibility.state).toBe(
+      "personal",
+    );
+    expect(inspectResponse.statusCode).toBe(200);
+    expect(inspectPayload.visibility.visibility.state).toBe("personal");
+    expect(shareResponse.statusCode).toBe(200);
+    expect(sharePayload.visibility.visibility.state).toBe("shared");
+    expect(sharePayload.visibility.visibility.scopeId).toBe("workspace");
     expect(getResponse.statusCode).toBe(200);
     expect(applyResponse.statusCode).toBe(200);
     expect(applyPayload.application.catalogEntry.entry.id).toBe(
@@ -626,6 +685,9 @@ describe("@runroot/api", () => {
       applyPayload.application.application.navigation.drilldowns[0]?.result
         .runId,
     ).toBe(createdPayload.run.id);
+    expect(unshareResponse.statusCode).toBe(200);
+    expect(unsharePayload.visibility.visibility.state).toBe("personal");
+    expect(unsharePayload.visibility.visibility.ownerId).toBe("operator");
     expect(archiveResponse.statusCode).toBe(200);
     expect(archivePayload.catalogEntry.entry.archivedAt).toBeTruthy();
     expect(listArchivedResponse.statusCode).toBe(200);

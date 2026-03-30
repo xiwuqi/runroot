@@ -120,6 +120,16 @@ export async function runCli(
           return writeJson(io.stdout.write, {
             catalogEntry: await service.archiveCatalogEntry(detail),
           });
+        case "inspect":
+          if (!detail) {
+            throw new Error(
+              "audit catalog inspect requires a catalog entry id.",
+            );
+          }
+
+          return writeJson(io.stdout.write, {
+            visibility: await service.getCatalogVisibility(detail),
+          });
         case "list":
           return writeJson(io.stdout.write, {
             catalog: await service.listCatalogEntries(),
@@ -130,6 +140,14 @@ export async function runCli(
               resolvePublishAuditCatalogEntryInput(flags, detail),
             ),
           });
+        case "share":
+          if (!detail) {
+            throw new Error("audit catalog share requires a catalog entry id.");
+          }
+
+          return writeJson(io.stdout.write, {
+            visibility: await service.shareCatalogEntry(detail),
+          });
         case "show":
           if (!detail) {
             throw new Error("audit catalog show requires a catalog entry id.");
@@ -137,6 +155,20 @@ export async function runCli(
 
           return writeJson(io.stdout.write, {
             catalogEntry: await service.getCatalogEntry(detail),
+          });
+        case "unshare":
+          if (!detail) {
+            throw new Error(
+              "audit catalog unshare requires a catalog entry id.",
+            );
+          }
+
+          return writeJson(io.stdout.write, {
+            visibility: await service.unshareCatalogEntry(detail),
+          });
+        case "visible":
+          return writeJson(io.stdout.write, {
+            visibility: await service.listVisibleCatalogEntries(),
           });
         default:
           throw new Error(
@@ -515,8 +547,12 @@ Commands:
   audit drilldown [--run-id <id>] [--approval-id <id>] [--step-id <id>] [--dispatch-job-id <id>] [--worker-id <id>] [--tool-call-id <id>] [--tool-id <id>]
   audit navigate [--definition-id <id>] [--status <status>] [--execution-mode <inline|queued>] [--tool-name <name>] [--run-id <id>] [--approval-id <id>] [--step-id <id>] [--dispatch-job-id <id>] [--worker-id <id>] [--tool-call-id <id>] [--tool-id <id>]
   audit catalog list
+  audit catalog visible
   audit catalog publish <saved-view-id> [--name <name>] [--description <text>]
   audit catalog show <catalog-entry-id>
+  audit catalog inspect <catalog-entry-id>
+  audit catalog share <catalog-entry-id>
+  audit catalog unshare <catalog-entry-id>
   audit catalog archive <catalog-entry-id>
   audit catalog apply <catalog-entry-id>
   audit saved-views list

@@ -14,7 +14,7 @@ import {
 } from "../../lib/navigation";
 import {
   type ApiAuditCatalogEntryApplication,
-  type ApiAuditCatalogEntryView,
+  type ApiAuditCatalogVisibilityView,
   type ApiAuditNavigationFilters,
   type ApiAuditNavigationView,
   type ApiAuditSavedView,
@@ -42,27 +42,35 @@ export default async function RunsPage({
     const savedViewId = readFirstSearchParam(resolvedSearchParams.savedViewId);
     const auditFilters = readAuditFilters(resolvedSearchParams);
     const drilldownFilters = readAuditDrilldownFilters(resolvedSearchParams);
-    const [runs, catalogEntries, savedViews, navigationResult] =
-      await Promise.all([
-        api.listRuns(),
-        api.listAuditCatalogEntries(),
-        api.listSavedAuditViews(),
-        catalogEntryId
-          ? api.applyAuditCatalogEntry(catalogEntryId)
-          : savedViewId
-            ? api.applySavedAuditView(savedViewId)
-            : api.getAuditNavigation({
-                drilldown: drilldownFilters,
-                summary: auditFilters,
-              }),
-      ]);
+    const [
+      runs,
+      catalogEntries,
+      savedViews,
+      navigationResult,
+      catalogVisibility,
+    ] = await Promise.all([
+      api.listRuns(),
+      api.listVisibleAuditCatalogEntries(),
+      api.listSavedAuditViews(),
+      catalogEntryId
+        ? api.applyAuditCatalogEntry(catalogEntryId)
+        : savedViewId
+          ? api.applySavedAuditView(savedViewId)
+          : api.getAuditNavigation({
+              drilldown: drilldownFilters,
+              summary: auditFilters,
+            }),
+      catalogEntryId
+        ? api.getAuditCatalogVisibility(catalogEntryId)
+        : Promise.resolve(undefined),
+    ]);
     const sortedRuns = [...runs].sort(compareRunsByUpdatedAt);
     let navigation: ApiAuditNavigationView;
-    let activeCatalogEntry: ApiAuditCatalogEntryView | undefined;
+    let activeCatalogEntry: ApiAuditCatalogVisibilityView | undefined;
     let activeSavedView: ApiAuditSavedView | undefined;
 
     if (hasCatalogEntryApplication(navigationResult)) {
-      activeCatalogEntry = navigationResult.catalogEntry;
+      activeCatalogEntry = catalogVisibility;
       activeSavedView = navigationResult.application.savedView;
       navigation = navigationResult.application.navigation;
     } else if (hasSavedViewApplication(navigationResult)) {

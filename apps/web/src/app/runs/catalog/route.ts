@@ -40,6 +40,39 @@ export async function POST(request: Request) {
       return Response.redirect(redirectUrl, 303);
     }
 
+    if (intent === "share" || intent === "unshare") {
+      const catalogEntryId = readTrimmedFormValue(formData, "catalogEntryId");
+
+      if (!catalogEntryId) {
+        appendFlashMessage(
+          redirectUrl,
+          "error",
+          "A catalog entry id is required to update visibility.",
+        );
+
+        return Response.redirect(redirectUrl, 303);
+      }
+
+      const visibility =
+        intent === "share"
+          ? await createRunrootApiClient().shareAuditCatalogEntry(
+              catalogEntryId,
+            )
+          : await createRunrootApiClient().unshareAuditCatalogEntry(
+              catalogEntryId,
+            );
+
+      appendFlashMessage(
+        redirectUrl,
+        "notice",
+        intent === "share"
+          ? `Catalog entry ${visibility.catalogEntry.entry.name} is now shared within ${visibility.visibility.scopeId}.`
+          : `Catalog entry ${visibility.catalogEntry.entry.name} is now personal to ${visibility.visibility.ownerId}.`,
+      );
+
+      return Response.redirect(redirectUrl, 303);
+    }
+
     const savedViewId = readTrimmedFormValue(formData, "savedViewId");
 
     if (!savedViewId) {

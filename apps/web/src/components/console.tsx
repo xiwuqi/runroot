@@ -2,8 +2,8 @@ import type { ReactNode } from "react";
 import type { FlashMessage } from "../lib/navigation";
 import type {
   ApiApproval,
-  ApiAuditCatalogEntryCollection,
-  ApiAuditCatalogEntryView,
+  ApiAuditCatalogVisibilityCollection,
+  ApiAuditCatalogVisibilityView,
   ApiAuditDrilldownLink,
   ApiAuditNavigationFilters,
   ApiAuditNavigationView,
@@ -140,29 +140,29 @@ export function AuditViewCatalogsView({
   activeCatalogEntry,
   catalogEntries,
 }: Readonly<{
-  activeCatalogEntry?: ApiAuditCatalogEntryView;
-  catalogEntries: ApiAuditCatalogEntryCollection;
+  activeCatalogEntry?: ApiAuditCatalogVisibilityView;
+  catalogEntries: ApiAuditCatalogVisibilityCollection;
 }>) {
   return (
     <section className="card">
       <div className="row spread">
         <div>
-          <div className="card-eyebrow">Phase 16 / Audit View Catalogs</div>
-          <h2>Audit view catalogs</h2>
+          <div className="card-eyebrow">Phase 17 / Catalog Visibility</div>
+          <h2>Catalog visibility</h2>
           <p className="empty-copy">
-            Publish existing constrained saved views into a thin catalog that
-            stays derived, reusable, and operator-facing.
+            Mark catalog entries as personal or shared without turning the web
+            console into a collaboration product or permission framework.
           </p>
         </div>
         <div className="timeline-count">
-          {catalogEntries.totalCount} catalog entry(s)
+          {catalogEntries.totalCount} visible catalog entry(s)
         </div>
       </div>
 
       {activeCatalogEntry ? (
         <div className="inline-note">
-          Applying <strong>{activeCatalogEntry.entry.name}</strong> from the
-          audit-view catalog.
+          Applying <strong>{activeCatalogEntry.catalogEntry.entry.name}</strong>{" "}
+          from the visible catalog.
           <a className="subtle-link" href="/runs">
             Clear catalog entry
           </a>
@@ -171,64 +171,123 @@ export function AuditViewCatalogsView({
 
       {catalogEntries.items.length === 0 ? (
         <p className="empty-copy">
-          No catalog entries yet. Publish a constrained saved view to make it
-          discoverable through the shared operator seam.
+          No visible catalog entries yet. Publish a constrained saved view, then
+          choose whether it stays personal or becomes visible within the current
+          operator scope.
         </p>
       ) : (
         <ol className="timeline-list">
           {catalogEntries.items.map((catalogEntry) => (
-            <li className="timeline-entry" key={catalogEntry.entry.id}>
+            <li
+              className="timeline-entry"
+              key={catalogEntry.catalogEntry.entry.id}
+            >
               <div className="row spread">
                 <div>
-                  <strong>{catalogEntry.entry.name}</strong>
-                  <div className="timeline-meta">{catalogEntry.entry.kind}</div>
+                  <strong>{catalogEntry.catalogEntry.entry.name}</strong>
+                  <div className="timeline-meta">
+                    {catalogEntry.catalogEntry.entry.kind} ·{" "}
+                    {catalogEntry.visibility.state}
+                  </div>
                 </div>
-                <span>{formatTimestamp(catalogEntry.entry.updatedAt)}</span>
+                <span>
+                  {formatTimestamp(catalogEntry.visibility.updatedAt)}
+                </span>
               </div>
-              {catalogEntry.entry.description ? (
-                <p className="empty-copy">{catalogEntry.entry.description}</p>
+              {catalogEntry.catalogEntry.entry.description ? (
+                <p className="empty-copy">
+                  {catalogEntry.catalogEntry.entry.description}
+                </p>
               ) : null}
               <div className="timeline-meta">
-                saved view {catalogEntry.savedView.id}
-                {catalogEntry.savedView.refs.auditViewRunId
-                  ? ` · audit view ${catalogEntry.savedView.refs.auditViewRunId}`
+                saved view {catalogEntry.catalogEntry.savedView.id}
+                {catalogEntry.catalogEntry.savedView.refs.auditViewRunId
+                  ? ` · audit view ${catalogEntry.catalogEntry.savedView.refs.auditViewRunId}`
                   : ""}
-                {catalogEntry.savedView.refs.drilldownRunId
-                  ? ` · drilldown ${catalogEntry.savedView.refs.drilldownRunId}`
+                {catalogEntry.catalogEntry.savedView.refs.drilldownRunId
+                  ? ` · drilldown ${catalogEntry.catalogEntry.savedView.refs.drilldownRunId}`
                   : ""}
+              </div>
+              <div className="timeline-meta">
+                owner {catalogEntry.visibility.ownerId} · scope{" "}
+                {catalogEntry.visibility.scopeId}
               </div>
               <div className="timeline-meta">
                 summary filters{" "}
                 {countSavedViewSummaryFilters(
-                  catalogEntry.savedView.navigation.summary,
+                  catalogEntry.catalogEntry.savedView.navigation.summary,
                 )}
                 {" · "}drilldown filters{" "}
                 {countSavedViewDrilldownFilters(
-                  catalogEntry.savedView.navigation.drilldown,
+                  catalogEntry.catalogEntry.savedView.navigation.drilldown,
                 )}
               </div>
               <div className="row spread">
                 <a
                   className="link-button"
-                  href={buildCatalogEntryHref(catalogEntry.entry.id)}
+                  href={buildCatalogEntryHref(
+                    catalogEntry.catalogEntry.entry.id,
+                  )}
                 >
                   Apply catalog entry
                 </a>
-                <form
-                  action="/runs/catalog"
-                  className="action-form"
-                  method="post"
-                >
-                  <input name="intent" type="hidden" value="archive" />
-                  <input
-                    name="catalogEntryId"
-                    type="hidden"
-                    value={catalogEntry.entry.id}
-                  />
-                  <button type="submit">Archive</button>
-                </form>
+                <div className="row">
+                  <form
+                    action="/runs/catalog"
+                    className="action-form"
+                    method="post"
+                  >
+                    <input
+                      name="returnTo"
+                      type="hidden"
+                      value={buildCatalogEntryHref(
+                        catalogEntry.catalogEntry.entry.id,
+                      )}
+                    />
+                    <input
+                      name="catalogEntryId"
+                      type="hidden"
+                      value={catalogEntry.catalogEntry.entry.id}
+                    />
+                    <input
+                      name="intent"
+                      type="hidden"
+                      value={
+                        catalogEntry.visibility.state === "shared"
+                          ? "unshare"
+                          : "share"
+                      }
+                    />
+                    <button type="submit">
+                      {catalogEntry.visibility.state === "shared"
+                        ? "Make personal"
+                        : "Share in scope"}
+                    </button>
+                  </form>
+                  <form
+                    action="/runs/catalog"
+                    className="action-form"
+                    method="post"
+                  >
+                    <input
+                      name="returnTo"
+                      type="hidden"
+                      value={buildCatalogEntryHref(
+                        catalogEntry.catalogEntry.entry.id,
+                      )}
+                    />
+                    <input name="intent" type="hidden" value="archive" />
+                    <input
+                      name="catalogEntryId"
+                      type="hidden"
+                      value={catalogEntry.catalogEntry.entry.id}
+                    />
+                    <button type="submit">Archive</button>
+                  </form>
+                </div>
               </div>
-              {activeCatalogEntry?.entry.id === catalogEntry.entry.id ? (
+              {activeCatalogEntry?.catalogEntry.entry.id ===
+              catalogEntry.catalogEntry.entry.id ? (
                 <div className="timeline-meta">Currently applied</div>
               ) : null}
             </li>
