@@ -9,7 +9,8 @@ The shared contract stores:
 
 - stable cross-run summary filters
 - stable identifier-driven drilldown filters
-- optional stable navigation references such as a run audit-view target
+- optional stable navigation references such as a run audit-view target that
+  augment an already constrained saved view
 - metadata needed to list and reopen the saved view later
 
 The contract does not store:
@@ -18,6 +19,9 @@ The contract does not store:
 - full audit fact snapshots
 - replay or approval state
 - surface-specific URL formats
+
+Saved views still require at least one stable summary or drilldown filter.
+References alone do not make a saved view valid.
 
 ## Read And Write Path
 
@@ -45,6 +49,7 @@ Applying a saved view does not replay a run or reconstruct workflow state.
 It only:
 
 - loads the saved filter and reference state
+- requires the saved view to remain constrained by stable filters
 - re-runs the existing audit navigation query through the shared seam
 - returns the current summaries, drilldowns, and linked run-audit references
 

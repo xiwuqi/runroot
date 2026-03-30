@@ -65,7 +65,7 @@ export function createCrossRunAuditSavedView(
 
   if (!hasCrossRunAuditSavedViewState(navigation, refs)) {
     throw new Error(
-      "Saved audit views require at least one stable filter or navigation reference.",
+      "Saved audit views require at least one stable summary or drilldown filter. References can only augment constrained views.",
     );
   }
 
@@ -97,12 +97,11 @@ export function compareCrossRunAuditSavedViews(
 
 export function hasCrossRunAuditSavedViewState(
   navigation: Partial<CrossRunAuditNavigationFilters> = {},
-  refs: CrossRunAuditSavedViewNavigationRefs = {},
+  _refs: CrossRunAuditSavedViewNavigationRefs = {},
 ): boolean {
   return (
     hasCrossRunAuditSummaryFilters(navigation.summary) ||
-    hasCrossRunAuditDrilldownFilters(navigation.drilldown) ||
-    Boolean(refs.auditViewRunId || refs.drilldownRunId)
+    hasCrossRunAuditDrilldownFilters(navigation.drilldown)
   );
 }
 

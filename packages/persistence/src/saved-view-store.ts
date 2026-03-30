@@ -774,7 +774,11 @@ function clone<TValue>(value: TValue): TValue {
 }
 
 function isExistingFileError(error: unknown): boolean {
-  return error instanceof Error && "code" in error && error.code === "EEXIST";
+  return (
+    error instanceof Error &&
+    "code" in error &&
+    (error.code === "EEXIST" || error.code === "EPERM")
+  );
 }
 
 function isMissingFileError(error: unknown): boolean {

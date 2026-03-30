@@ -27,7 +27,7 @@ save/list/load/apply paths.
 
 1. `@runroot/replay` owns the shared saved-view contract.
    - The contract stores constrained audit navigation state and stable
-     navigation references.
+     navigation references that only augment constrained saved views.
    - The contract does not snapshot audit facts, provider payloads, or
      workflow-state models.
    - Applying a saved view reuses the existing navigation query instead of
