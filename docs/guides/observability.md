@@ -22,6 +22,9 @@ Phase 6 introduces minimal observability seams without changing replay semantics
   operator presets without becoming a collaborative catalog product
 - catalog visibility metadata that distinguishes personal and shared presets
   without becoming an RBAC, multi-tenant, or collaboration platform
+- catalog review signals and shared notes that annotate visible presets without
+  becoming replay, approval, threaded collaboration, or a review workflow
+  product
 - correlation attributes for run, step, dispatch job, worker, and tool
   identifiers across inline and queued execution
 
@@ -59,6 +62,9 @@ Phase 6 introduces minimal observability seams without changing replay semantics
   collaborative catalog, dashboard, search, or analytics platform
 - catalog visibility stays thin and operator-facing instead of turning into an
   RBAC system, discovery portal, or collaboration platform
+- catalog review signals stay thin and operator-facing instead of turning into
+  threaded collaboration, assignments, review workflows, dashboards, search,
+  or analytics platforms
 
 ## Minimal Local Path
 

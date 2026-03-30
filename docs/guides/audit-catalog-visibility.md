@@ -2,6 +2,11 @@
 
 Phase 17 adds a thin shared-visibility layer over existing audit view catalogs.
 
+Phase 18 adds a separate review-signal layer over visible catalog entries.
+Visibility still decides who can currently see and reopen a preset; review
+signals now annotate those visible presets through a different shared
+contract.
+
 ## What Visibility Records
 
 The shared contract stores:
@@ -16,11 +21,11 @@ The contract does not store:
 - workflow-state snapshots
 - replay or approval state
 - fine-grained RBAC rules
-- collaborative comments or review state
+- collaborative comments, assignments, or threaded review workflows
 - surface-specific route formats
 
 Visibility records remain derived operator state. They do not replace replay,
-approval, saved views, or catalog entries.
+approval, saved views, catalog entries, or the separate review-signal layer.
 
 ## Share, List-Visible, Inspect, Unshare, And Apply
 
@@ -96,6 +101,10 @@ pnpm --filter @runroot/cli dev audit catalog apply catalog_entry_1
 Both paths reuse the same shared visibility contract through the configured
 persistence adapter.
 
+Phase 18 review signals reuse that same visibility gate. A reviewed preset is
+still only applicable if the current operator can already see the referenced
+catalog entry through the shared visibility seam.
+
 ## What Stays Deferred
 
 Still out of scope after Phase 17:
@@ -103,7 +112,8 @@ Still out of scope after Phase 17:
 - productized dashboards, discovery products, or broad analytics UX
 - open-ended search products
 - fine-grained RBAC, org or team management, and multi-tenant access models
-- collaborative comments, review workflows, or broader multi-user curation
+- threaded comments, assignments, broader review workflows, or wider multi-user
+  curation beyond the thin review-signal layer
 - full observability backend integrations
 - default persistence of provider-specific payloads or full derived audit
   snapshots

@@ -7,6 +7,11 @@ publication still defines reusable presets; visibility metadata now determines
 whether those presets stay personal or become shared through the same operator
 seams.
 
+Phase 18 adds a separate review-signal layer over visible catalog entries.
+Catalog publication still defines reusable presets; review signals and shared
+notes now annotate those presets through the same operator seams without
+turning catalog entries into a threaded collaboration product.
+
 ## What Catalog Entries Record
 
 The shared contract stores:
@@ -20,6 +25,7 @@ The contract does not store:
 - provider-specific payloads
 - workflow-state snapshots
 - replay or approval state
+- review-signal or shared-note metadata
 - collaborative sharing or RBAC metadata
 - surface-specific route formats
 

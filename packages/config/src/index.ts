@@ -17,7 +17,8 @@ export type DeliveryPhase =
   | 14
   | 15
   | 16
-  | 17;
+  | 17
+  | 18;
 
 export type ExecutionMode = "inline" | "queued";
 
@@ -75,8 +76,8 @@ export const projectMetadata = {
   name: "Runroot",
   description:
     "MCP-native runtime and orchestration for durable developer and ops workflows.",
-  currentPhase: 17,
-  phaseName: "Cross-Run Audit Catalog Visibility and Shared Presets",
+  currentPhase: 18,
+  phaseName: "Cross-Run Audit Catalog Review Signals and Shared Notes",
 } as const;
 
 export const requiredQualityCommands = [
