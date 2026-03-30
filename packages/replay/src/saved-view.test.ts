@@ -42,7 +42,21 @@ describe("@runroot/replay saved audit views", () => {
         timestamp: "2026-03-29T12:00:00.000Z",
       }),
     ).toThrow(
-      "Saved audit views require at least one stable filter or navigation reference.",
+      "Saved audit views require at least one stable summary or drilldown filter. References can only augment constrained views.",
+    );
+
+    expect(() =>
+      createCrossRunAuditSavedView({
+        id: "saved_refs_only",
+        name: "Refs only",
+        refs: {
+          auditViewRunId: "run_queued",
+          drilldownRunId: "run_queued",
+        },
+        timestamp: "2026-03-29T12:00:00.000Z",
+      }),
+    ).toThrow(
+      "Saved audit views require at least one stable summary or drilldown filter. References can only augment constrained views.",
     );
   });
 

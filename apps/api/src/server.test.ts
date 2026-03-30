@@ -448,4 +448,32 @@ describe("@runroot/api", () => {
       applyPayload.application.navigation.drilldowns[0]?.result.runId,
     ).toBe(createdPayload.run.id);
   });
+
+  it("rejects refs-only saved audit views through the operator API", async () => {
+    const workspaceRoot = await mkdtemp(
+      join(tmpdir(), "runroot-api-saved-invalid-"),
+    );
+    app = buildServer({
+      operator: createRunrootOperatorService({
+        workspacePath: join(workspaceRoot, "workspace.json"),
+      }),
+    });
+
+    const saveResponse = await app.inject({
+      method: "POST",
+      payload: {
+        name: "Refs only",
+        refs: {
+          auditViewRunId: "run_queued",
+          drilldownRunId: "run_queued",
+        },
+      },
+      url: "/audit/saved-views",
+    });
+
+    expect(saveResponse.statusCode).toBe(400);
+    expect(saveResponse.body).toContain(
+      "Saved audit views require at least one stable summary or drilldown filter",
+    );
+  });
 });

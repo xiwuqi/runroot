@@ -13,9 +13,15 @@ import {
   resolveSavedAuditViewsFilePath,
 } from "./saved-view-store";
 
-function createSavedView(id: string) {
+function createSavedView(
+  id: string,
+  overrides: {
+    readonly description?: string;
+    readonly timestamp?: string;
+  } = {},
+) {
   return createCrossRunAuditSavedView({
-    description: "Queued worker follow-up",
+    description: overrides.description ?? "Queued worker follow-up",
     id,
     name: `Saved view ${id}`,
     navigation: {
@@ -30,7 +36,7 @@ function createSavedView(id: string) {
       auditViewRunId: "run_queued",
       drilldownRunId: "run_queued",
     },
-    timestamp: "2026-03-29T12:00:00.000Z",
+    timestamp: overrides.timestamp ?? "2026-03-29T12:00:00.000Z",
   });
 }
 
@@ -90,5 +96,28 @@ describe("@runroot/persistence saved audit view stores", () => {
     expect(await fileStore.listSavedViews()).toEqual([
       createSavedView("saved_file"),
     ]);
+  });
+
+  it("overwrites existing saved audit views through the file-sidecar compatibility path", async () => {
+    const workspaceRoot = await mkdtemp(
+      join(tmpdir(), "runroot-saved-file-overwrite-"),
+    );
+    const workspacePath = join(workspaceRoot, "workspace.json");
+    const fileStore = createFileSavedAuditViewStore({
+      filePath: resolveSavedAuditViewsFilePath(workspacePath),
+    });
+    const originalSavedView = createSavedView("saved_file_overwrite");
+    const updatedSavedView = createSavedView("saved_file_overwrite", {
+      description: "Queued worker follow-up updated",
+      timestamp: "2026-03-29T12:00:05.000Z",
+    });
+
+    await fileStore.saveSavedView(originalSavedView);
+    await fileStore.saveSavedView(updatedSavedView);
+
+    expect(await fileStore.getSavedView("saved_file_overwrite")).toEqual(
+      updatedSavedView,
+    );
+    expect(await fileStore.listSavedViews()).toEqual([updatedSavedView]);
   });
 });
