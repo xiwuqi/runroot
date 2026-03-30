@@ -324,6 +324,28 @@ export interface ApiAuditCatalogEntryApplication {
   readonly catalogEntry: ApiAuditCatalogEntryView;
 }
 
+export type ApiAuditCatalogVisibilityState = "personal" | "shared";
+
+export interface ApiAuditCatalogVisibility {
+  readonly catalogEntryId: string;
+  readonly createdAt: string;
+  readonly kind: "catalog-visibility";
+  readonly ownerId: string;
+  readonly scopeId: string;
+  readonly state: ApiAuditCatalogVisibilityState;
+  readonly updatedAt: string;
+}
+
+export interface ApiAuditCatalogVisibilityView {
+  readonly catalogEntry: ApiAuditCatalogEntryView;
+  readonly visibility: ApiAuditCatalogVisibility;
+}
+
+export interface ApiAuditCatalogVisibilityCollection {
+  readonly items: readonly ApiAuditCatalogVisibilityView[];
+  readonly totalCount: number;
+}
+
 export interface CreateApiAuditCatalogEntryInput {
   readonly description?: string;
   readonly name?: string;
@@ -355,6 +377,9 @@ export interface RunrootApiClient {
   archiveAuditCatalogEntry(
     catalogEntryId: string,
   ): Promise<ApiAuditCatalogEntryView>;
+  getAuditCatalogVisibility(
+    catalogEntryId: string,
+  ): Promise<ApiAuditCatalogVisibilityView>;
   decideApproval(
     approvalId: string,
     input: DecideApprovalRequest,
@@ -371,6 +396,7 @@ export interface RunrootApiClient {
   ): Promise<ApiAuditCatalogEntryView>;
   getSavedAuditView(savedViewId: string): Promise<ApiAuditSavedView>;
   listAuditCatalogEntries(): Promise<ApiAuditCatalogEntryCollection>;
+  listVisibleAuditCatalogEntries(): Promise<ApiAuditCatalogVisibilityCollection>;
   listAuditDrilldowns(
     filters?: ApiCrossRunAuditDrilldownFilters,
   ): Promise<ApiCrossRunAuditDrilldownResults>;
@@ -381,6 +407,9 @@ export interface RunrootApiClient {
   publishAuditCatalogEntry(
     input: CreateApiAuditCatalogEntryInput,
   ): Promise<ApiAuditCatalogEntryView>;
+  shareAuditCatalogEntry(
+    catalogEntryId: string,
+  ): Promise<ApiAuditCatalogVisibilityView>;
   saveSavedAuditView(
     input: CreateApiAuditSavedViewInput,
   ): Promise<ApiAuditSavedView>;
@@ -388,6 +417,9 @@ export interface RunrootApiClient {
   getTimeline(runId: string): Promise<ApiTimeline>;
   listRuns(): Promise<readonly ApiRun[]>;
   resumeRun(runId: string): Promise<ApiRun>;
+  unshareAuditCatalogEntry(
+    catalogEntryId: string,
+  ): Promise<ApiAuditCatalogVisibilityView>;
 }
 
 export interface RunrootApiClientOptions {
@@ -533,6 +565,18 @@ export function createRunrootApiClient(
       return payload.catalogEntry;
     },
 
+    async getAuditCatalogVisibility(catalogEntryId) {
+      const payload = await requestJson<{
+        visibility: ApiAuditCatalogVisibilityView;
+      }>(
+        `/audit/catalog/${catalogEntryId}/visibility`,
+        { method: "GET" },
+        "web.api.getAuditCatalogVisibility",
+      );
+
+      return payload.visibility;
+    },
+
     async decideApproval(approvalId, input) {
       const payload = await requestJson<{
         approval: ApiApproval;
@@ -649,6 +693,18 @@ export function createRunrootApiClient(
       return payload.catalog;
     },
 
+    async listVisibleAuditCatalogEntries() {
+      const payload = await requestJson<{
+        visibility: ApiAuditCatalogVisibilityCollection;
+      }>(
+        "/audit/catalog/visible",
+        { method: "GET" },
+        "web.api.listVisibleAuditCatalogEntries",
+      );
+
+      return payload.visibility;
+    },
+
     async listAuditResults(filters) {
       const payload = await requestJson<{
         audit: ApiCrossRunAuditResults;
@@ -689,6 +745,18 @@ export function createRunrootApiClient(
       );
 
       return payload.catalogEntry;
+    },
+
+    async shareAuditCatalogEntry(catalogEntryId) {
+      const payload = await requestJson<{
+        visibility: ApiAuditCatalogVisibilityView;
+      }>(
+        `/audit/catalog/${catalogEntryId}/share`,
+        { method: "POST" },
+        "web.api.shareAuditCatalogEntry",
+      );
+
+      return payload.visibility;
     },
 
     async saveSavedAuditView(input) {
@@ -743,6 +811,18 @@ export function createRunrootApiClient(
       }>(`/runs/${runId}/resume`, { method: "POST" }, "web.api.resumeRun");
 
       return payload.run;
+    },
+
+    async unshareAuditCatalogEntry(catalogEntryId) {
+      const payload = await requestJson<{
+        visibility: ApiAuditCatalogVisibilityView;
+      }>(
+        `/audit/catalog/${catalogEntryId}/unshare`,
+        { method: "POST" },
+        "web.api.unshareAuditCatalogEntry",
+      );
+
+      return payload.visibility;
     },
   };
 }

@@ -219,6 +219,12 @@ export function buildServer(options: BuildServerOptions = {}) {
     })),
   );
 
+  app.get("/audit/catalog/visible", async (_request, reply) =>
+    handleOperatorResponse(reply, async () => ({
+      visibility: await operator.listVisibleCatalogEntries(),
+    })),
+  );
+
   app.post("/audit/saved-views", async (request, reply) =>
     handleOperatorResponse(reply, async () => {
       const body = request.body as {
@@ -312,6 +318,18 @@ export function buildServer(options: BuildServerOptions = {}) {
     }),
   );
 
+  app.get("/audit/catalog/:catalogEntryId/visibility", async (request, reply) =>
+    handleOperatorResponse(reply, async () => {
+      const params = request.params as {
+        readonly catalogEntryId: string;
+      };
+
+      return {
+        visibility: await operator.getCatalogVisibility(params.catalogEntryId),
+      };
+    }),
+  );
+
   app.get("/audit/catalog/:catalogEntryId", async (request, reply) =>
     handleOperatorResponse(reply, async () => {
       const params = request.params as {
@@ -320,6 +338,30 @@ export function buildServer(options: BuildServerOptions = {}) {
 
       return {
         catalogEntry: await operator.getCatalogEntry(params.catalogEntryId),
+      };
+    }),
+  );
+
+  app.post("/audit/catalog/:catalogEntryId/share", async (request, reply) =>
+    handleOperatorResponse(reply, async () => {
+      const params = request.params as {
+        readonly catalogEntryId: string;
+      };
+
+      return {
+        visibility: await operator.shareCatalogEntry(params.catalogEntryId),
+      };
+    }),
+  );
+
+  app.post("/audit/catalog/:catalogEntryId/unshare", async (request, reply) =>
+    handleOperatorResponse(reply, async () => {
+      const params = request.params as {
+        readonly catalogEntryId: string;
+      };
+
+      return {
+        visibility: await operator.unshareCatalogEntry(params.catalogEntryId),
       };
     }),
   );
