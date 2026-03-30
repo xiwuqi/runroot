@@ -1152,4 +1152,346 @@ describe("@runroot/cli integration", () => {
     expect(archivePayload.catalogEntry.entry.archivedAt).toBeTruthy();
     expect(listAfterArchivePayload.catalog.totalCount).toBe(0);
   });
+
+  it("reviews, lists-reviewed, inspects, clears, and reapplies reviewed catalog entries through the CLI", async () => {
+    const workspaceRoot = await mkdtemp(
+      join(tmpdir(), "runroot-cli-review-signals-"),
+    );
+    const sqlitePath = join(workspaceRoot, "runroot.sqlite");
+    const inputFile = join(workspaceRoot, "shell-runbook.json");
+    await writeFile(
+      inputFile,
+      JSON.stringify({
+        approvalRequired: false,
+        commandAlias: "print-ready",
+        runbookId: "node-health-check",
+      }),
+    );
+    const inlineStartIo = createIo();
+    const queuedStartIo = createIo();
+    const saveIo = createIo();
+    const publishIo = createIo();
+    const shareIo = createIo();
+    const reviewIo = createIo();
+    const reviewedIo = createIo();
+    const inspectReviewIo = createIo();
+    const applyIo = createIo();
+    const clearReviewIo = createIo();
+    const reviewedAfterClearIo = createIo();
+
+    await runCli(
+      ["runs", "start", "shell-runbook-flow", "--input-file", inputFile],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_oncall",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: inlineStartIo.io,
+      },
+    );
+    const inlineRun = JSON.parse(inlineStartIo.stdout.join("")) as {
+      run: {
+        id: string;
+      };
+    };
+
+    await runCli(
+      ["runs", "start", "shell-runbook-flow", "--input-file", inputFile],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_EXECUTION_MODE: "queued",
+          RUNROOT_OPERATOR_ID: "ops_oncall",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: queuedStartIo.io,
+      },
+    );
+    const queuedRun = JSON.parse(queuedStartIo.stdout.join("")) as {
+      run: {
+        id: string;
+      };
+    };
+
+    const worker = createRunrootWorkerService({
+      persistenceDriver: "sqlite",
+      sqlitePath,
+      workerId: "worker_cli_review",
+    });
+    await worker.processNextJob();
+
+    await runCli(
+      [
+        "audit",
+        "saved-views",
+        "save",
+        "--name",
+        "Queued review preset",
+        "--description",
+        "Saved queued worker review preset",
+        "--execution-mode",
+        "queued",
+        "--worker-id",
+        "worker_cli_review",
+        "--audit-view-run-id",
+        queuedRun.run.id,
+        "--drilldown-run-id",
+        queuedRun.run.id,
+      ],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_oncall",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: saveIo.io,
+      },
+    );
+    const savedViewPayload = JSON.parse(saveIo.stdout.join("")) as {
+      savedView: {
+        id: string;
+      };
+    };
+
+    const publishExitCode = await runCli(
+      ["audit", "catalog", "publish", savedViewPayload.savedView.id],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_oncall",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: publishIo.io,
+      },
+    );
+    const publishedPayload = JSON.parse(publishIo.stdout.join("")) as {
+      catalogEntry: {
+        entry: {
+          id: string;
+        };
+      };
+    };
+    const shareExitCode = await runCli(
+      ["audit", "catalog", "share", publishedPayload.catalogEntry.entry.id],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_oncall",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: shareIo.io,
+      },
+    );
+    const reviewExitCode = await runCli(
+      [
+        "audit",
+        "catalog",
+        "review",
+        publishedPayload.catalogEntry.entry.id,
+        "--state",
+        "recommended",
+        "--note",
+        `Queued preset reviewed after inline ${inlineRun.run.id}`,
+      ],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_oncall",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: reviewIo.io,
+      },
+    );
+    const reviewedExitCode = await runCli(["audit", "catalog", "reviewed"], {
+      cwd: workspaceRoot,
+      env: {
+        RUNROOT_OPERATOR_ID: "ops_oncall",
+        RUNROOT_OPERATOR_SCOPE: "ops",
+        RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+        RUNROOT_SQLITE_PATH: sqlitePath,
+      },
+      io: reviewedIo.io,
+    });
+    const inspectReviewExitCode = await runCli(
+      [
+        "audit",
+        "catalog",
+        "inspect-review",
+        publishedPayload.catalogEntry.entry.id,
+      ],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_oncall",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: inspectReviewIo.io,
+      },
+    );
+    const applyExitCode = await runCli(
+      ["audit", "catalog", "apply", publishedPayload.catalogEntry.entry.id],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_oncall",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: applyIo.io,
+      },
+    );
+    const clearReviewExitCode = await runCli(
+      [
+        "audit",
+        "catalog",
+        "clear-review",
+        publishedPayload.catalogEntry.entry.id,
+      ],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_oncall",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: clearReviewIo.io,
+      },
+    );
+    const reviewedAfterClearExitCode = await runCli(
+      ["audit", "catalog", "reviewed"],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_oncall",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: reviewedAfterClearIo.io,
+      },
+    );
+    const sharePayload = JSON.parse(shareIo.stdout.join("")) as {
+      visibility: {
+        visibility: {
+          state: "shared";
+        };
+      };
+    };
+    const reviewPayload = JSON.parse(reviewIo.stdout.join("")) as {
+      review: {
+        review: {
+          note?: string;
+          state: "recommended" | "reviewed";
+        };
+      };
+    };
+    const reviewedPayload = JSON.parse(reviewedIo.stdout.join("")) as {
+      reviewed: {
+        items: Array<{
+          review: {
+            note?: string;
+            state: "recommended" | "reviewed";
+          };
+          visibility: {
+            catalogEntry: {
+              entry: {
+                id: string;
+              };
+              savedView: {
+                refs: {
+                  auditViewRunId?: string;
+                };
+              };
+            };
+          };
+        }>;
+        totalCount: number;
+      };
+    };
+    const inspectReviewPayload = JSON.parse(
+      inspectReviewIo.stdout.join(""),
+    ) as {
+      review: {
+        review: {
+          note?: string;
+          state: "recommended" | "reviewed";
+        };
+      };
+    };
+    const applyPayload = JSON.parse(applyIo.stdout.join("")) as {
+      application: {
+        application: {
+          navigation: {
+            drilldowns: Array<{
+              result: {
+                runId: string;
+              };
+            }>;
+            totalSummaryCount: number;
+          };
+        };
+      };
+    };
+    const clearReviewPayload = JSON.parse(clearReviewIo.stdout.join("")) as {
+      review: {
+        review: {
+          state: "recommended" | "reviewed";
+        };
+      };
+    };
+    const reviewedAfterClearPayload = JSON.parse(
+      reviewedAfterClearIo.stdout.join(""),
+    ) as {
+      reviewed: {
+        totalCount: number;
+      };
+    };
+
+    expect(publishExitCode).toBe(0);
+    expect(shareExitCode).toBe(0);
+    expect(reviewExitCode).toBe(0);
+    expect(reviewedExitCode).toBe(0);
+    expect(inspectReviewExitCode).toBe(0);
+    expect(applyExitCode).toBe(0);
+    expect(clearReviewExitCode).toBe(0);
+    expect(reviewedAfterClearExitCode).toBe(0);
+    expect(sharePayload.visibility.visibility.state).toBe("shared");
+    expect(reviewPayload.review.review.state).toBe("recommended");
+    expect(reviewPayload.review.review.note).toContain(inlineRun.run.id);
+    expect(reviewedPayload.reviewed.totalCount).toBe(1);
+    expect(
+      reviewedPayload.reviewed.items[0]?.visibility.catalogEntry.entry.id,
+    ).toBe(publishedPayload.catalogEntry.entry.id);
+    expect(
+      reviewedPayload.reviewed.items[0]?.visibility.catalogEntry.savedView.refs
+        .auditViewRunId,
+    ).toBe(queuedRun.run.id);
+    expect(inspectReviewPayload.review.review.note).toContain("Queued preset");
+    expect(
+      applyPayload.application.application.navigation.totalSummaryCount,
+    ).toBe(1);
+    expect(
+      applyPayload.application.application.navigation.drilldowns[0]?.result
+        .runId,
+    ).toBe(queuedRun.run.id);
+    expect(clearReviewPayload.review.review.state).toBe("recommended");
+    expect(reviewedAfterClearPayload.reviewed.totalCount).toBe(0);
+  });
 });

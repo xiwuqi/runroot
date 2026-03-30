@@ -1021,4 +1021,254 @@ describe("@runroot/api integration", () => {
     expect(listAfterArchiveResponse.status).toBe(200);
     expect(listAfterArchivePayload.catalog.totalCount).toBe(0);
   });
+
+  it("serves review, list-reviewed, inspect-review, clear-review, and apply paths through the network API", async () => {
+    const workspaceRoot = await mkdtemp(
+      join(tmpdir(), "runroot-api-review-signals-"),
+    );
+    const sqlitePath = join(workspaceRoot, "runroot.sqlite");
+    const inlineOperator = createRunrootOperatorService({
+      catalogEntryIdGenerator: () => "catalog_entry_review_api",
+      executionMode: "inline",
+      operatorId: "ops_oncall",
+      operatorScopeId: "ops",
+      persistenceDriver: "sqlite",
+      savedViewIdGenerator: () => "saved_view_review_api",
+      sqlitePath,
+    });
+    const queuedOperator = createRunrootOperatorService({
+      executionMode: "queued",
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+    const workerService = (
+      await import("@runroot/sdk")
+    ).createRunrootWorkerService({
+      persistenceDriver: "sqlite",
+      sqlitePath,
+      workerId: "worker_review_api",
+    });
+
+    const inlineRun = await inlineOperator.startRun({
+      input: {
+        approvalRequired: false,
+        commandAlias: "print-ready",
+        runbookId: "node-health-check",
+      },
+      templateId: "shell-runbook-flow",
+    });
+    const queuedRun = await queuedOperator.startRun({
+      input: {
+        approvalRequired: false,
+        commandAlias: "print-ready",
+        runbookId: "node-health-check",
+      },
+      templateId: "shell-runbook-flow",
+    });
+
+    await workerService.processNextJob();
+
+    app = buildServer({
+      operator: createRunrootOperatorService({
+        catalogEntryIdGenerator: () => "catalog_entry_review_api",
+        operatorId: "ops_oncall",
+        operatorScopeId: "ops",
+        persistenceDriver: "sqlite",
+        savedViewIdGenerator: () => "saved_view_review_api",
+        sqlitePath,
+      }),
+    });
+    const address = await app.listen({
+      host: "127.0.0.1",
+      port: 0,
+    });
+
+    const saveResponse = await fetch(`${address}/audit/saved-views`, {
+      body: JSON.stringify({
+        description: "Queued worker review preset",
+        name: "Queued worker review preset",
+        navigation: {
+          drilldown: {
+            workerId: "worker_review_api",
+          },
+          summary: {
+            executionMode: "queued",
+          },
+        },
+        refs: {
+          auditViewRunId: queuedRun.id,
+          drilldownRunId: queuedRun.id,
+        },
+      }),
+      headers: {
+        "content-type": "application/json",
+      },
+      method: "POST",
+    });
+    const savedViewPayload = (await saveResponse.json()) as {
+      savedView: {
+        id: string;
+      };
+    };
+    const publishResponse = await fetch(`${address}/audit/catalog`, {
+      body: JSON.stringify({
+        savedViewId: savedViewPayload.savedView.id,
+      }),
+      headers: {
+        "content-type": "application/json",
+      },
+      method: "POST",
+    });
+    const publishedPayload = (await publishResponse.json()) as {
+      catalogEntry: {
+        entry: {
+          id: string;
+        };
+      };
+    };
+    const shareResponse = await fetch(
+      `${address}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/share`,
+      {
+        method: "POST",
+      },
+    );
+    const reviewResponse = await fetch(
+      `${address}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/review`,
+      {
+        body: JSON.stringify({
+          note: `Recommended after inline ${inlineRun.id} and queued ${queuedRun.id}`,
+          state: "recommended",
+        }),
+        headers: {
+          "content-type": "application/json",
+        },
+        method: "POST",
+      },
+    );
+    const reviewedResponse = await fetch(`${address}/audit/catalog/reviewed`);
+    const inspectResponse = await fetch(
+      `${address}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/review`,
+    );
+    const applyResponse = await fetch(
+      `${address}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/apply`,
+    );
+    const clearResponse = await fetch(
+      `${address}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/review/clear`,
+      {
+        method: "POST",
+      },
+    );
+    const reviewedAfterClearResponse = await fetch(
+      `${address}/audit/catalog/reviewed`,
+    );
+    const sharePayload = (await shareResponse.json()) as {
+      visibility: {
+        visibility: {
+          state: "shared";
+        };
+      };
+    };
+    const reviewPayload = (await reviewResponse.json()) as {
+      review: {
+        review: {
+          note?: string;
+          state: "recommended" | "reviewed";
+        };
+      };
+    };
+    const reviewedPayload = (await reviewedResponse.json()) as {
+      reviewed: {
+        items: Array<{
+          review: {
+            state: "recommended" | "reviewed";
+          };
+          visibility: {
+            catalogEntry: {
+              entry: {
+                id: string;
+              };
+              savedView: {
+                refs: {
+                  auditViewRunId?: string;
+                };
+              };
+            };
+          };
+        }>;
+        totalCount: number;
+      };
+    };
+    const inspectPayload = (await inspectResponse.json()) as {
+      review: {
+        review: {
+          note?: string;
+          state: "recommended" | "reviewed";
+        };
+      };
+    };
+    const applyPayload = (await applyResponse.json()) as {
+      application: {
+        application: {
+          navigation: {
+            drilldowns: Array<{
+              result: {
+                runId: string;
+              };
+            }>;
+            totalSummaryCount: number;
+          };
+          savedView: {
+            id: string;
+          };
+        };
+      };
+    };
+    const clearPayload = (await clearResponse.json()) as {
+      review: {
+        review: {
+          state: "recommended" | "reviewed";
+        };
+      };
+    };
+    const reviewedAfterClearPayload =
+      (await reviewedAfterClearResponse.json()) as {
+        reviewed: {
+          totalCount: number;
+        };
+      };
+
+    expect(saveResponse.status).toBe(201);
+    expect(publishResponse.status).toBe(201);
+    expect(shareResponse.status).toBe(200);
+    expect(sharePayload.visibility.visibility.state).toBe("shared");
+    expect(reviewResponse.status).toBe(200);
+    expect(reviewPayload.review.review.state).toBe("recommended");
+    expect(reviewPayload.review.review.note).toContain(queuedRun.id);
+    expect(reviewedResponse.status).toBe(200);
+    expect(reviewedPayload.reviewed.totalCount).toBe(1);
+    expect(
+      reviewedPayload.reviewed.items[0]?.visibility.catalogEntry.entry.id,
+    ).toBe("catalog_entry_review_api");
+    expect(
+      reviewedPayload.reviewed.items[0]?.visibility.catalogEntry.savedView.refs
+        .auditViewRunId,
+    ).toBe(queuedRun.id);
+    expect(inspectResponse.status).toBe(200);
+    expect(inspectPayload.review.review.note).toContain(inlineRun.id);
+    expect(applyResponse.status).toBe(200);
+    expect(applyPayload.application.application.savedView.id).toBe(
+      "saved_view_review_api",
+    );
+    expect(
+      applyPayload.application.application.navigation.totalSummaryCount,
+    ).toBe(1);
+    expect(
+      applyPayload.application.application.navigation.drilldowns[0]?.result
+        .runId,
+    ).toBe(queuedRun.id);
+    expect(clearResponse.status).toBe(200);
+    expect(clearPayload.review.review.state).toBe("recommended");
+    expect(reviewedAfterClearResponse.status).toBe(200);
+    expect(reviewedAfterClearPayload.reviewed.totalCount).toBe(0);
+  });
 });
