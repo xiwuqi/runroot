@@ -198,6 +198,33 @@ export const runtimePersistenceMigrations = [
         ON runroot_tool_history (run_id, started_at, call_id)`,
     ],
   },
+  {
+    id: "0004_saved_audit_views",
+    postgres: [
+      `CREATE TABLE IF NOT EXISTS runroot_saved_audit_views (
+        id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL,
+        name TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        data TEXT NOT NULL
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_runroot_saved_audit_views_updated
+        ON runroot_saved_audit_views (updated_at DESC, created_at DESC, id ASC)`,
+    ],
+    sqlite: [
+      `CREATE TABLE IF NOT EXISTS runroot_saved_audit_views (
+        id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL,
+        name TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        data TEXT NOT NULL
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_runroot_saved_audit_views_updated
+        ON runroot_saved_audit_views (updated_at DESC, created_at DESC, id ASC)`,
+    ],
+  },
 ] as const satisfies readonly PersistenceMigration[];
 
 export function getRuntimePersistenceMigrationStatements(

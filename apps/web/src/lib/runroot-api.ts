@@ -270,6 +270,42 @@ export interface ApiAuditNavigationView {
   readonly totalSummaryCount: number;
 }
 
+export type ApiAuditSavedViewKind = "operator-preset" | "saved-view";
+
+export interface ApiAuditSavedViewNavigationRefs {
+  readonly auditViewRunId?: string;
+  readonly drilldownRunId?: string;
+}
+
+export interface ApiAuditSavedView {
+  readonly createdAt: string;
+  readonly description?: string;
+  readonly id: string;
+  readonly kind: ApiAuditSavedViewKind;
+  readonly name: string;
+  readonly navigation: ApiAuditNavigationFilters;
+  readonly refs: ApiAuditSavedViewNavigationRefs;
+  readonly updatedAt: string;
+}
+
+export interface ApiAuditSavedViewCollection {
+  readonly items: readonly ApiAuditSavedView[];
+  readonly totalCount: number;
+}
+
+export interface ApiAuditSavedViewApplication {
+  readonly navigation: ApiAuditNavigationView;
+  readonly savedView: ApiAuditSavedView;
+}
+
+export interface CreateApiAuditSavedViewInput {
+  readonly description?: string;
+  readonly kind?: ApiAuditSavedViewKind;
+  readonly name: string;
+  readonly navigation?: Partial<ApiAuditNavigationFilters>;
+  readonly refs?: ApiAuditSavedViewNavigationRefs;
+}
+
 export interface DecideApprovalRequest {
   readonly actorDisplayName?: string;
   readonly actorId?: string;
@@ -278,6 +314,9 @@ export interface DecideApprovalRequest {
 }
 
 export interface RunrootApiClient {
+  applySavedAuditView(
+    savedViewId: string,
+  ): Promise<ApiAuditSavedViewApplication>;
   decideApproval(
     approvalId: string,
     input: DecideApprovalRequest,
@@ -289,12 +328,17 @@ export interface RunrootApiClient {
   getPendingApprovals(): Promise<readonly PendingApprovalSummary[]>;
   getRun(runId: string): Promise<ApiRun>;
   getAuditView(runId: string): Promise<ApiAuditView>;
+  getSavedAuditView(savedViewId: string): Promise<ApiAuditSavedView>;
   listAuditDrilldowns(
     filters?: ApiCrossRunAuditDrilldownFilters,
   ): Promise<ApiCrossRunAuditDrilldownResults>;
   listAuditResults(
     filters?: ApiCrossRunAuditFilters,
   ): Promise<ApiCrossRunAuditResults>;
+  listSavedAuditViews(): Promise<ApiAuditSavedViewCollection>;
+  saveSavedAuditView(
+    input: CreateApiAuditSavedViewInput,
+  ): Promise<ApiAuditSavedView>;
   getToolHistory(runId: string): Promise<readonly ApiToolHistoryEntry[]>;
   getTimeline(runId: string): Promise<ApiTimeline>;
   listRuns(): Promise<readonly ApiRun[]>;
@@ -408,6 +452,18 @@ export function createRunrootApiClient(
   }
 
   return {
+    async applySavedAuditView(savedViewId) {
+      const payload = await requestJson<{
+        application: ApiAuditSavedViewApplication;
+      }>(
+        `/audit/saved-views/${savedViewId}/apply`,
+        { method: "GET" },
+        "web.api.applySavedAuditView",
+      );
+
+      return payload.application;
+    },
+
     async decideApproval(approvalId, input) {
       const payload = await requestJson<{
         approval: ApiApproval;
@@ -476,6 +532,18 @@ export function createRunrootApiClient(
       return payload.audit;
     },
 
+    async getSavedAuditView(savedViewId) {
+      const payload = await requestJson<{
+        savedView: ApiAuditSavedView;
+      }>(
+        `/audit/saved-views/${savedViewId}`,
+        { method: "GET" },
+        "web.api.getSavedAuditView",
+      );
+
+      return payload.savedView;
+    },
+
     async listAuditDrilldowns(filters) {
       const payload = await requestJson<{
         audit: ApiCrossRunAuditDrilldownResults;
@@ -498,6 +566,36 @@ export function createRunrootApiClient(
       );
 
       return payload.audit;
+    },
+
+    async listSavedAuditViews() {
+      const payload = await requestJson<{
+        savedViews: ApiAuditSavedViewCollection;
+      }>(
+        "/audit/saved-views",
+        { method: "GET" },
+        "web.api.listSavedAuditViews",
+      );
+
+      return payload.savedViews;
+    },
+
+    async saveSavedAuditView(input) {
+      const payload = await requestJson<{
+        savedView: ApiAuditSavedView;
+      }>(
+        "/audit/saved-views",
+        {
+          body: JSON.stringify(input),
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "POST",
+        },
+        "web.api.saveSavedAuditView",
+      );
+
+      return payload.savedView;
     },
 
     async getToolHistory(runId) {

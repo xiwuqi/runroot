@@ -16,7 +16,7 @@ Runroot focuses on:
 
 ## Current Status
 
-Phase 14 (Cross-Run Audit Navigation and Linked Operator Views) is complete on
+Phase 15 (Cross-Run Audit Saved Views and Operator Presets) is complete on
 this branch. The
 repository now includes:
 
@@ -45,6 +45,8 @@ repository now includes:
   in SDK, API, CLI, and web
 - shared audit navigation that links cross-run summaries, constrained
   drilldowns, and existing run-scoped audit views through the same seams
+- shared saved audit views that preserve constrained navigation state and
+  reopen it through the same SDK, API, CLI, and web seams
 
 Persisted tool history is additive audit data. It does not become part of the
 shared replay or approval source of truth.
@@ -61,6 +63,10 @@ They do not become replay, approval, or workflow-state source of truth.
 Audit navigation remains a derived operator read model too. It links existing
 summary, drilldown, and run-audit reads without becoming a second source of
 truth for replay or approvals.
+
+Saved audit views remain derived operator state as well. They store stable
+filters and navigation references without snapshotting audit facts or becoming
+workflow-state source of truth.
 
 ## Planned Capabilities
 
@@ -141,6 +147,11 @@ operator-facing. It can connect summaries, drilldowns, and run-scoped audit
 views, but it does not expand into a dashboard, search product, or analytics
 platform.
 
+Phase 15 adds a twelfth rule: saved audit views stay thin and derived. They
+can persist constrained navigation state and reopen it through existing seams,
+but they do not expand into a catalog, dashboard, analytics suite, or replay
+replacement.
+
 ## Example Use Cases
 
 - GitHub issue triage with optional human approval
@@ -165,6 +176,7 @@ platform.
 - [Audit Queries](./docs/guides/audit-queries.md)
 - [Audit Drilldowns](./docs/guides/audit-drilldowns.md)
 - [Audit Navigation](./docs/guides/audit-navigation.md)
+- [Audit Saved Views](./docs/guides/audit-saved-views.md)
 - [Release Readiness](./docs/guides/release-readiness.md)
 - [Examples](./examples/README.md)
 - [Web Console](./docs/architecture/web-console.md)

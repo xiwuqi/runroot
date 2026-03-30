@@ -1,6 +1,6 @@
 # Phase 15: Cross-Run Audit Saved Views and Operator Presets
 
-Status: scope freeze proposed on branch
+Status: implemented on branch, pending phase review
 
 This document proposes the repository-owned Phase 15 execution contract for
 Runroot. It defines the minimum implementation boundary for saved audit views
@@ -56,7 +56,8 @@ becomes the repository-owned formal Phase 15 name.
 ## Formal Goals
 
 1. Add a shared saved-view and operator-preset contract that records stable
-   audit-navigation filters and references without snapshotting audit facts or
+   audit-navigation filters plus optional navigation references that only
+   augment a constrained saved view, without snapshotting audit facts or
    redefining replay or approval source of truth.
 2. Expose the minimum save, list, load, and apply paths needed for SDK, API,
    CLI, and web surfaces to reopen constrained audit investigations through the
@@ -75,15 +76,16 @@ becomes the repository-owned formal Phase 15 name.
    remains a derived layer over existing summary, drilldown, and run-scoped
    audit navigation reads.
 2. Operators can save, list, load, and apply constrained audit views by using
-   stable filter state and navigation references instead of surface-specific
-   bookmarks or copied URLs.
+   stable filter state plus optional navigation references instead of
+   surface-specific bookmarks or copied URLs.
 3. Existing operator surfaces can query or present those saved-view paths
    through existing seams without introducing app-owned storage reads or a new
    orchestration stack.
 4. Replay and approval semantics still derive only from persisted runtime and
    approval events.
-5. Saved views store stable filters and navigation references rather than full
-   provider-specific payloads or workflow-state snapshots.
+5. Saved views store stable filters and optional navigation references rather
+   than full provider-specific payloads or workflow-state snapshots, and
+   references alone do not make an otherwise unconstrained view valid.
 6. At least one inline-originated run and one queued-originated run appear in
    integration coverage for the saved-view path.
 7. Local-development and CI guidance exists for the Phase 15 path.

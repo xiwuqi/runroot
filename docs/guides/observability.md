@@ -16,6 +16,8 @@ Phase 6 introduces minimal observability seams without changing replay semantics
   derived audit facts
 - linked audit navigation that connects summaries, drilldowns, and existing
   run-scoped audit views through the same seams
+- saved audit views that persist constrained navigation state without
+  snapshotting replay or approval data
 - correlation attributes for run, step, dispatch job, worker, and tool
   identifiers across inline and queued execution
 
@@ -45,6 +47,8 @@ Phase 6 introduces minimal observability seams without changing replay semantics
   turning into a dashboard, search, or analytics platform
 - linked audit navigation stays thin and operator-facing instead of turning
   into a dashboard, search, or analytics platform
+- saved audit views stay thin and operator-facing instead of turning into a
+  catalog, dashboard, search, or analytics platform
 
 ## Minimal Local Path
 

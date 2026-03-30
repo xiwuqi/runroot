@@ -208,14 +208,24 @@ export async function migrateSqlitePersistence(
   const appliedVersions: readonly string[] = await withFileLock(
     filePath,
     {},
-    async () =>
-      withSqliteClient(
-        {
-          filePath,
-          mutable: true,
-        },
-        (client) => applyRuntimePersistenceMigrations(client),
-      ),
+    async () => {
+      await ensureParentDirectory(filePath);
+
+      const SQL = await loadSqliteModule();
+      const database = await openSqliteDatabase(SQL, filePath);
+
+      try {
+        const client = new SqliteSqlClient(database);
+        const nextAppliedVersions =
+          await applyRuntimePersistenceMigrations(client);
+
+        await writeBinaryFileAtomically(filePath, database.export());
+
+        return nextAppliedVersions;
+      } finally {
+        database.close();
+      }
+    },
   );
 
   return {
@@ -1063,7 +1073,11 @@ function delay(durationMs: number): Promise<void> {
 }
 
 function isExistingFileError(error: unknown): boolean {
-  return error instanceof Error && "code" in error && error.code === "EEXIST";
+  return (
+    error instanceof Error &&
+    "code" in error &&
+    (error.code === "EEXIST" || error.code === "EPERM")
+  );
 }
 
 function isMissingFileError(error: unknown): boolean {

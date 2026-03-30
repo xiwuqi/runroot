@@ -46,9 +46,11 @@ export {
   type CrossRunAuditNavigationQuery,
   type CrossRunAuditQuery,
   type CrossRunAuditReader,
+  type CrossRunAuditSavedViewQuery,
   createCrossRunAuditDrilldownQuery,
   createCrossRunAuditNavigationQuery,
   createCrossRunAuditQuery,
+  createCrossRunAuditSavedViewQuery,
   createRunAuditQuery,
   createRunTimelineQuery,
   type RunAuditQuery,
@@ -56,6 +58,19 @@ export {
   type RunTimelineQuery,
   type RunTimelineReader,
 } from "./query";
+export {
+  type CreateCrossRunAuditSavedViewInput,
+  type CrossRunAuditSavedView,
+  type CrossRunAuditSavedViewApplication,
+  type CrossRunAuditSavedViewCollection,
+  type CrossRunAuditSavedViewKind,
+  type CrossRunAuditSavedViewNavigationRefs,
+  type CrossRunAuditSavedViewStore,
+  compareCrossRunAuditSavedViews,
+  createCrossRunAuditSavedView,
+  hasCrossRunAuditSavedViewState,
+  normalizeCrossRunAuditNavigationFilters,
+} from "./saved-view";
 export {
   projectRunTimeline,
   type RunTimeline,

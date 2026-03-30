@@ -23,6 +23,13 @@ import {
   type CrossRunAuditNavigationView,
   projectCrossRunAuditNavigationView,
 } from "./navigation";
+import {
+  type CrossRunAuditSavedView,
+  type CrossRunAuditSavedViewApplication,
+  type CrossRunAuditSavedViewCollection,
+  type CrossRunAuditSavedViewStore,
+  compareCrossRunAuditSavedViews,
+} from "./saved-view";
 import { projectRunTimeline, type RunTimeline } from "./timeline";
 
 export interface RunTimelineReader {
@@ -62,6 +69,17 @@ export interface CrossRunAuditNavigationQuery {
   getAuditNavigation(
     filters?: Partial<CrossRunAuditNavigationFilters>,
   ): Promise<CrossRunAuditNavigationView>;
+}
+
+export interface CrossRunAuditSavedViewQuery {
+  applySavedView(
+    id: string,
+  ): Promise<CrossRunAuditSavedViewApplication | undefined>;
+  getSavedView(id: string): Promise<CrossRunAuditSavedView | undefined>;
+  listSavedViews(): Promise<CrossRunAuditSavedViewCollection>;
+  saveSavedView(
+    savedView: CrossRunAuditSavedView,
+  ): Promise<CrossRunAuditSavedView>;
 }
 
 export function createRunTimelineQuery(
@@ -205,6 +223,45 @@ export function createCrossRunAuditNavigationQuery(
       ]);
 
       return projectCrossRunAuditNavigationView(summaries, drilldowns);
+    },
+  };
+}
+
+export function createCrossRunAuditSavedViewQuery(
+  store: CrossRunAuditSavedViewStore,
+  navigation: CrossRunAuditNavigationQuery,
+): CrossRunAuditSavedViewQuery {
+  return {
+    async applySavedView(id) {
+      const savedView = await store.getSavedView(id);
+
+      if (!savedView) {
+        return undefined;
+      }
+
+      return {
+        navigation: await navigation.getAuditNavigation(savedView.navigation),
+        savedView,
+      };
+    },
+
+    async getSavedView(id) {
+      return store.getSavedView(id);
+    },
+
+    async listSavedViews() {
+      const items = [...(await store.listSavedViews())].sort(
+        compareCrossRunAuditSavedViews,
+      );
+
+      return {
+        items,
+        totalCount: items.length,
+      };
+    },
+
+    async saveSavedView(savedView) {
+      return store.saveSavedView(savedView);
     },
   };
 }

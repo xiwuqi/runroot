@@ -516,4 +516,110 @@ describe("@runroot/sdk operator service integration", () => {
       ),
     ).toBe(true);
   });
+
+  it("saves, lists, loads, and applies constrained audit views for inline and queued runs through the operator seam", async () => {
+    const workspaceRoot = await mkdtemp(
+      join(tmpdir(), "runroot-sdk-saved-views-"),
+    );
+    const sqlitePath = join(workspaceRoot, "runroot.sqlite");
+    const now = createClock();
+    const idGenerator = createIdGenerator();
+    const inlineService = createRunrootOperatorService({
+      executionMode: "inline",
+      idGenerator,
+      now,
+      persistenceDriver: "sqlite",
+      savedViewIdGenerator: () => "saved_view_1",
+      sqlitePath,
+    });
+    const queuedService = createRunrootOperatorService({
+      executionMode: "queued",
+      idGenerator,
+      now,
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+    const worker = createRunrootWorkerService({
+      idGenerator,
+      now,
+      persistenceDriver: "sqlite",
+      sqlitePath,
+      workerId: "worker_saved_view",
+    });
+    const queryService = createRunrootOperatorService({
+      idGenerator,
+      now,
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+
+    await inlineService.startRun({
+      input: {
+        approvalRequired: false,
+        commandAlias: "print-ready",
+        runbookId: "node-health-check",
+      },
+      templateId: "shell-runbook-flow",
+    });
+    const queuedRun = await queuedService.startRun({
+      input: {
+        approvalRequired: false,
+        commandAlias: "print-ready",
+        runbookId: "node-health-check",
+      },
+      templateId: "shell-runbook-flow",
+    });
+
+    await worker.processNextJob();
+
+    const savedView = await inlineService.saveSavedView({
+      description: "Queued worker investigation",
+      name: "Queued worker follow-up",
+      navigation: {
+        drilldown: {
+          workerId: "worker_saved_view",
+        },
+        summary: {
+          executionMode: "queued",
+        },
+      },
+      refs: {
+        auditViewRunId: queuedRun.id,
+        drilldownRunId: queuedRun.id,
+      },
+    });
+    const savedViews = await queryService.listSavedViews();
+    const loadedSavedView = await queryService.getSavedView(savedView.id);
+    const application = await queryService.applySavedView(savedView.id);
+
+    expect(savedView).toMatchObject({
+      id: "saved_view_1",
+      kind: "saved-view",
+      name: "Queued worker follow-up",
+      refs: {
+        auditViewRunId: queuedRun.id,
+        drilldownRunId: queuedRun.id,
+      },
+    });
+    expect(savedViews.totalCount).toBe(1);
+    expect(savedViews.items[0]?.id).toBe(savedView.id);
+    expect(loadedSavedView).toMatchObject({
+      id: savedView.id,
+      navigation: {
+        drilldown: {
+          workerId: "worker_saved_view",
+        },
+        summary: {
+          executionMode: "queued",
+        },
+      },
+    });
+    expect(application?.savedView.id).toBe(savedView.id);
+    expect(application?.navigation.totalSummaryCount).toBe(1);
+    expect(application?.navigation.drilldowns[0]).toMatchObject({
+      result: {
+        runId: queuedRun.id,
+      },
+    });
+  });
 });

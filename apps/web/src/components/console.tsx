@@ -5,6 +5,8 @@ import type {
   ApiAuditDrilldownLink,
   ApiAuditNavigationFilters,
   ApiAuditNavigationView,
+  ApiAuditSavedView,
+  ApiAuditSavedViewCollection,
   ApiAuditView,
   ApiCrossRunAuditDrilldownFilters,
   ApiCrossRunAuditDrilldownResults,
@@ -128,6 +130,175 @@ export function RunsListView({
           </div>
         </article>
       ))}
+    </section>
+  );
+}
+
+export function SavedAuditViewsView({
+  activeSavedView,
+  navigation,
+  savedViews,
+}: Readonly<{
+  activeSavedView?: ApiAuditSavedView;
+  navigation: ApiAuditNavigationView;
+  savedViews: ApiAuditSavedViewCollection;
+}>) {
+  const returnTo = activeSavedView
+    ? buildSavedAuditViewHref(activeSavedView.id)
+    : buildAuditNavigationPageHref(
+        navigation.filters.summary,
+        navigation.filters.drilldown,
+      );
+
+  return (
+    <section className="card">
+      <div className="row spread">
+        <div>
+          <div className="card-eyebrow">Phase 15 / Saved Audit Views</div>
+          <h2>Saved audit views</h2>
+          <p className="empty-copy">
+            Save constrained audit navigation state without snapshotting audit
+            facts or turning the web console into a catalog product.
+          </p>
+        </div>
+        <div className="timeline-count">
+          {savedViews.totalCount} saved view(s)
+        </div>
+      </div>
+
+      {activeSavedView ? (
+        <div className="inline-note">
+          Applying <strong>{activeSavedView.name}</strong> (
+          {activeSavedView.kind}
+          ).
+          <a className="subtle-link" href="/runs">
+            Clear saved view
+          </a>
+        </div>
+      ) : null}
+
+      <form action="/runs/saved-views" className="decision-form" method="post">
+        <input name="returnTo" type="hidden" value={returnTo} />
+        <HiddenField
+          name="summaryDefinitionId"
+          value={navigation.filters.summary.definitionId}
+        />
+        <HiddenField
+          name="summaryRunStatus"
+          value={navigation.filters.summary.runStatus}
+        />
+        <HiddenField
+          name="summaryExecutionMode"
+          value={navigation.filters.summary.executionMode}
+        />
+        <HiddenField
+          name="summaryToolName"
+          value={navigation.filters.summary.toolName}
+        />
+        <HiddenField
+          name="drilldownApprovalId"
+          value={navigation.filters.drilldown.approvalId}
+        />
+        <HiddenField
+          name="drilldownDispatchJobId"
+          value={navigation.filters.drilldown.dispatchJobId}
+        />
+        <HiddenField
+          name="drilldownRunId"
+          value={navigation.filters.drilldown.runId}
+        />
+        <HiddenField
+          name="drilldownStepId"
+          value={navigation.filters.drilldown.stepId}
+        />
+        <HiddenField
+          name="drilldownToolCallId"
+          value={navigation.filters.drilldown.toolCallId}
+        />
+        <HiddenField
+          name="drilldownToolId"
+          value={navigation.filters.drilldown.toolId}
+        />
+        <HiddenField
+          name="drilldownWorkerId"
+          value={navigation.filters.drilldown.workerId}
+        />
+        <div className="data-grid">
+          <label>
+            <span>Name</span>
+            <input
+              name="name"
+              placeholder="Queued worker follow-up"
+              type="text"
+            />
+          </label>
+          <label>
+            <span>Description</span>
+            <input
+              name="description"
+              placeholder="Saved operator preset for constrained audit follow-up"
+              type="text"
+            />
+          </label>
+        </div>
+        <div className="row spread">
+          <div className="decision-actions">
+            <button type="submit">Save current view</button>
+            <a className="subtle-link" href={returnTo}>
+              Keep current filters
+            </a>
+          </div>
+        </div>
+      </form>
+
+      {savedViews.items.length === 0 ? (
+        <p className="empty-copy">
+          No saved audit views yet. Save a constrained navigation state to
+          reopen it later through the same operator seam.
+        </p>
+      ) : (
+        <ol className="timeline-list">
+          {savedViews.items.map((savedView) => (
+            <li className="timeline-entry" key={savedView.id}>
+              <div className="row spread">
+                <div>
+                  <strong>{savedView.name}</strong>
+                  <div className="timeline-meta">{savedView.kind}</div>
+                </div>
+                <span>{formatTimestamp(savedView.updatedAt)}</span>
+              </div>
+              {savedView.description ? (
+                <p className="empty-copy">{savedView.description}</p>
+              ) : null}
+              <div className="timeline-meta">
+                summary filters{" "}
+                {countSavedViewSummaryFilters(savedView.navigation.summary)}
+                {savedView.refs.auditViewRunId
+                  ? ` · audit view ${savedView.refs.auditViewRunId}`
+                  : ""}
+                {savedView.refs.drilldownRunId
+                  ? ` · drilldown ${savedView.refs.drilldownRunId}`
+                  : ""}
+              </div>
+              <div className="timeline-meta">
+                drilldown filters{" "}
+                {countSavedViewDrilldownFilters(savedView.navigation.drilldown)}
+              </div>
+              <div className="row spread">
+                <a
+                  className="link-button"
+                  href={buildSavedAuditViewHref(savedView.id)}
+                >
+                  Apply saved view
+                </a>
+                {activeSavedView?.id === savedView.id ? (
+                  <span className="subtle-link">Currently applied</span>
+                ) : null}
+              </div>
+            </li>
+          ))}
+        </ol>
+      )}
     </section>
   );
 }
@@ -1202,6 +1373,35 @@ function joinOrFallback(values: readonly string[], fallback: string): string {
   return values.length > 0 ? values.join(", ") : fallback;
 }
 
+function countSavedViewSummaryFilters(
+  filters: ApiAuditNavigationFilters["summary"],
+): number {
+  return [
+    filters.definitionId,
+    filters.executionMode,
+    filters.runStatus,
+    filters.toolName,
+  ].filter(Boolean).length;
+}
+
+function countSavedViewDrilldownFilters(
+  filters: ApiCrossRunAuditDrilldownFilters,
+): number {
+  return [
+    filters.approvalId,
+    filters.dispatchJobId,
+    filters.runId,
+    filters.stepId,
+    filters.toolCallId,
+    filters.toolId,
+    filters.workerId,
+  ].filter(Boolean).length;
+}
+
+function buildSavedAuditViewHref(savedViewId: string): string {
+  return `/runs?savedViewId=${encodeURIComponent(savedViewId)}`;
+}
+
 function buildAuditDrilldownHref(
   filters: ApiCrossRunAuditDrilldownFilters,
 ): string {
@@ -1272,4 +1472,18 @@ function buildAuditNavigationPageHref(
   const query = params.toString();
 
   return query.length > 0 ? `/runs?${query}` : "/runs";
+}
+
+function HiddenField({
+  name,
+  value,
+}: Readonly<{
+  name: string;
+  value: string | undefined;
+}>) {
+  if (!value) {
+    return null;
+  }
+
+  return <input name={name} type="hidden" value={value} />;
 }
