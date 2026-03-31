@@ -29,6 +29,7 @@ export class OperatorNotFoundError extends OperatorError {
     resource:
       | "approval"
       | "catalog assignment checklist"
+      | "catalog checklist item blocker"
       | "catalog checklist item progress"
       | "catalog entry"
       | "catalog review assignment"

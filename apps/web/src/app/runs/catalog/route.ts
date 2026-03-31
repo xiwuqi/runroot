@@ -269,6 +269,53 @@ export async function POST(request: Request) {
       return Response.redirect(redirectUrl, 303);
     }
 
+    if (intent === "block") {
+      const catalogEntryId = readTrimmedFormValue(formData, "catalogEntryId");
+      const blockerItems = readChecklistItemBlockerItems(
+        formData.get("blockerItems"),
+      );
+      const blockerNoteValue = formData.get("blockerNote");
+
+      if (!catalogEntryId) {
+        appendFlashMessage(
+          redirectUrl,
+          "error",
+          "A catalog entry id is required to update checklist item blocker metadata.",
+        );
+
+        return Response.redirect(redirectUrl, 303);
+      }
+
+      if (blockerItems.length === 0) {
+        appendFlashMessage(
+          redirectUrl,
+          "error",
+          "At least one checklist item blocker entry is required.",
+        );
+
+        return Response.redirect(redirectUrl, 303);
+      }
+
+      const blocker =
+        await createRunrootApiClient().setAuditCatalogChecklistItemBlocker(
+          catalogEntryId,
+          {
+            ...(typeof blockerNoteValue === "string"
+              ? { blockerNote: blockerNoteValue }
+              : {}),
+            items: blockerItems,
+          },
+        );
+
+      appendFlashMessage(
+        redirectUrl,
+        "notice",
+        `Checklist item blockers for ${blocker.progress.checklist.assignment.review.visibility.catalogEntry.entry.name} updated.`,
+      );
+
+      return Response.redirect(redirectUrl, 303);
+    }
+
     if (intent === "clear-review") {
       const catalogEntryId = readTrimmedFormValue(formData, "catalogEntryId");
 
@@ -318,6 +365,33 @@ export async function POST(request: Request) {
         redirectUrl,
         "notice",
         `Checklist for ${checklist.assignment.review.visibility.catalogEntry.entry.name} cleared.`,
+      );
+
+      return Response.redirect(redirectUrl, 303);
+    }
+
+    if (intent === "clear-blocker") {
+      const catalogEntryId = readTrimmedFormValue(formData, "catalogEntryId");
+
+      if (!catalogEntryId) {
+        appendFlashMessage(
+          redirectUrl,
+          "error",
+          "A catalog entry id is required to clear checklist item blocker metadata.",
+        );
+
+        return Response.redirect(redirectUrl, 303);
+      }
+
+      const blocker =
+        await createRunrootApiClient().clearAuditCatalogChecklistItemBlocker(
+          catalogEntryId,
+        );
+
+      appendFlashMessage(
+        redirectUrl,
+        "notice",
+        `Checklist item blockers for ${blocker.progress.checklist.assignment.review.visibility.catalogEntry.entry.name} cleared.`,
       );
 
       return Response.redirect(redirectUrl, 303);
@@ -484,6 +558,52 @@ function readChecklistItemProgressItems(
       if (rawState !== "completed" && rawState !== "pending") {
         throw new Error(
           `Checklist item progress state must be pending or completed for "${item}".`,
+        );
+      }
+
+      return {
+        item,
+        state: rawState,
+      };
+    });
+}
+
+function readChecklistItemBlockerItems(
+  value: FormDataEntryValue | null,
+): readonly {
+  readonly item: string;
+  readonly state: "blocked" | "cleared";
+}[] {
+  if (typeof value !== "string") {
+    return [];
+  }
+
+  return value
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .map((line) => {
+      const separatorIndex = line.indexOf(":");
+
+      if (separatorIndex < 0) {
+        return {
+          item: line,
+          state: "blocked" as const,
+        };
+      }
+
+      const rawState = line.slice(0, separatorIndex).trim();
+      const item = line.slice(separatorIndex + 1).trim();
+
+      if (item.length === 0) {
+        throw new Error(
+          "Checklist item blocker lines require a non-empty item.",
+        );
+      }
+
+      if (rawState !== "blocked" && rawState !== "cleared") {
+        throw new Error(
+          `Checklist item blocker state must be blocked or cleared for "${item}".`,
         );
       }
 

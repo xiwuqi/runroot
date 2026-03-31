@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 import type { PackageBoundary } from "@runroot/config";
 import type { JsonValue, RunStatus } from "@runroot/domain";
 import {
+  type BlockAuditCatalogEntryInput,
   type ChecklistAuditCatalogEntryInput,
   createRunrootOperatorService,
   type DecideApprovalInput,
@@ -135,9 +136,24 @@ export async function runCli(
               resolveAssignAuditCatalogEntryInput(flags),
             ),
           });
+        case "block":
+          if (!detail) {
+            throw new Error("audit catalog block requires a catalog entry id.");
+          }
+
+          return writeJson(io.stdout.write, {
+            blocker: await service.blockCatalogEntry(
+              detail,
+              resolveBlockAuditCatalogEntryInput(flags),
+            ),
+          });
         case "assigned":
           return writeJson(io.stdout.write, {
             assigned: await service.listAssignedCatalogEntries(),
+          });
+        case "blocked":
+          return writeJson(io.stdout.write, {
+            blocked: await service.listBlockedCatalogEntries(),
           });
         case "checklist":
           if (!detail) {
@@ -165,6 +181,16 @@ export async function runCli(
 
           return writeJson(io.stdout.write, {
             progress: await service.clearCatalogChecklistItemProgress(detail),
+          });
+        case "clear-blocker":
+          if (!detail) {
+            throw new Error(
+              "audit catalog clear-blocker requires a catalog entry id.",
+            );
+          }
+
+          return writeJson(io.stdout.write, {
+            blocker: await service.clearCatalogChecklistItemBlocker(detail),
           });
         case "clear-assignment":
           if (!detail) {
@@ -235,6 +261,16 @@ export async function runCli(
 
           return writeJson(io.stdout.write, {
             progress: await service.getCatalogChecklistItemProgress(detail),
+          });
+        case "inspect-blocker":
+          if (!detail) {
+            throw new Error(
+              "audit catalog inspect-blocker requires a catalog entry id.",
+            );
+          }
+
+          return writeJson(io.stdout.write, {
+            blocker: await service.getCatalogChecklistItemBlocker(detail),
           });
         case "inspect-review":
           if (!detail) {
@@ -672,6 +708,22 @@ function resolveProgressAuditCatalogEntryInput(
   };
 }
 
+function resolveBlockAuditCatalogEntryInput(
+  flags: ReadonlyMap<string, string | boolean>,
+): BlockAuditCatalogEntryInput {
+  const itemsJson = getStringFlag(flags, "items-json");
+  const blockerNote = getStringFlag(flags, "blocker-note");
+
+  if (!itemsJson) {
+    throw new Error("audit catalog block requires --items-json <json-array>.");
+  }
+
+  return {
+    ...(blockerNote !== undefined ? { blockerNote } : {}),
+    items: resolveChecklistItemBlockerItems(itemsJson),
+  };
+}
+
 function resolveChecklistItems(itemsJson: string): readonly string[] {
   const parsedItems = JSON.parse(itemsJson) as unknown;
 
@@ -705,6 +757,32 @@ function resolveChecklistItemProgressItems(itemsJson: string): readonly {
   ) {
     throw new Error(
       "--items-json must decode to an array of { item, state } objects with state pending|completed.",
+    );
+  }
+
+  return parsedItems;
+}
+
+function resolveChecklistItemBlockerItems(itemsJson: string): readonly {
+  readonly item: string;
+  readonly state: "blocked" | "cleared";
+}[] {
+  const parsedItems = JSON.parse(itemsJson) as unknown;
+
+  if (
+    !Array.isArray(parsedItems) ||
+    !parsedItems.every(
+      (item) =>
+        typeof item === "object" &&
+        item !== null &&
+        "item" in item &&
+        typeof item.item === "string" &&
+        "state" in item &&
+        (item.state === "blocked" || item.state === "cleared"),
+    )
+  ) {
+    throw new Error(
+      "--items-json must decode to an array of { item, state } objects with state blocked|cleared.",
     );
   }
 
@@ -817,18 +895,22 @@ Commands:
   audit catalog visible
   audit catalog reviewed
   audit catalog assigned
+  audit catalog blocked
   audit catalog checklisted
   audit catalog progressed
   audit catalog publish <saved-view-id> [--name <name>] [--description <text>]
   audit catalog show <catalog-entry-id>
   audit catalog inspect <catalog-entry-id>
   audit catalog inspect-assignment <catalog-entry-id>
+  audit catalog inspect-blocker <catalog-entry-id>
   audit catalog inspect-checklist <catalog-entry-id>
   audit catalog inspect-progress <catalog-entry-id>
   audit catalog inspect-review <catalog-entry-id>
   audit catalog assign <catalog-entry-id> --assignee <operator-id> [--handoff-note <text>]
+  audit catalog block <catalog-entry-id> --items-json <json-array> [--blocker-note <text>]
   audit catalog checklist <catalog-entry-id> --status <pending|completed> [--items-json <json-array>]
   audit catalog progress <catalog-entry-id> --items-json <json-array> [--completion-note <text>]
+  audit catalog clear-blocker <catalog-entry-id>
   audit catalog clear-assignment <catalog-entry-id>
   audit catalog clear-checklist <catalog-entry-id>
   audit catalog clear-progress <catalog-entry-id>

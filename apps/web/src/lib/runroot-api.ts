@@ -444,6 +444,34 @@ export interface ApiAuditCatalogChecklistItemProgressCollection {
   readonly totalCount: number;
 }
 
+export type ApiAuditCatalogChecklistItemBlockerState = "blocked" | "cleared";
+
+export interface ApiAuditCatalogChecklistItemBlockerItem {
+  readonly item: string;
+  readonly state: ApiAuditCatalogChecklistItemBlockerState;
+}
+
+export interface ApiAuditCatalogChecklistItemBlocker {
+  readonly blockerNote?: string;
+  readonly catalogEntryId: string;
+  readonly createdAt: string;
+  readonly items: readonly ApiAuditCatalogChecklistItemBlockerItem[];
+  readonly kind: "catalog-checklist-item-blocker";
+  readonly operatorId: string;
+  readonly scopeId: string;
+  readonly updatedAt: string;
+}
+
+export interface ApiAuditCatalogChecklistItemBlockerView {
+  readonly blocker: ApiAuditCatalogChecklistItemBlocker;
+  readonly progress: ApiAuditCatalogChecklistItemProgressView;
+}
+
+export interface ApiAuditCatalogChecklistItemBlockerCollection {
+  readonly items: readonly ApiAuditCatalogChecklistItemBlockerView[];
+  readonly totalCount: number;
+}
+
 export interface CreateApiAuditCatalogEntryInput {
   readonly description?: string;
   readonly name?: string;
@@ -458,6 +486,11 @@ export interface UpdateApiAuditCatalogAssignmentChecklistInput {
 export interface UpdateApiAuditCatalogChecklistItemProgressInput {
   readonly completionNote?: string;
   readonly items: readonly ApiAuditCatalogChecklistItemProgressItem[];
+}
+
+export interface UpdateApiAuditCatalogChecklistItemBlockerInput {
+  readonly blockerNote?: string;
+  readonly items: readonly ApiAuditCatalogChecklistItemBlockerItem[];
 }
 
 export interface UpdateApiAuditCatalogReviewAssignmentInput {
@@ -499,6 +532,9 @@ export interface RunrootApiClient {
   clearAuditCatalogAssignmentChecklist(
     catalogEntryId: string,
   ): Promise<ApiAuditCatalogAssignmentChecklistView>;
+  clearAuditCatalogChecklistItemBlocker(
+    catalogEntryId: string,
+  ): Promise<ApiAuditCatalogChecklistItemBlockerView>;
   clearAuditCatalogChecklistItemProgress(
     catalogEntryId: string,
   ): Promise<ApiAuditCatalogChecklistItemProgressView>;
@@ -514,6 +550,9 @@ export interface RunrootApiClient {
   getAuditCatalogAssignmentChecklist(
     catalogEntryId: string,
   ): Promise<ApiAuditCatalogAssignmentChecklistView>;
+  getAuditCatalogChecklistItemBlocker(
+    catalogEntryId: string,
+  ): Promise<ApiAuditCatalogChecklistItemBlockerView>;
   getAuditCatalogChecklistItemProgress(
     catalogEntryId: string,
   ): Promise<ApiAuditCatalogChecklistItemProgressView>;
@@ -542,6 +581,7 @@ export interface RunrootApiClient {
   ): Promise<ApiAuditCatalogEntryView>;
   getSavedAuditView(savedViewId: string): Promise<ApiAuditSavedView>;
   listAssignedAuditCatalogEntries(): Promise<ApiAuditCatalogReviewAssignmentCollection>;
+  listBlockedAuditCatalogEntries(): Promise<ApiAuditCatalogChecklistItemBlockerCollection>;
   listChecklistedAuditCatalogEntries(): Promise<ApiAuditCatalogAssignmentChecklistCollection>;
   listAuditCatalogEntries(): Promise<ApiAuditCatalogEntryCollection>;
   listProgressedAuditCatalogEntries(): Promise<ApiAuditCatalogChecklistItemProgressCollection>;
@@ -561,6 +601,10 @@ export interface RunrootApiClient {
     catalogEntryId: string,
     input: UpdateApiAuditCatalogChecklistItemProgressInput,
   ): Promise<ApiAuditCatalogChecklistItemProgressView>;
+  setAuditCatalogChecklistItemBlocker(
+    catalogEntryId: string,
+    input: UpdateApiAuditCatalogChecklistItemBlockerInput,
+  ): Promise<ApiAuditCatalogChecklistItemBlockerView>;
   setAuditCatalogAssignmentChecklist(
     catalogEntryId: string,
     input: UpdateApiAuditCatalogAssignmentChecklistInput,
@@ -745,6 +789,18 @@ export function createRunrootApiClient(
       return payload.checklist;
     },
 
+    async clearAuditCatalogChecklistItemBlocker(catalogEntryId) {
+      const payload = await requestJson<{
+        blocker: ApiAuditCatalogChecklistItemBlockerView;
+      }>(
+        `/audit/catalog/${catalogEntryId}/blocker/clear`,
+        { method: "POST" },
+        "web.api.clearAuditCatalogChecklistItemBlocker",
+      );
+
+      return payload.blocker;
+    },
+
     async clearAuditCatalogChecklistItemProgress(catalogEntryId) {
       const payload = await requestJson<{
         progress: ApiAuditCatalogChecklistItemProgressView;
@@ -803,6 +859,18 @@ export function createRunrootApiClient(
       );
 
       return payload.checklist;
+    },
+
+    async getAuditCatalogChecklistItemBlocker(catalogEntryId) {
+      const payload = await requestJson<{
+        blocker: ApiAuditCatalogChecklistItemBlockerView;
+      }>(
+        `/audit/catalog/${catalogEntryId}/blocker`,
+        { method: "GET" },
+        "web.api.getAuditCatalogChecklistItemBlocker",
+      );
+
+      return payload.blocker;
     },
 
     async getAuditCatalogChecklistItemProgress(catalogEntryId) {
@@ -981,6 +1049,18 @@ export function createRunrootApiClient(
       return payload.assigned;
     },
 
+    async listBlockedAuditCatalogEntries() {
+      const payload = await requestJson<{
+        blocked: ApiAuditCatalogChecklistItemBlockerCollection;
+      }>(
+        "/audit/catalog/blocked",
+        { method: "GET" },
+        "web.api.listBlockedAuditCatalogEntries",
+      );
+
+      return payload.blocked;
+    },
+
     async listChecklistedAuditCatalogEntries() {
       const payload = await requestJson<{
         checklisted: ApiAuditCatalogAssignmentChecklistCollection;
@@ -1087,6 +1167,24 @@ export function createRunrootApiClient(
       );
 
       return payload.progress;
+    },
+
+    async setAuditCatalogChecklistItemBlocker(catalogEntryId, input) {
+      const payload = await requestJson<{
+        blocker: ApiAuditCatalogChecklistItemBlockerView;
+      }>(
+        `/audit/catalog/${catalogEntryId}/blocker`,
+        {
+          body: JSON.stringify(input),
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "POST",
+        },
+        "web.api.setAuditCatalogChecklistItemBlocker",
+      );
+
+      return payload.blocker;
     },
 
     async setAuditCatalogAssignmentChecklist(catalogEntryId, input) {

@@ -4,6 +4,9 @@ import type {
   ApiApproval,
   ApiAuditCatalogAssignmentChecklistCollection,
   ApiAuditCatalogAssignmentChecklistView,
+  ApiAuditCatalogChecklistItemBlockerCollection,
+  ApiAuditCatalogChecklistItemBlockerItem,
+  ApiAuditCatalogChecklistItemBlockerView,
   ApiAuditCatalogChecklistItemProgressCollection,
   ApiAuditCatalogChecklistItemProgressItem,
   ApiAuditCatalogChecklistItemProgressView,
@@ -429,6 +432,147 @@ export function ChecklistItemProgressView({
   );
 }
 
+export function ChecklistItemBlockersView({
+  activeCatalogChecklistItemBlocker,
+  blockedEntries,
+}: Readonly<{
+  activeCatalogChecklistItemBlocker?: ApiAuditCatalogChecklistItemBlockerView;
+  blockedEntries: ApiAuditCatalogChecklistItemBlockerCollection;
+}>) {
+  return (
+    <section className="card">
+      <div className="row spread">
+        <div>
+          <div className="card-eyebrow">Phase 22 / Checklist Item Blockers</div>
+          <h2>Checklist item blockers</h2>
+          <p className="empty-copy">
+            Track thin per-item blockers and a single blocker note on progressed
+            assigned presets without turning the console into a workflow engine
+            or collaboration product.
+          </p>
+        </div>
+        <div className="timeline-count">
+          {blockedEntries.totalCount} blocked preset(s)
+        </div>
+      </div>
+
+      {activeCatalogChecklistItemBlocker ? (
+        <div className="inline-note">
+          Active blockers:{" "}
+          <strong>
+            {
+              activeCatalogChecklistItemBlocker.progress.checklist.assignment
+                .review.visibility.catalogEntry.entry.name
+            }
+          </strong>
+          {" · "}
+          {formatBlockerSummary(
+            activeCatalogChecklistItemBlocker.blocker.items,
+          )}
+          {activeCatalogChecklistItemBlocker.blocker.blockerNote
+            ? ` · ${activeCatalogChecklistItemBlocker.blocker.blockerNote}`
+            : ""}
+        </div>
+      ) : null}
+
+      {blockedEntries.items.length === 0 ? (
+        <p className="empty-copy">
+          No checklist item blockers yet. Record progress first, then save thin
+          blocker metadata through the shared operator seam.
+        </p>
+      ) : (
+        <ol className="timeline-list">
+          {blockedEntries.items.map((blockerView) => (
+            <li
+              className="timeline-entry"
+              key={
+                blockerView.progress.checklist.assignment.review.visibility
+                  .catalogEntry.entry.id
+              }
+            >
+              <div className="row spread">
+                <div>
+                  <strong>
+                    {
+                      blockerView.progress.checklist.assignment.review
+                        .visibility.catalogEntry.entry.name
+                    }
+                  </strong>
+                  <div className="timeline-meta">
+                    {formatBlockerSummary(blockerView.blocker.items)}
+                    {" · "}
+                    {formatProgressSummary(blockerView.progress.progress.items)}
+                    {" · "}
+                    {blockerView.progress.checklist.checklist.state}
+                  </div>
+                </div>
+                <span>{formatTimestamp(blockerView.blocker.updatedAt)}</span>
+              </div>
+              <ul className="approval-history">
+                {blockerView.blocker.items.map((item) => (
+                  <li
+                    key={`${blockerView.blocker.catalogEntryId}:${item.item}`}
+                  >
+                    <strong>{item.state}</strong>: {item.item}
+                  </li>
+                ))}
+              </ul>
+              {blockerView.blocker.blockerNote ? (
+                <p className="empty-copy">{blockerView.blocker.blockerNote}</p>
+              ) : null}
+              <div className="timeline-meta">
+                operator {blockerView.blocker.operatorId} · scope{" "}
+                {blockerView.blocker.scopeId}
+              </div>
+              <div className="row spread">
+                <a
+                  className="link-button"
+                  href={buildCatalogEntryHref(
+                    blockerView.progress.checklist.assignment.review.visibility
+                      .catalogEntry.entry.id,
+                  )}
+                >
+                  Apply blocked preset
+                </a>
+                <form
+                  action="/runs/catalog"
+                  className="action-form"
+                  method="post"
+                >
+                  <input
+                    name="returnTo"
+                    type="hidden"
+                    value={buildCatalogEntryHref(
+                      blockerView.progress.checklist.assignment.review
+                        .visibility.catalogEntry.entry.id,
+                    )}
+                  />
+                  <input name="intent" type="hidden" value="clear-blocker" />
+                  <input
+                    name="catalogEntryId"
+                    type="hidden"
+                    value={
+                      blockerView.progress.checklist.assignment.review
+                        .visibility.catalogEntry.entry.id
+                    }
+                  />
+                  <button type="submit">Clear blockers</button>
+                </form>
+              </div>
+              {activeCatalogChecklistItemBlocker?.progress.checklist.assignment
+                .review.visibility.catalogEntry.entry.id ===
+              blockerView.progress.checklist.assignment.review.visibility
+                .catalogEntry.entry.id ? (
+                <div className="timeline-meta">Currently applied</div>
+              ) : null}
+            </li>
+          ))}
+        </ol>
+      )}
+    </section>
+  );
+}
+
 export function CatalogReviewAssignmentsView({
   activeCatalogReviewAssignment,
   assignedEntries,
@@ -663,14 +807,20 @@ export function CatalogReviewSignalsView({
 
 export function AuditViewCatalogsView({
   activeCatalogEntry,
+  activeCatalogChecklistItemBlocker,
+  activeCatalogChecklistItemProgress,
   assignedEntries,
+  blockedEntries,
   catalogEntries,
   checklistedEntries,
   progressedEntries,
   reviewedEntries,
 }: Readonly<{
   activeCatalogEntry?: ApiAuditCatalogVisibilityView;
+  activeCatalogChecklistItemBlocker?: ApiAuditCatalogChecklistItemBlockerView;
+  activeCatalogChecklistItemProgress?: ApiAuditCatalogChecklistItemProgressView;
   assignedEntries: ApiAuditCatalogReviewAssignmentCollection;
+  blockedEntries: ApiAuditCatalogChecklistItemBlockerCollection;
   catalogEntries: ApiAuditCatalogVisibilityCollection;
   checklistedEntries: ApiAuditCatalogAssignmentChecklistCollection;
   progressedEntries: ApiAuditCatalogChecklistItemProgressCollection;
@@ -700,6 +850,16 @@ export function AuditViewCatalogsView({
       (item) =>
         [
           item.checklist.assignment.review.visibility.catalogEntry.entry.id,
+          item,
+        ] as const,
+    ),
+  );
+  const blockersByCatalogEntryId = new Map(
+    blockedEntries.items.map(
+      (item) =>
+        [
+          item.progress.checklist.assignment.review.visibility.catalogEntry
+            .entry.id,
           item,
         ] as const,
     ),
@@ -754,6 +914,9 @@ export function AuditViewCatalogsView({
                 const progress = progressByCatalogEntryId.get(
                   catalogEntry.catalogEntry.entry.id,
                 );
+                const blocker = blockersByCatalogEntryId.get(
+                  catalogEntry.catalogEntry.entry.id,
+                );
                 const reviewSignal = reviewSignalsByCatalogEntryId.get(
                   catalogEntry.catalogEntry.entry.id,
                 );
@@ -777,6 +940,9 @@ export function AuditViewCatalogsView({
                             : ""}
                           {progress
                             ? ` · ${formatProgressSummary(progress.progress.items)}`
+                            : ""}
+                          {blocker
+                            ? ` · ${formatBlockerSummary(blocker.blocker.items)}`
                             : ""}
                         </div>
                       </div>
@@ -815,6 +981,19 @@ export function AuditViewCatalogsView({
                         completion note: {progress.progress.completionNote}
                       </p>
                     ) : null}
+                    {blocker?.blocker.items.length ? (
+                      <p className="empty-copy">
+                        blockers:{" "}
+                        {blocker.blocker.items
+                          .map((item) => `${item.state}: ${item.item}`)
+                          .join(", ")}
+                      </p>
+                    ) : null}
+                    {blocker?.blocker.blockerNote ? (
+                      <p className="empty-copy">
+                        blocker note: {blocker.blocker.blockerNote}
+                      </p>
+                    ) : null}
                     <div className="timeline-meta">
                       saved view {catalogEntry.catalogEntry.savedView.id}
                       {catalogEntry.catalogEntry.savedView.refs.auditViewRunId
@@ -838,6 +1017,9 @@ export function AuditViewCatalogsView({
                         : ""}
                       {progress
                         ? ` · progress owner ${progress.progress.operatorId}`
+                        : ""}
+                      {blocker
+                        ? ` · blocker owner ${blocker.blocker.operatorId}`
                         : ""}
                     </div>
                     <div className="timeline-meta">
@@ -1056,6 +1238,57 @@ export function AuditViewCatalogsView({
                         </div>
                       </form>
                     ) : null}
+                    {progress ? (
+                      <form
+                        action="/runs/catalog"
+                        className="decision-form"
+                        method="post"
+                      >
+                        <input
+                          name="returnTo"
+                          type="hidden"
+                          value={buildCatalogEntryHref(
+                            catalogEntry.catalogEntry.entry.id,
+                          )}
+                        />
+                        <input name="intent" type="hidden" value="block" />
+                        <input
+                          name="catalogEntryId"
+                          type="hidden"
+                          value={catalogEntry.catalogEntry.entry.id}
+                        />
+                        <div className="data-grid">
+                          <label>
+                            <span>Checklist item blockers</span>
+                            <textarea
+                              className="note-input"
+                              defaultValue={formatChecklistItemBlockerLines(
+                                progress.progress.items,
+                                blocker?.blocker.items,
+                              )}
+                              name="blockerItems"
+                              placeholder="blocked: Validate queued follow-up"
+                              rows={4}
+                            />
+                          </label>
+                          <label>
+                            <span>Blocker note</span>
+                            <input
+                              defaultValue={blocker?.blocker.blockerNote ?? ""}
+                              name="blockerNote"
+                              placeholder="Optional thin blocker note"
+                              type="text"
+                            />
+                          </label>
+                        </div>
+                        <div className="row spread">
+                          <div />
+                          <button type="submit">
+                            {blocker ? "Update blockers" : "Save blockers"}
+                          </button>
+                        </div>
+                      </form>
+                    ) : null}
                     <div className="row spread">
                       <a
                         className="link-button"
@@ -1170,6 +1403,32 @@ export function AuditViewCatalogsView({
                             <button type="submit">Clear progress</button>
                           </form>
                         ) : null}
+                        {blocker ? (
+                          <form
+                            action="/runs/catalog"
+                            className="action-form"
+                            method="post"
+                          >
+                            <input
+                              name="returnTo"
+                              type="hidden"
+                              value={buildCatalogEntryHref(
+                                catalogEntry.catalogEntry.entry.id,
+                              )}
+                            />
+                            <input
+                              name="intent"
+                              type="hidden"
+                              value="clear-blocker"
+                            />
+                            <input
+                              name="catalogEntryId"
+                              type="hidden"
+                              value={catalogEntry.catalogEntry.entry.id}
+                            />
+                            <button type="submit">Clear blockers</button>
+                          </form>
+                        ) : null}
                         <form
                           action="/runs/catalog"
                           className="action-form"
@@ -1227,6 +1486,20 @@ export function AuditViewCatalogsView({
                     {activeCatalogEntry?.catalogEntry.entry.id ===
                     catalogEntry.catalogEntry.entry.id ? (
                       <div className="timeline-meta">Currently applied</div>
+                    ) : null}
+                    {activeCatalogChecklistItemProgress?.checklist.assignment
+                      .review.visibility.catalogEntry.entry.id ===
+                    catalogEntry.catalogEntry.entry.id ? (
+                      <div className="timeline-meta">
+                        Active progress selected
+                      </div>
+                    ) : null}
+                    {activeCatalogChecklistItemBlocker?.progress.checklist
+                      .assignment.review.visibility.catalogEntry.entry.id ===
+                    catalogEntry.catalogEntry.entry.id ? (
+                      <div className="timeline-meta">
+                        Active blockers selected
+                      </div>
                     ) : null}
                   </>
                 );
@@ -2528,6 +2801,14 @@ function formatProgressSummary(
   return `${completedCount}/${items.length} completed`;
 }
 
+function formatBlockerSummary(
+  items: readonly ApiAuditCatalogChecklistItemBlockerItem[],
+): string {
+  const blockedCount = items.filter((item) => item.state === "blocked").length;
+
+  return `${blockedCount}/${items.length} blocked`;
+}
+
 function formatChecklistItemProgressLines(
   checklistItems: readonly string[],
   progressItems:
@@ -2540,6 +2821,19 @@ function formatChecklistItemProgressLines(
 
   return checklistItems
     .map((item) => `${progressByItem.get(item) ?? "pending"}: ${item}`)
+    .join("\n");
+}
+
+function formatChecklistItemBlockerLines(
+  progressItems: readonly ApiAuditCatalogChecklistItemProgressItem[],
+  blockerItems: readonly ApiAuditCatalogChecklistItemBlockerItem[] | undefined,
+): string {
+  const blockerByItem = new Map(
+    (blockerItems ?? []).map((item) => [item.item, item.state] as const),
+  );
+
+  return progressItems
+    .map((item) => `${blockerByItem.get(item.item) ?? "cleared"}: ${item.item}`)
     .join("\n");
 }
 
