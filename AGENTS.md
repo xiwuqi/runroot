@@ -56,6 +56,7 @@ The project is executed in phases. Only work on the current phase.
 - Phase 19: Cross-Run Audit Catalog Review Assignments and Operator Handoffs
 - Phase 20: Cross-Run Audit Catalog Assignment Checklists and Handoff Statuses
 - Phase 21: Cross-Run Audit Catalog Checklist Item Progress and Completion Notes
+- Phase 22: Cross-Run Audit Catalog Checklist Item Blockers and Blocker Notes
 
 Do not pull work from later phases into the current phase unless it is required to unblock the current phase and the reason is documented.
 

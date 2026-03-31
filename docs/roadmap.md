@@ -295,4 +295,24 @@ Status: completed
   engines, broader multi-user curation, or broad observability and analytics
   platform work
 
-Status: implemented on branch
+Status: completed
+
+## Phase 22: Cross-Run Audit Catalog Checklist Item Blockers and Blocker Notes
+
+- add a shared audit-catalog checklist-item-blocker contract over the existing
+  checklist-item-progress and assignment-checklist paths rather than
+  introducing broader checklist orchestration or a workflow engine
+- expose minimal block, list-blocked, inspect-blocker, clear-blocker, and
+  apply paths through the existing seams in SDK, API, CLI, and web
+- keep operator surfaces thin while allowing progressed assigned presets to
+  carry stable per-item blocker state and a thin blocker note without
+  expanding into threaded collaboration, fine-grained RBAC, multi-tenant
+  access, dashboards, search, or analytics products
+- execute against the formal handoff in
+  [docs/architecture/phase-22-handoff.md](./architecture/phase-22-handoff.md)
+- keep the phase focused on checklist item blockers and blocker notes rather
+  than broader checklist orchestration, broader review workflow engines,
+  broader multi-user curation, or broad observability and analytics platform
+  work
+
+Status: scope frozen on branch
