@@ -25,7 +25,7 @@ describe("@runroot/api", () => {
     expect(response.json()).toEqual({
       status: "ok",
       project: "Runroot",
-      phase: 19,
+      phase: 20,
     });
   });
 
@@ -878,6 +878,218 @@ describe("@runroot/api", () => {
     expect(reviewedAfterClearPayload.reviewed.totalCount).toBe(0);
   });
 
+  it("checklists, lists-checklisted, inspects, clears, and reapplies assigned catalog entries through the operator API", async () => {
+    const workspaceRoot = await mkdtemp(
+      join(tmpdir(), "runroot-api-checklists-"),
+    );
+    app = buildServer({
+      operator: createRunrootOperatorService({
+        catalogEntryIdGenerator: () => "catalog_entry_checklist_api",
+        operatorId: "ops_oncall",
+        operatorScopeId: "ops",
+        savedViewIdGenerator: () => "saved_view_checklist_api",
+        workspacePath: join(workspaceRoot, "workspace.json"),
+      }),
+    });
+
+    const createResponse = await app.inject({
+      method: "POST",
+      payload: {
+        input: {
+          approvalRequired: false,
+          commandAlias: "print-ready",
+          runbookId: "node-health-check",
+        },
+        templateId: "shell-runbook-flow",
+      },
+      url: "/runs",
+    });
+    const createdPayload = createResponse.json() as {
+      run: {
+        id: string;
+      };
+    };
+    const saveResponse = await app.inject({
+      method: "POST",
+      payload: {
+        name: "Saved checklist detail",
+        navigation: {
+          drilldown: {
+            runId: createdPayload.run.id,
+          },
+          summary: {
+            definitionId: "shell-runbook-flow",
+          },
+        },
+        refs: {
+          auditViewRunId: createdPayload.run.id,
+        },
+      },
+      url: "/audit/saved-views",
+    });
+    const savedViewPayload = saveResponse.json() as {
+      savedView: {
+        id: string;
+      };
+    };
+    const publishResponse = await app.inject({
+      method: "POST",
+      payload: {
+        savedViewId: savedViewPayload.savedView.id,
+      },
+      url: "/audit/catalog",
+    });
+    const publishedPayload = publishResponse.json() as {
+      catalogEntry: {
+        entry: {
+          id: string;
+        };
+      };
+    };
+    const reviewResponse = await app.inject({
+      method: "POST",
+      payload: {
+        note: "Checklist-ready inline follow-up",
+        state: "reviewed",
+      },
+      url: `/audit/catalog/${publishedPayload.catalogEntry.entry.id}/review`,
+    });
+    const assignmentResponse = await app.inject({
+      method: "POST",
+      payload: {
+        assigneeId: "ops_oncall",
+        handoffNote: "Inline checklist remains with the owner",
+      },
+      url: `/audit/catalog/${publishedPayload.catalogEntry.entry.id}/assignment`,
+    });
+    const checklistResponse = await app.inject({
+      method: "POST",
+      payload: {
+        items: ["Confirm inline handoff", "Close follow-up"],
+        state: "pending",
+      },
+      url: `/audit/catalog/${publishedPayload.catalogEntry.entry.id}/checklist`,
+    });
+    const checklistedResponse = await app.inject({
+      method: "GET",
+      url: "/audit/catalog/checklisted",
+    });
+    const inspectResponse = await app.inject({
+      method: "GET",
+      url: `/audit/catalog/${publishedPayload.catalogEntry.entry.id}/checklist`,
+    });
+    const applyResponse = await app.inject({
+      method: "GET",
+      url: `/audit/catalog/${publishedPayload.catalogEntry.entry.id}/apply`,
+    });
+    const clearResponse = await app.inject({
+      method: "POST",
+      url: `/audit/catalog/${publishedPayload.catalogEntry.entry.id}/checklist/clear`,
+    });
+    const checklistedAfterClearResponse = await app.inject({
+      method: "GET",
+      url: "/audit/catalog/checklisted",
+    });
+    const checklistPayload = checklistResponse.json() as {
+      checklist: {
+        assignment: {
+          assignment: {
+            assigneeId: string;
+          };
+        };
+        checklist: {
+          items?: readonly string[];
+          state: "completed" | "pending";
+        };
+      };
+    };
+    const checklistedPayload = checklistedResponse.json() as {
+      checklisted: {
+        items: Array<{
+          assignment: {
+            review: {
+              visibility: {
+                catalogEntry: {
+                  entry: {
+                    id: string;
+                  };
+                };
+              };
+            };
+          };
+          checklist: {
+            state: "completed" | "pending";
+          };
+        }>;
+        totalCount: number;
+      };
+    };
+    const inspectPayload = inspectResponse.json() as {
+      checklist: {
+        checklist: {
+          items?: readonly string[];
+          state: "completed" | "pending";
+        };
+      };
+    };
+    const applyPayload = applyResponse.json() as {
+      application: {
+        application: {
+          savedView: {
+            id: string;
+          };
+        };
+      };
+    };
+    const clearPayload = clearResponse.json() as {
+      checklist: {
+        checklist: {
+          state: "completed" | "pending";
+        };
+      };
+    };
+    const checklistedAfterClearPayload =
+      checklistedAfterClearResponse.json() as {
+        checklisted: {
+          totalCount: number;
+        };
+      };
+
+    expect(reviewResponse.statusCode).toBe(200);
+    expect(assignmentResponse.statusCode).toBe(200);
+    expect(checklistResponse.statusCode).toBe(200);
+    expect(checklistPayload.checklist.assignment.assignment.assigneeId).toBe(
+      "ops_oncall",
+    );
+    expect(checklistPayload.checklist.checklist.state).toBe("pending");
+    expect(checklistPayload.checklist.checklist.items).toEqual([
+      "Confirm inline handoff",
+      "Close follow-up",
+    ]);
+    expect(checklistedResponse.statusCode).toBe(200);
+    expect(checklistedPayload.checklisted.totalCount).toBe(1);
+    expect(
+      checklistedPayload.checklisted.items[0]?.assignment.review.visibility
+        .catalogEntry.entry.id,
+    ).toBe("catalog_entry_checklist_api");
+    expect(checklistedPayload.checklisted.items[0]?.checklist.state).toBe(
+      "pending",
+    );
+    expect(inspectResponse.statusCode).toBe(200);
+    expect(inspectPayload.checklist.checklist.items).toEqual([
+      "Confirm inline handoff",
+      "Close follow-up",
+    ]);
+    expect(applyResponse.statusCode).toBe(200);
+    expect(applyPayload.application.application.savedView.id).toBe(
+      savedViewPayload.savedView.id,
+    );
+    expect(clearResponse.statusCode).toBe(200);
+    expect(clearPayload.checklist.checklist.state).toBe("pending");
+    expect(checklistedAfterClearResponse.statusCode).toBe(200);
+    expect(checklistedAfterClearPayload.checklisted.totalCount).toBe(0);
+  });
+
   it("rejects invalid catalog review state through the operator API", async () => {
     const workspaceRoot = await mkdtemp(
       join(tmpdir(), "runroot-api-review-invalid-"),
@@ -899,6 +1111,30 @@ describe("@runroot/api", () => {
     expect(reviewResponse.statusCode).toBe(400);
     expect(reviewResponse.body).toContain(
       "state must be one of recommended|reviewed.",
+    );
+  });
+
+  it("rejects invalid catalog checklist state through the operator API", async () => {
+    const workspaceRoot = await mkdtemp(
+      join(tmpdir(), "runroot-api-checklist-invalid-"),
+    );
+    app = buildServer({
+      operator: createRunrootOperatorService({
+        workspacePath: join(workspaceRoot, "workspace.json"),
+      }),
+    });
+
+    const checklistResponse = await app.inject({
+      method: "POST",
+      payload: {
+        state: "invalid",
+      },
+      url: "/audit/catalog/catalog_entry_invalid/checklist",
+    });
+
+    expect(checklistResponse.statusCode).toBe(400);
+    expect(checklistResponse.body).toContain(
+      "state must be one of pending|completed.",
     );
   });
 });
