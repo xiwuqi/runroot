@@ -497,4 +497,181 @@ describe("@runroot/web integration", () => {
       await app.close();
     }
   });
+
+  it("renders, reviews, clears, and reapplies reviewed presets through the existing API surface", async () => {
+    const workspaceRoot = await mkdtemp(
+      join(tmpdir(), "runroot-web-review-signals-"),
+    );
+    const sqlitePath = join(workspaceRoot, "runroot.sqlite");
+    const inlineOperator = createRunrootOperatorService({
+      catalogEntryIdGenerator: () => "catalog_entry_review_web",
+      executionMode: "inline",
+      operatorId: "ops_oncall",
+      operatorScopeId: "ops",
+      persistenceDriver: "sqlite",
+      savedViewIdGenerator: () => "saved_view_review_web",
+      sqlitePath,
+    });
+    const queuedOperator = createRunrootOperatorService({
+      executionMode: "queued",
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+    const workerService = (
+      await import("@runroot/sdk")
+    ).createRunrootWorkerService({
+      persistenceDriver: "sqlite",
+      sqlitePath,
+      workerId: "worker_web_review",
+    });
+    const app = buildServer({
+      operator: createRunrootOperatorService({
+        catalogEntryIdGenerator: () => "catalog_entry_review_web",
+        operatorId: "ops_oncall",
+        operatorScopeId: "ops",
+        persistenceDriver: "sqlite",
+        savedViewIdGenerator: () => "saved_view_review_web",
+        sqlitePath,
+      }),
+    });
+
+    try {
+      const inlineRun = await inlineOperator.startRun({
+        input: {
+          approvalRequired: false,
+          commandAlias: "print-ready",
+          runbookId: "node-health-check",
+        },
+        templateId: "shell-runbook-flow",
+      });
+      const queuedRun = await queuedOperator.startRun({
+        input: {
+          approvalRequired: false,
+          commandAlias: "print-ready",
+          runbookId: "node-health-check",
+        },
+        templateId: "shell-runbook-flow",
+      });
+
+      await workerService.processNextJob();
+
+      const address = await app.listen({
+        host: "127.0.0.1",
+        port: 0,
+      });
+      process.env.RUNROOT_API_BASE_URL = address;
+
+      const saveForm = new FormData();
+      saveForm.set("name", "Queued review preset");
+      saveForm.set("description", "Saved queued worker review preset");
+      saveForm.set("summaryExecutionMode", "queued");
+      saveForm.set("drilldownWorkerId", "worker_web_review");
+      saveForm.set("auditViewRunId", queuedRun.id);
+      saveForm.set("drilldownRunId", queuedRun.id);
+      saveForm.set("returnTo", "/runs");
+
+      const saveResponse = await saveSavedView(
+        new Request("http://localhost/runs/saved-views", {
+          body: saveForm,
+          method: "POST",
+        }),
+      );
+
+      expect(saveResponse.status).toBe(303);
+
+      const publishForm = new FormData();
+      publishForm.set("intent", "publish");
+      publishForm.set("savedViewId", "saved_view_review_web");
+
+      const publishResponse = await mutateCatalog(
+        new Request("http://localhost/runs/catalog", {
+          body: publishForm,
+          method: "POST",
+        }),
+      );
+
+      expect(publishResponse.status).toBe(303);
+
+      const shareForm = new FormData();
+      shareForm.set("catalogEntryId", "catalog_entry_review_web");
+      shareForm.set("intent", "share");
+
+      const shareResponse = await mutateCatalog(
+        new Request("http://localhost/runs/catalog", {
+          body: shareForm,
+          method: "POST",
+        }),
+      );
+
+      expect(shareResponse.status).toBe(303);
+
+      const reviewForm = new FormData();
+      reviewForm.set("catalogEntryId", "catalog_entry_review_web");
+      reviewForm.set("intent", "review");
+      reviewForm.set("note", `Recommended after inline ${inlineRun.id}`);
+      reviewForm.set("reviewState", "recommended");
+      reviewForm.set(
+        "returnTo",
+        "/runs?catalogEntryId=catalog_entry_review_web",
+      );
+
+      const reviewResponse = await mutateCatalog(
+        new Request("http://localhost/runs/catalog", {
+          body: reviewForm,
+          method: "POST",
+        }),
+      );
+
+      expect(reviewResponse.status).toBe(303);
+
+      const reviewedMarkup = renderToStaticMarkup(
+        await RunsPage({
+          searchParams: Promise.resolve({
+            catalogEntryId: "catalog_entry_review_web",
+          }),
+        }),
+      );
+
+      expect(reviewedMarkup).toContain("Catalog review signals");
+      expect(reviewedMarkup).toContain("Queued review preset");
+      expect(reviewedMarkup).toContain("recommended");
+      expect(reviewedMarkup).toContain(inlineRun.id);
+      expect(reviewedMarkup).toContain(queuedRun.id);
+      expect(reviewedMarkup).toContain("Apply reviewed preset");
+      expect(reviewedMarkup).toContain("Currently applied");
+
+      const clearForm = new FormData();
+      clearForm.set("catalogEntryId", "catalog_entry_review_web");
+      clearForm.set("intent", "clear-review");
+      clearForm.set(
+        "returnTo",
+        "/runs?catalogEntryId=catalog_entry_review_web",
+      );
+
+      const clearResponse = await mutateCatalog(
+        new Request("http://localhost/runs/catalog", {
+          body: clearForm,
+          method: "POST",
+        }),
+      );
+
+      expect(clearResponse.status).toBe(303);
+
+      const clearedMarkup = renderToStaticMarkup(
+        await RunsPage({
+          searchParams: Promise.resolve({
+            catalogEntryId: "catalog_entry_review_web",
+          }),
+        }),
+      );
+
+      expect(clearedMarkup).toContain("Catalog review signals");
+      expect(clearedMarkup).toContain("No review signals yet");
+      expect(clearedMarkup).not.toContain(
+        `Recommended after inline ${inlineRun.id}`,
+      );
+    } finally {
+      await app.close();
+    }
+  });
 });

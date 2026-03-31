@@ -16,8 +16,8 @@ Runroot focuses on:
 
 ## Current Status
 
-Phase 17 (Cross-Run Audit Catalog Visibility and Shared Presets) is complete on
-this branch. The
+Phase 18 (Cross-Run Audit Catalog Review Signals and Shared Notes) is complete
+on this branch. The
 repository now includes:
 
 - the Phase 2 runtime core for runs, steps, checkpoints, and retries
@@ -52,6 +52,9 @@ repository now includes:
 - shared catalog visibility metadata that keeps curated presets personal or
   shared through the same SDK, API, CLI, and web seams without becoming a
   collaboration or SaaS layer
+- shared catalog review signals and shared notes that let operators mark
+  visible presets as recommended or reviewed through the same SDK, API, CLI,
+  and web seams without becoming a threaded collaboration or approval layer
 
 Persisted tool history is additive audit data. It does not become part of the
 shared replay or approval source of truth.
@@ -82,6 +85,11 @@ Catalog visibility remains a derived operator layer as well. It adds minimal
 shared-preset visibility state over catalog entries without becoming replay,
 approval, RBAC, multi-tenant access control, or a collaborative catalog
 product.
+
+Catalog review signals remain a derived operator layer too. They add thin
+review state and optional shared notes over visible presets without becoming
+replay, approval, workflow correctness, threaded collaboration, or a
+dashboard/search surface.
 
 ## Planned Capabilities
 
@@ -177,6 +185,12 @@ operator-facing. It can distinguish personal and shared presets through stable
 visibility metadata, but it does not expand into RBAC, multi-tenant access
 models, discovery products, or collaborative SaaS catalog behavior.
 
+Phase 18 adds a fifteenth rule: catalog review signals stay thin and
+operator-facing. They can attach stable review state and optional shared notes
+to visible presets, but they do not expand into threaded collaboration,
+assignments, RBAC, multi-tenant access models, dashboards, search products, or
+analytics platforms.
+
 ## Example Use Cases
 
 - GitHub issue triage with optional human approval
@@ -204,6 +218,7 @@ models, discovery products, or collaborative SaaS catalog behavior.
 - [Audit Saved Views](./docs/guides/audit-saved-views.md)
 - [Audit View Catalogs](./docs/guides/audit-view-catalogs.md)
 - [Audit Catalog Visibility](./docs/guides/audit-catalog-visibility.md)
+- [Audit Catalog Review Signals](./docs/guides/audit-catalog-review-signals.md)
 - [Release Readiness](./docs/guides/release-readiness.md)
 - [Examples](./examples/README.md)
 - [Web Console](./docs/architecture/web-console.md)

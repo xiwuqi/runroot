@@ -1,5 +1,6 @@
 import {
   AuditViewCatalogsView,
+  CatalogReviewSignalsView,
   ConsoleShell,
   CrossRunAuditNavigationView,
   ErrorState,
@@ -14,6 +15,7 @@ import {
 } from "../../lib/navigation";
 import {
   type ApiAuditCatalogEntryApplication,
+  type ApiAuditCatalogReviewSignalView,
   type ApiAuditCatalogVisibilityView,
   type ApiAuditNavigationFilters,
   type ApiAuditNavigationView,
@@ -44,12 +46,15 @@ export default async function RunsPage({
     const drilldownFilters = readAuditDrilldownFilters(resolvedSearchParams);
     const [
       runs,
+      reviewedEntries,
       catalogEntries,
       savedViews,
       navigationResult,
       catalogVisibility,
+      catalogReviewSignal,
     ] = await Promise.all([
       api.listRuns(),
+      api.listReviewedAuditCatalogEntries(),
       api.listVisibleAuditCatalogEntries(),
       api.listSavedAuditViews(),
       catalogEntryId
@@ -63,14 +68,19 @@ export default async function RunsPage({
       catalogEntryId
         ? api.getAuditCatalogVisibility(catalogEntryId)
         : Promise.resolve(undefined),
+      catalogEntryId
+        ? api.getAuditCatalogReviewSignal(catalogEntryId).catch(() => undefined)
+        : Promise.resolve(undefined),
     ]);
     const sortedRuns = [...runs].sort(compareRunsByUpdatedAt);
     let navigation: ApiAuditNavigationView;
     let activeCatalogEntry: ApiAuditCatalogVisibilityView | undefined;
+    let activeCatalogReviewSignal: ApiAuditCatalogReviewSignalView | undefined;
     let activeSavedView: ApiAuditSavedView | undefined;
 
     if (hasCatalogEntryApplication(navigationResult)) {
       activeCatalogEntry = catalogVisibility;
+      activeCatalogReviewSignal = catalogReviewSignal;
       activeSavedView = navigationResult.application.savedView;
       navigation = navigationResult.application.navigation;
     } else if (hasSavedViewApplication(navigationResult)) {
@@ -86,8 +96,13 @@ export default async function RunsPage({
         title="Runs"
       >
         <FlashBanner message={flash} />
+        <CatalogReviewSignalsView
+          reviewedEntries={reviewedEntries}
+          {...(activeCatalogReviewSignal ? { activeCatalogReviewSignal } : {})}
+        />
         <AuditViewCatalogsView
           catalogEntries={catalogEntries}
+          reviewedEntries={reviewedEntries}
           {...(activeCatalogEntry ? { activeCatalogEntry } : {})}
         />
         <SavedAuditViewsView

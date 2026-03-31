@@ -236,4 +236,4 @@ Status: completed
   threaded collaboration, SaaS catalogs, or broad observability and analytics
   platform work
 
-Status: scope frozen on branch, pending docs PR
+Status: implemented on branch, pending phase review

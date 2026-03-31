@@ -73,6 +73,85 @@ export async function POST(request: Request) {
       return Response.redirect(redirectUrl, 303);
     }
 
+    if (intent === "review") {
+      const catalogEntryId = readTrimmedFormValue(formData, "catalogEntryId");
+      const reviewState = readTrimmedFormValue(formData, "reviewState");
+      const noteValue = formData.get("note");
+
+      if (!catalogEntryId) {
+        appendFlashMessage(
+          redirectUrl,
+          "error",
+          "A catalog entry id is required to update review metadata.",
+        );
+
+        return Response.redirect(redirectUrl, 303);
+      }
+
+      if (!reviewState) {
+        appendFlashMessage(
+          redirectUrl,
+          "error",
+          "A review state is required to update review metadata.",
+        );
+
+        return Response.redirect(redirectUrl, 303);
+      }
+
+      if (reviewState !== "recommended" && reviewState !== "reviewed") {
+        appendFlashMessage(
+          redirectUrl,
+          "error",
+          "Review state must be recommended or reviewed.",
+        );
+
+        return Response.redirect(redirectUrl, 303);
+      }
+
+      const review = await createRunrootApiClient().reviewAuditCatalogEntry(
+        catalogEntryId,
+        {
+          ...(typeof noteValue === "string" ? { note: noteValue } : {}),
+          state: reviewState,
+        },
+      );
+
+      appendFlashMessage(
+        redirectUrl,
+        "notice",
+        `Review signal for ${review.visibility.catalogEntry.entry.name} updated to ${review.review.state}.`,
+      );
+
+      return Response.redirect(redirectUrl, 303);
+    }
+
+    if (intent === "clear-review") {
+      const catalogEntryId = readTrimmedFormValue(formData, "catalogEntryId");
+
+      if (!catalogEntryId) {
+        appendFlashMessage(
+          redirectUrl,
+          "error",
+          "A catalog entry id is required to clear review metadata.",
+        );
+
+        return Response.redirect(redirectUrl, 303);
+      }
+
+      const review =
+        await createRunrootApiClient().clearAuditCatalogReviewSignal(
+          catalogEntryId,
+        );
+
+      appendFlashMessage(
+        redirectUrl,
+        "notice",
+        `Review signal for ${review.visibility.catalogEntry.entry.name} cleared.`,
+      );
+
+      return Response.redirect(redirectUrl, 303);
+    }
+
     const savedViewId = readTrimmedFormValue(formData, "savedViewId");
 
     if (!savedViewId) {

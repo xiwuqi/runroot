@@ -782,4 +782,160 @@ describe("@runroot/sdk operator service integration", () => {
     expect(archivedEntry.entry.archivedAt).toBeTruthy();
     expect(listedAfterArchive.totalCount).toBe(0);
   });
+
+  it("reviews, lists-reviewed, inspects, clears, and reapplies reviewed presets for inline and queued runs through the operator seam", async () => {
+    const workspaceRoot = await mkdtemp(
+      join(tmpdir(), "runroot-sdk-review-signals-"),
+    );
+    const sqlitePath = join(workspaceRoot, "runroot.sqlite");
+    const now = createClock();
+    const idGenerator = createIdGenerator();
+    let savedViewCount = 0;
+    let catalogEntryCount = 0;
+    const inlineService = createRunrootOperatorService({
+      executionMode: "inline",
+      idGenerator,
+      now,
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+    const queuedService = createRunrootOperatorService({
+      executionMode: "queued",
+      idGenerator,
+      now,
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+    const worker = createRunrootWorkerService({
+      idGenerator,
+      now,
+      persistenceDriver: "sqlite",
+      sqlitePath,
+      workerId: "worker_review_signals",
+    });
+    const ownerService = createRunrootOperatorService({
+      catalogEntryIdGenerator: () =>
+        `catalog_entry_review_${++catalogEntryCount}`,
+      idGenerator,
+      now,
+      operatorId: "ops_oncall",
+      operatorScopeId: "ops",
+      persistenceDriver: "sqlite",
+      savedViewIdGenerator: () => `saved_view_review_${++savedViewCount}`,
+      sqlitePath,
+    });
+    const peerService = createRunrootOperatorService({
+      idGenerator,
+      now,
+      operatorId: "ops_backup",
+      operatorScopeId: "ops",
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+
+    const inlineRun = await inlineService.startRun({
+      input: {
+        approvalRequired: false,
+        commandAlias: "print-ready",
+        runbookId: "node-health-check",
+      },
+      templateId: "shell-runbook-flow",
+    });
+    const queuedRun = await queuedService.startRun({
+      input: {
+        approvalRequired: false,
+        commandAlias: "print-ready",
+        runbookId: "node-health-check",
+      },
+      templateId: "shell-runbook-flow",
+    });
+
+    await worker.processNextJob();
+
+    const inlineSavedView = await ownerService.saveSavedView({
+      description: "Inline preset for owner follow-up",
+      name: "Inline review preset",
+      navigation: {
+        drilldown: {
+          runId: inlineRun.id,
+        },
+        summary: {
+          executionMode: "inline",
+        },
+      },
+      refs: {
+        auditViewRunId: inlineRun.id,
+        drilldownRunId: inlineRun.id,
+      },
+    });
+    const queuedSavedView = await ownerService.saveSavedView({
+      description: "Queued preset for shared review",
+      name: "Queued review preset",
+      navigation: {
+        drilldown: {
+          workerId: "worker_review_signals",
+        },
+        summary: {
+          executionMode: "queued",
+        },
+      },
+      refs: {
+        auditViewRunId: queuedRun.id,
+        drilldownRunId: queuedRun.id,
+      },
+    });
+    const inlineCatalogEntry = await ownerService.publishCatalogEntry({
+      savedViewId: inlineSavedView.id,
+    });
+    const queuedCatalogEntry = await ownerService.publishCatalogEntry({
+      savedViewId: queuedSavedView.id,
+    });
+
+    await ownerService.shareCatalogEntry(queuedCatalogEntry.entry.id);
+    await ownerService.reviewCatalogEntry(inlineCatalogEntry.entry.id, {
+      note: "Inline preset verified by the owner",
+      state: "reviewed",
+    });
+    await peerService.reviewCatalogEntry(queuedCatalogEntry.entry.id, {
+      note: "Queued preset recommended for shared follow-up",
+      state: "recommended",
+    });
+
+    const ownerReviewed = await ownerService.listReviewedCatalogEntries();
+    const peerReviewed = await peerService.listReviewedCatalogEntries();
+    const inspectedReview = await ownerService.getCatalogReviewSignal(
+      queuedCatalogEntry.entry.id,
+    );
+    const appliedReview = await peerService.applyCatalogEntry(
+      queuedCatalogEntry.entry.id,
+    );
+    const clearedReview = await ownerService.clearCatalogReviewSignal(
+      queuedCatalogEntry.entry.id,
+    );
+    const peerReviewedAfterClear =
+      await peerService.listReviewedCatalogEntries();
+
+    expect(
+      ownerReviewed.items.map((item) => item.visibility.catalogEntry.entry.id),
+    ).toEqual([queuedCatalogEntry.entry.id, inlineCatalogEntry.entry.id]);
+    expect(
+      peerReviewed.items.map((item) => item.visibility.catalogEntry.entry.id),
+    ).toEqual([queuedCatalogEntry.entry.id]);
+    expect(inspectedReview.review).toMatchObject({
+      note: "Queued preset recommended for shared follow-up",
+      operatorId: "ops_backup",
+      scopeId: "ops",
+      state: "recommended",
+    });
+    expect(appliedReview.catalogEntry.entry.id).toBe(
+      queuedCatalogEntry.entry.id,
+    );
+    expect(appliedReview.application.savedView.id).toBe(queuedSavedView.id);
+    expect(appliedReview.application.navigation.totalSummaryCount).toBe(1);
+    expect(
+      appliedReview.application.navigation.drilldowns[0]?.result.runId,
+    ).toBe(queuedRun.id);
+    expect(clearedReview.review.state).toBe("recommended");
+    expect(peerReviewedAfterClear.totalCount).toBe(0);
+  });
 });

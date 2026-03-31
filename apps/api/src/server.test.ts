@@ -25,7 +25,7 @@ describe("@runroot/api", () => {
     expect(response.json()).toEqual({
       status: "ok",
       project: "Runroot",
-      phase: 17,
+      phase: 18,
     });
   });
 
@@ -692,5 +692,213 @@ describe("@runroot/api", () => {
     expect(archivePayload.catalogEntry.entry.archivedAt).toBeTruthy();
     expect(listArchivedResponse.statusCode).toBe(200);
     expect(archivedListPayload.catalog.totalCount).toBe(0);
+  });
+
+  it("reviews, lists-reviewed, inspects, clears, and reuses reviewed catalog entries through the operator API", async () => {
+    const workspaceRoot = await mkdtemp(
+      join(tmpdir(), "runroot-api-review-signals-"),
+    );
+    app = buildServer({
+      operator: createRunrootOperatorService({
+        catalogEntryIdGenerator: () => "catalog_entry_review_api",
+        operatorId: "ops_oncall",
+        operatorScopeId: "ops",
+        savedViewIdGenerator: () => "saved_view_review_api",
+        workspacePath: join(workspaceRoot, "workspace.json"),
+      }),
+    });
+
+    const createResponse = await app.inject({
+      method: "POST",
+      payload: {
+        input: {
+          approvalRequired: false,
+          commandAlias: "print-ready",
+          runbookId: "node-health-check",
+        },
+        templateId: "shell-runbook-flow",
+      },
+      url: "/runs",
+    });
+    const createdPayload = createResponse.json() as {
+      run: {
+        id: string;
+      };
+    };
+    const saveResponse = await app.inject({
+      method: "POST",
+      payload: {
+        name: "Saved run detail",
+        navigation: {
+          drilldown: {
+            runId: createdPayload.run.id,
+          },
+          summary: {
+            definitionId: "shell-runbook-flow",
+          },
+        },
+        refs: {
+          auditViewRunId: createdPayload.run.id,
+        },
+      },
+      url: "/audit/saved-views",
+    });
+    const savedViewPayload = saveResponse.json() as {
+      savedView: {
+        id: string;
+      };
+    };
+    const publishResponse = await app.inject({
+      method: "POST",
+      payload: {
+        savedViewId: savedViewPayload.savedView.id,
+      },
+      url: "/audit/catalog",
+    });
+    const publishedPayload = publishResponse.json() as {
+      catalogEntry: {
+        entry: {
+          id: string;
+        };
+      };
+    };
+    const shareResponse = await app.inject({
+      method: "POST",
+      url: `/audit/catalog/${publishedPayload.catalogEntry.entry.id}/share`,
+    });
+    const reviewResponse = await app.inject({
+      method: "POST",
+      payload: {
+        note: "Recommended for shared on-call follow-up",
+        state: "recommended",
+      },
+      url: `/audit/catalog/${publishedPayload.catalogEntry.entry.id}/review`,
+    });
+    const reviewedListResponse = await app.inject({
+      method: "GET",
+      url: "/audit/catalog/reviewed",
+    });
+    const inspectReviewResponse = await app.inject({
+      method: "GET",
+      url: `/audit/catalog/${publishedPayload.catalogEntry.entry.id}/review`,
+    });
+    const applyResponse = await app.inject({
+      method: "GET",
+      url: `/audit/catalog/${publishedPayload.catalogEntry.entry.id}/apply`,
+    });
+    const clearReviewResponse = await app.inject({
+      method: "POST",
+      url: `/audit/catalog/${publishedPayload.catalogEntry.entry.id}/review/clear`,
+    });
+    const reviewedAfterClearResponse = await app.inject({
+      method: "GET",
+      url: "/audit/catalog/reviewed",
+    });
+    const sharePayload = shareResponse.json() as {
+      visibility: {
+        visibility: {
+          state: "shared";
+        };
+      };
+    };
+    const reviewPayload = reviewResponse.json() as {
+      review: {
+        review: {
+          note?: string;
+          state: "recommended" | "reviewed";
+        };
+      };
+    };
+    const reviewedListPayload = reviewedListResponse.json() as {
+      reviewed: {
+        items: Array<{
+          review: {
+            state: "recommended" | "reviewed";
+          };
+          visibility: {
+            catalogEntry: {
+              entry: {
+                id: string;
+              };
+            };
+          };
+        }>;
+        totalCount: number;
+      };
+    };
+    const inspectReviewPayload = inspectReviewResponse.json() as {
+      review: {
+        review: {
+          note?: string;
+          state: "recommended" | "reviewed";
+        };
+      };
+    };
+    const applyPayload = applyResponse.json() as {
+      application: {
+        application: {
+          savedView: {
+            id: string;
+          };
+        };
+      };
+    };
+    const clearReviewPayload = clearReviewResponse.json() as {
+      review: {
+        review: {
+          state: "recommended" | "reviewed";
+        };
+      };
+    };
+    const reviewedAfterClearPayload = reviewedAfterClearResponse.json() as {
+      reviewed: {
+        totalCount: number;
+      };
+    };
+
+    expect(shareResponse.statusCode).toBe(200);
+    expect(sharePayload.visibility.visibility.state).toBe("shared");
+    expect(reviewResponse.statusCode).toBe(200);
+    expect(reviewPayload.review.review.state).toBe("recommended");
+    expect(reviewPayload.review.review.note).toContain("shared on-call");
+    expect(reviewedListResponse.statusCode).toBe(200);
+    expect(reviewedListPayload.reviewed.totalCount).toBe(1);
+    expect(
+      reviewedListPayload.reviewed.items[0]?.visibility.catalogEntry.entry.id,
+    ).toBe("catalog_entry_review_api");
+    expect(inspectReviewResponse.statusCode).toBe(200);
+    expect(inspectReviewPayload.review.review.note).toContain("shared on-call");
+    expect(applyResponse.statusCode).toBe(200);
+    expect(applyPayload.application.application.savedView.id).toBe(
+      savedViewPayload.savedView.id,
+    );
+    expect(clearReviewResponse.statusCode).toBe(200);
+    expect(clearReviewPayload.review.review.state).toBe("recommended");
+    expect(reviewedAfterClearResponse.statusCode).toBe(200);
+    expect(reviewedAfterClearPayload.reviewed.totalCount).toBe(0);
+  });
+
+  it("rejects invalid catalog review state through the operator API", async () => {
+    const workspaceRoot = await mkdtemp(
+      join(tmpdir(), "runroot-api-review-invalid-"),
+    );
+    app = buildServer({
+      operator: createRunrootOperatorService({
+        workspacePath: join(workspaceRoot, "workspace.json"),
+      }),
+    });
+
+    const reviewResponse = await app.inject({
+      method: "POST",
+      payload: {
+        state: "invalid",
+      },
+      url: "/audit/catalog/catalog_entry_invalid/review",
+    });
+
+    expect(reviewResponse.statusCode).toBe(400);
+    expect(reviewResponse.body).toContain(
+      "state must be one of recommended|reviewed.",
+    );
   });
 });

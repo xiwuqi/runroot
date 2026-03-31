@@ -1,6 +1,6 @@
 # Phase 18: Cross-Run Audit Catalog Review Signals and Shared Notes
 
-Status: suggested freeze
+Status: implemented on branch, pending phase review
 
 This document records the repository-owned suggested execution contract for
 Phase 18. It defines the minimum implementation boundary for a shared catalog
