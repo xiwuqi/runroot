@@ -3,6 +3,7 @@ import {
   AuditViewCatalogsView,
   CatalogReviewAssignmentsView,
   CatalogReviewSignalsView,
+  ChecklistItemProgressView,
   ConsoleShell,
   CrossRunAuditNavigationView,
   ErrorState,
@@ -17,6 +18,7 @@ import {
 } from "../../lib/navigation";
 import {
   type ApiAuditCatalogAssignmentChecklistView,
+  type ApiAuditCatalogChecklistItemProgressView,
   type ApiAuditCatalogEntryApplication,
   type ApiAuditCatalogReviewAssignmentView,
   type ApiAuditCatalogReviewSignalView,
@@ -50,6 +52,7 @@ export default async function RunsPage({
     const drilldownFilters = readAuditDrilldownFilters(resolvedSearchParams);
     const [
       runs,
+      progressedEntries,
       checklistedEntries,
       assignedEntries,
       reviewedEntries,
@@ -57,11 +60,13 @@ export default async function RunsPage({
       savedViews,
       navigationResult,
       catalogVisibility,
+      catalogChecklistItemProgress,
       catalogAssignmentChecklist,
       catalogReviewSignal,
       catalogReviewAssignment,
     ] = await Promise.all([
       api.listRuns(),
+      api.listProgressedAuditCatalogEntries(),
       api.listChecklistedAuditCatalogEntries(),
       api.listAssignedAuditCatalogEntries(),
       api.listReviewedAuditCatalogEntries(),
@@ -77,6 +82,11 @@ export default async function RunsPage({
             }),
       catalogEntryId
         ? api.getAuditCatalogVisibility(catalogEntryId)
+        : Promise.resolve(undefined),
+      catalogEntryId
+        ? api
+            .getAuditCatalogChecklistItemProgress(catalogEntryId)
+            .catch(() => undefined)
         : Promise.resolve(undefined),
       catalogEntryId
         ? api
@@ -97,6 +107,9 @@ export default async function RunsPage({
     let activeCatalogAssignmentChecklist:
       | ApiAuditCatalogAssignmentChecklistView
       | undefined;
+    let activeCatalogChecklistItemProgress:
+      | ApiAuditCatalogChecklistItemProgressView
+      | undefined;
     let activeCatalogReviewAssignment:
       | ApiAuditCatalogReviewAssignmentView
       | undefined;
@@ -106,6 +119,7 @@ export default async function RunsPage({
 
     if (hasCatalogEntryApplication(navigationResult)) {
       activeCatalogEntry = catalogVisibility;
+      activeCatalogChecklistItemProgress = catalogChecklistItemProgress;
       activeCatalogAssignmentChecklist = catalogAssignmentChecklist;
       activeCatalogReviewAssignment = catalogReviewAssignment;
       activeCatalogReviewSignal = catalogReviewSignal;
@@ -124,6 +138,12 @@ export default async function RunsPage({
         title="Runs"
       >
         <FlashBanner message={flash} />
+        <ChecklistItemProgressView
+          progressedEntries={progressedEntries}
+          {...(activeCatalogChecklistItemProgress
+            ? { activeCatalogChecklistItemProgress }
+            : {})}
+        />
         <AssignmentChecklistsView
           checklistedEntries={checklistedEntries}
           {...(activeCatalogAssignmentChecklist
@@ -144,8 +164,12 @@ export default async function RunsPage({
           assignedEntries={assignedEntries}
           catalogEntries={catalogEntries}
           checklistedEntries={checklistedEntries}
+          progressedEntries={progressedEntries}
           reviewedEntries={reviewedEntries}
           {...(activeCatalogEntry ? { activeCatalogEntry } : {})}
+          {...(activeCatalogChecklistItemProgress
+            ? { activeCatalogChecklistItemProgress }
+            : {})}
         />
         <SavedAuditViewsView
           navigation={navigation}

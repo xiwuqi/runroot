@@ -13,6 +13,7 @@ export {
   createRunTimelineService,
   type DecideApprovalInput,
   type PendingApprovalSummary,
+  type ProgressAuditCatalogEntryInput,
   type PublishAuditViewCatalogEntryInput,
   type ReviewAuditCatalogEntryInput,
   type RunrootOperatorService,
