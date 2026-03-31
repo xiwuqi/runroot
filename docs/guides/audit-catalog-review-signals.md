@@ -17,7 +17,7 @@ The contract does not store:
 - provider-specific payloads
 - workflow-state snapshots
 - replay or approval state
-- threaded comments, assignments, or broader review workflows
+- threaded comments, checklist-driven assignments, or broader review workflows
 - fine-grained RBAC or multi-tenant access rules
 - surface-specific route formats
 
@@ -91,14 +91,18 @@ pnpm --filter @runroot/cli dev audit catalog clear-review catalog_entry_1
 Both inline-originated and queued-originated presets reuse the same review
 contract through the configured persistence adapter.
 
+Phase 19 adds a separate thin assignment and handoff layer for reviewed
+presets. Review signals still stay responsible only for stable review state and
+optional shared notes.
+
 ## What Stays Deferred
 
-Still out of scope after Phase 18:
+Still out of scope after Phase 19:
 
 - productized dashboards, discovery products, or broad analytics UX
 - open-ended search products
 - fine-grained RBAC, org or team management, and multi-tenant access models
-- threaded comments, assignments, review workflows, or broader multi-user
+- threaded comments, checklist-driven assignments, review workflows, or broader multi-user
   curation
 - full observability backend integrations
 - default persistence of provider-specific payloads or full derived audit

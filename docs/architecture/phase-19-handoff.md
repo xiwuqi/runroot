@@ -1,6 +1,6 @@
 # Phase 19: Cross-Run Audit Catalog Review Assignments and Operator Handoffs
 
-Status: suggested scope freeze on branch, pending merge
+Status: repository-owned phase contract after scope freeze
 
 This document records the repository-owned suggested execution contract for
 Phase 19. It defines the minimum implementation boundary for a shared catalog
