@@ -11,9 +11,9 @@ import {
 describe("@runroot/config", () => {
   it("exposes phase-aware project metadata", () => {
     expect(projectMetadata.name).toBe("Runroot");
-    expect(projectMetadata.currentPhase).toBe(19);
+    expect(projectMetadata.currentPhase).toBe(20);
     expect(projectMetadata.phaseName).toBe(
-      "Cross-Run Audit Catalog Review Assignments and Operator Handoffs",
+      "Cross-Run Audit Catalog Assignment Checklists and Handoff Statuses",
     );
   });
 

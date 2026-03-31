@@ -275,4 +275,4 @@ Status: completed
   than threaded comments, broader review workflow engines, broader multi-user
   curation, or broad observability and analytics platform work
 
-Status: suggested scope freeze on branch, pending merge
+Status: completed on branch
