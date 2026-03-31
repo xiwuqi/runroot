@@ -120,6 +120,33 @@ export async function runCli(
           return writeJson(io.stdout.write, {
             catalogEntry: await service.archiveCatalogEntry(detail),
           });
+        case "assign":
+          if (!detail) {
+            throw new Error(
+              "audit catalog assign requires a catalog entry id.",
+            );
+          }
+
+          return writeJson(io.stdout.write, {
+            assignment: await service.assignCatalogEntry(
+              detail,
+              resolveAssignAuditCatalogEntryInput(flags),
+            ),
+          });
+        case "assigned":
+          return writeJson(io.stdout.write, {
+            assigned: await service.listAssignedCatalogEntries(),
+          });
+        case "clear-assignment":
+          if (!detail) {
+            throw new Error(
+              "audit catalog clear-assignment requires a catalog entry id.",
+            );
+          }
+
+          return writeJson(io.stdout.write, {
+            assignment: await service.clearCatalogReviewAssignment(detail),
+          });
         case "clear-review":
           if (!detail) {
             throw new Error(
@@ -139,6 +166,16 @@ export async function runCli(
 
           return writeJson(io.stdout.write, {
             visibility: await service.getCatalogVisibility(detail),
+          });
+        case "inspect-assignment":
+          if (!detail) {
+            throw new Error(
+              "audit catalog inspect-assignment requires a catalog entry id.",
+            );
+          }
+
+          return writeJson(io.stdout.write, {
+            assignment: await service.getCatalogReviewAssignment(detail),
           });
         case "inspect-review":
           if (!detail) {
@@ -502,6 +539,25 @@ function resolveReviewAuditCatalogEntryInput(
   };
 }
 
+function resolveAssignAuditCatalogEntryInput(
+  flags: ReadonlyMap<string, string | boolean>,
+): {
+  readonly assigneeId: string;
+  readonly handoffNote?: string;
+} {
+  const assigneeId = getStringFlag(flags, "assignee");
+  const handoffNote = getStringFlag(flags, "handoff-note");
+
+  if (!assigneeId) {
+    throw new Error("audit catalog assign requires --assignee <operator-id>.");
+  }
+
+  return {
+    assigneeId,
+    ...(handoffNote !== undefined ? { handoffNote } : {}),
+  };
+}
+
 function getStringFlag(
   flags: ReadonlyMap<string, string | boolean>,
   name: string,
@@ -607,10 +663,14 @@ Commands:
   audit catalog list
   audit catalog visible
   audit catalog reviewed
+  audit catalog assigned
   audit catalog publish <saved-view-id> [--name <name>] [--description <text>]
   audit catalog show <catalog-entry-id>
   audit catalog inspect <catalog-entry-id>
+  audit catalog inspect-assignment <catalog-entry-id>
   audit catalog inspect-review <catalog-entry-id>
+  audit catalog assign <catalog-entry-id> --assignee <operator-id> [--handoff-note <text>]
+  audit catalog clear-assignment <catalog-entry-id>
   audit catalog review <catalog-entry-id> --state <recommended|reviewed> [--note <text>]
   audit catalog clear-review <catalog-entry-id>
   audit catalog share <catalog-entry-id>

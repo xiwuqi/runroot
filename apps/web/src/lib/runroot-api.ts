@@ -369,10 +369,39 @@ export interface ApiAuditCatalogReviewSignalCollection {
   readonly totalCount: number;
 }
 
+export type ApiAuditCatalogReviewAssignmentState = "assigned";
+
+export interface ApiAuditCatalogReviewAssignment {
+  readonly assigneeId: string;
+  readonly assignerId: string;
+  readonly catalogEntryId: string;
+  readonly createdAt: string;
+  readonly handoffNote?: string;
+  readonly kind: "catalog-review-assignment";
+  readonly scopeId: string;
+  readonly state: ApiAuditCatalogReviewAssignmentState;
+  readonly updatedAt: string;
+}
+
+export interface ApiAuditCatalogReviewAssignmentView {
+  readonly assignment: ApiAuditCatalogReviewAssignment;
+  readonly review: ApiAuditCatalogReviewSignalView;
+}
+
+export interface ApiAuditCatalogReviewAssignmentCollection {
+  readonly items: readonly ApiAuditCatalogReviewAssignmentView[];
+  readonly totalCount: number;
+}
+
 export interface CreateApiAuditCatalogEntryInput {
   readonly description?: string;
   readonly name?: string;
   readonly savedViewId: string;
+}
+
+export interface UpdateApiAuditCatalogReviewAssignmentInput {
+  readonly assigneeId: string;
+  readonly handoffNote?: string;
 }
 
 export interface UpdateApiAuditCatalogReviewSignalInput {
@@ -402,12 +431,22 @@ export interface RunrootApiClient {
   applySavedAuditView(
     savedViewId: string,
   ): Promise<ApiAuditSavedViewApplication>;
+  assignAuditCatalogEntry(
+    catalogEntryId: string,
+    input: UpdateApiAuditCatalogReviewAssignmentInput,
+  ): Promise<ApiAuditCatalogReviewAssignmentView>;
   archiveAuditCatalogEntry(
     catalogEntryId: string,
   ): Promise<ApiAuditCatalogEntryView>;
+  clearAuditCatalogReviewAssignment(
+    catalogEntryId: string,
+  ): Promise<ApiAuditCatalogReviewAssignmentView>;
   clearAuditCatalogReviewSignal(
     catalogEntryId: string,
   ): Promise<ApiAuditCatalogReviewSignalView>;
+  getAuditCatalogReviewAssignment(
+    catalogEntryId: string,
+  ): Promise<ApiAuditCatalogReviewAssignmentView>;
   getAuditCatalogVisibility(
     catalogEntryId: string,
   ): Promise<ApiAuditCatalogVisibilityView>;
@@ -429,6 +468,7 @@ export interface RunrootApiClient {
     catalogEntryId: string,
   ): Promise<ApiAuditCatalogEntryView>;
   getSavedAuditView(savedViewId: string): Promise<ApiAuditSavedView>;
+  listAssignedAuditCatalogEntries(): Promise<ApiAuditCatalogReviewAssignmentCollection>;
   listAuditCatalogEntries(): Promise<ApiAuditCatalogEntryCollection>;
   listReviewedAuditCatalogEntries(): Promise<ApiAuditCatalogReviewSignalCollection>;
   listVisibleAuditCatalogEntries(): Promise<ApiAuditCatalogVisibilityCollection>;
@@ -592,6 +632,24 @@ export function createRunrootApiClient(
       return payload.application;
     },
 
+    async assignAuditCatalogEntry(catalogEntryId, input) {
+      const payload = await requestJson<{
+        assignment: ApiAuditCatalogReviewAssignmentView;
+      }>(
+        `/audit/catalog/${catalogEntryId}/assignment`,
+        {
+          body: JSON.stringify(input),
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "POST",
+        },
+        "web.api.assignAuditCatalogEntry",
+      );
+
+      return payload.assignment;
+    },
+
     async archiveAuditCatalogEntry(catalogEntryId) {
       const payload = await requestJson<{
         catalogEntry: ApiAuditCatalogEntryView;
@@ -604,6 +662,18 @@ export function createRunrootApiClient(
       return payload.catalogEntry;
     },
 
+    async clearAuditCatalogReviewAssignment(catalogEntryId) {
+      const payload = await requestJson<{
+        assignment: ApiAuditCatalogReviewAssignmentView;
+      }>(
+        `/audit/catalog/${catalogEntryId}/assignment/clear`,
+        { method: "POST" },
+        "web.api.clearAuditCatalogReviewAssignment",
+      );
+
+      return payload.assignment;
+    },
+
     async clearAuditCatalogReviewSignal(catalogEntryId) {
       const payload = await requestJson<{
         review: ApiAuditCatalogReviewSignalView;
@@ -614,6 +684,18 @@ export function createRunrootApiClient(
       );
 
       return payload.review;
+    },
+
+    async getAuditCatalogReviewAssignment(catalogEntryId) {
+      const payload = await requestJson<{
+        assignment: ApiAuditCatalogReviewAssignmentView;
+      }>(
+        `/audit/catalog/${catalogEntryId}/assignment`,
+        { method: "GET" },
+        "web.api.getAuditCatalogReviewAssignment",
+      );
+
+      return payload.assignment;
     },
 
     async getAuditCatalogVisibility(catalogEntryId) {
@@ -754,6 +836,18 @@ export function createRunrootApiClient(
       );
 
       return payload.catalog;
+    },
+
+    async listAssignedAuditCatalogEntries() {
+      const payload = await requestJson<{
+        assigned: ApiAuditCatalogReviewAssignmentCollection;
+      }>(
+        "/audit/catalog/assigned",
+        { method: "GET" },
+        "web.api.listAssignedAuditCatalogEntries",
+      );
+
+      return payload.assigned;
     },
 
     async listReviewedAuditCatalogEntries() {

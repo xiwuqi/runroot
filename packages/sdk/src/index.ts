@@ -7,6 +7,7 @@ export {
   OperatorNotFoundError,
 } from "./errors";
 export {
+  type AssignAuditCatalogEntryInput,
   createRunrootOperatorService,
   createRunTimelineService,
   type DecideApprovalInput,

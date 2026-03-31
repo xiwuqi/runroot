@@ -125,6 +125,50 @@ export async function POST(request: Request) {
       return Response.redirect(redirectUrl, 303);
     }
 
+    if (intent === "assign") {
+      const catalogEntryId = readTrimmedFormValue(formData, "catalogEntryId");
+      const assigneeId = readTrimmedFormValue(formData, "assigneeId");
+      const handoffNoteValue = formData.get("handoffNote");
+
+      if (!catalogEntryId) {
+        appendFlashMessage(
+          redirectUrl,
+          "error",
+          "A catalog entry id is required to update assignment metadata.",
+        );
+
+        return Response.redirect(redirectUrl, 303);
+      }
+
+      if (!assigneeId) {
+        appendFlashMessage(
+          redirectUrl,
+          "error",
+          "An assignee id is required to update assignment metadata.",
+        );
+
+        return Response.redirect(redirectUrl, 303);
+      }
+
+      const assignment = await createRunrootApiClient().assignAuditCatalogEntry(
+        catalogEntryId,
+        {
+          assigneeId,
+          ...(typeof handoffNoteValue === "string"
+            ? { handoffNote: handoffNoteValue }
+            : {}),
+        },
+      );
+
+      appendFlashMessage(
+        redirectUrl,
+        "notice",
+        `Assignment for ${assignment.review.visibility.catalogEntry.entry.name} updated to ${assignment.assignment.assigneeId}.`,
+      );
+
+      return Response.redirect(redirectUrl, 303);
+    }
+
     if (intent === "clear-review") {
       const catalogEntryId = readTrimmedFormValue(formData, "catalogEntryId");
 
@@ -147,6 +191,33 @@ export async function POST(request: Request) {
         redirectUrl,
         "notice",
         `Review signal for ${review.visibility.catalogEntry.entry.name} cleared.`,
+      );
+
+      return Response.redirect(redirectUrl, 303);
+    }
+
+    if (intent === "clear-assignment") {
+      const catalogEntryId = readTrimmedFormValue(formData, "catalogEntryId");
+
+      if (!catalogEntryId) {
+        appendFlashMessage(
+          redirectUrl,
+          "error",
+          "A catalog entry id is required to clear assignment metadata.",
+        );
+
+        return Response.redirect(redirectUrl, 303);
+      }
+
+      const assignment =
+        await createRunrootApiClient().clearAuditCatalogReviewAssignment(
+          catalogEntryId,
+        );
+
+      appendFlashMessage(
+        redirectUrl,
+        "notice",
+        `Assignment for ${assignment.review.visibility.catalogEntry.entry.name} cleared.`,
       );
 
       return Response.redirect(redirectUrl, 303);
