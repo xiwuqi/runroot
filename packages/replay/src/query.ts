@@ -2,7 +2,17 @@ import type { DispatchJob } from "@runroot/dispatch";
 import type { RunId, WorkflowRun } from "@runroot/domain";
 import type { RuntimeEvent } from "@runroot/events";
 import type { ToolHistoryEntry } from "@runroot/tools";
-
+import {
+  type CrossRunAuditCatalogAssignmentChecklist,
+  type CrossRunAuditCatalogAssignmentChecklistApplication,
+  type CrossRunAuditCatalogAssignmentChecklistCollection,
+  type CrossRunAuditCatalogAssignmentChecklistStore,
+  type CrossRunAuditCatalogAssignmentChecklistView,
+  compareCrossRunAuditCatalogAssignmentChecklists,
+  createCrossRunAuditCatalogAssignmentChecklist,
+  normalizeChecklistItems,
+  type UpdateCrossRunAuditCatalogAssignmentChecklistInput,
+} from "./assignment-checklist";
 import { projectRunAuditView, type RunAuditView } from "./audit";
 import {
   archiveCrossRunAuditCatalogEntry,
@@ -207,6 +217,30 @@ export interface CrossRunAuditCatalogReviewAssignmentQuery {
     input: UpdateCrossRunAuditCatalogReviewAssignmentInput,
     timestamp: string,
   ): Promise<CrossRunAuditCatalogReviewAssignmentView>;
+}
+
+export interface CrossRunAuditCatalogAssignmentChecklistQuery {
+  applyCatalogEntry(
+    id: string,
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+  ): Promise<CrossRunAuditCatalogAssignmentChecklistApplication | undefined>;
+  clearCatalogAssignmentChecklist(
+    id: string,
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+  ): Promise<CrossRunAuditCatalogAssignmentChecklistView | undefined>;
+  getCatalogAssignmentChecklist(
+    id: string,
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+  ): Promise<CrossRunAuditCatalogAssignmentChecklistView | undefined>;
+  listChecklistedCatalogEntries(
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+  ): Promise<CrossRunAuditCatalogAssignmentChecklistCollection>;
+  setCatalogAssignmentChecklist(
+    id: string,
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+    input: UpdateCrossRunAuditCatalogAssignmentChecklistInput,
+    timestamp: string,
+  ): Promise<CrossRunAuditCatalogAssignmentChecklistView>;
 }
 
 export function createRunTimelineQuery(
@@ -846,6 +880,130 @@ export function createCrossRunAuditCatalogReviewAssignmentQuery(
   };
 }
 
+export function createCrossRunAuditCatalogAssignmentChecklistQuery(
+  store: CrossRunAuditCatalogAssignmentChecklistStore,
+  assignments: CrossRunAuditCatalogReviewAssignmentQuery,
+): CrossRunAuditCatalogAssignmentChecklistQuery {
+  return {
+    async applyCatalogEntry(id, viewer) {
+      const checklist = await resolveCatalogAssignmentChecklistView(
+        store,
+        assignments,
+        id,
+        viewer,
+      );
+
+      if (!checklist) {
+        return undefined;
+      }
+
+      const application = await assignments.applyCatalogEntry(id, viewer);
+
+      if (!application) {
+        return undefined;
+      }
+
+      return {
+        application,
+        checklist,
+      };
+    },
+
+    async clearCatalogAssignmentChecklist(id, viewer) {
+      const checklist = await resolveCatalogAssignmentChecklistView(
+        store,
+        assignments,
+        id,
+        viewer,
+      );
+
+      if (!checklist) {
+        return undefined;
+      }
+
+      await store.deleteCatalogAssignmentChecklist(id);
+
+      return checklist;
+    },
+
+    async getCatalogAssignmentChecklist(id, viewer) {
+      return resolveCatalogAssignmentChecklistView(
+        store,
+        assignments,
+        id,
+        viewer,
+      );
+    },
+
+    async listChecklistedCatalogEntries(viewer) {
+      const checklists = [
+        ...(await store.listCatalogAssignmentChecklists()),
+      ].sort(compareCrossRunAuditCatalogAssignmentChecklists);
+      const items = (
+        await Promise.all(
+          checklists.map(async (checklist) =>
+            resolveCatalogAssignmentChecklistFromValue(
+              assignments,
+              checklist,
+              viewer,
+            ),
+          ),
+        )
+      ).filter(
+        (checklist): checklist is CrossRunAuditCatalogAssignmentChecklistView =>
+          checklist !== undefined,
+      );
+
+      return {
+        items,
+        totalCount: items.length,
+      };
+    },
+
+    async setCatalogAssignmentChecklist(id, viewer, input, timestamp) {
+      const assignment = await assignments.getCatalogReviewAssignment(
+        id,
+        viewer,
+      );
+
+      if (!assignment) {
+        throw new Error(
+          `Catalog entry "${id}" is not assigned and visible to operator "${viewer.operatorId}".`,
+        );
+      }
+
+      const normalizedItems = normalizeChecklistItems(input.items);
+      const existingChecklist = await store.getCatalogAssignmentChecklist(id);
+      const checklist = existingChecklist
+        ? {
+            catalogEntryId: id,
+            createdAt: existingChecklist.createdAt,
+            ...(normalizedItems.length > 0 ? { items: normalizedItems } : {}),
+            kind: existingChecklist.kind,
+            operatorId: viewer.operatorId,
+            scopeId: viewer.scopeId,
+            state: input.state,
+            updatedAt: timestamp,
+          }
+        : createCrossRunAuditCatalogAssignmentChecklist({
+            catalogEntryId: id,
+            ...(normalizedItems.length > 0 ? { items: normalizedItems } : {}),
+            operatorId: viewer.operatorId,
+            scopeId: viewer.scopeId,
+            state: input.state,
+            timestamp,
+          });
+
+      await store.saveCatalogAssignmentChecklist(checklist);
+
+      return {
+        assignment,
+        checklist,
+      };
+    },
+  };
+}
+
 async function resolveCatalogEntryView(
   store: CrossRunAuditCatalogStore,
   savedViews: CrossRunAuditSavedViewQuery,
@@ -971,5 +1129,42 @@ async function resolveCatalogReviewAssignmentFromValue(
   return {
     assignment,
     review,
+  };
+}
+
+async function resolveCatalogAssignmentChecklistView(
+  store: CrossRunAuditCatalogAssignmentChecklistStore,
+  assignments: CrossRunAuditCatalogReviewAssignmentQuery,
+  id: string,
+  viewer: CrossRunAuditCatalogVisibilityViewer,
+): Promise<CrossRunAuditCatalogAssignmentChecklistView | undefined> {
+  const checklist = await store.getCatalogAssignmentChecklist(id);
+
+  return checklist
+    ? resolveCatalogAssignmentChecklistFromValue(assignments, checklist, viewer)
+    : undefined;
+}
+
+async function resolveCatalogAssignmentChecklistFromValue(
+  assignments: CrossRunAuditCatalogReviewAssignmentQuery,
+  checklist: CrossRunAuditCatalogAssignmentChecklist,
+  viewer: CrossRunAuditCatalogVisibilityViewer,
+): Promise<CrossRunAuditCatalogAssignmentChecklistView | undefined> {
+  if (checklist.scopeId !== viewer.scopeId) {
+    return undefined;
+  }
+
+  const assignment = await assignments.getCatalogReviewAssignment(
+    checklist.catalogEntryId,
+    viewer,
+  );
+
+  if (!assignment) {
+    return undefined;
+  }
+
+  return {
+    assignment,
+    checklist,
   };
 }
