@@ -938,4 +938,175 @@ describe("@runroot/sdk operator service integration", () => {
     expect(clearedReview.review.state).toBe("recommended");
     expect(peerReviewedAfterClear.totalCount).toBe(0);
   });
+
+  it("assigns, lists-assigned, inspects, clears, and reapplies reviewed presets for inline and queued runs through the operator seam", async () => {
+    const workspaceRoot = await mkdtemp(
+      join(tmpdir(), "runroot-sdk-review-assignments-"),
+    );
+    const sqlitePath = join(workspaceRoot, "runroot.sqlite");
+    const now = createClock();
+    const idGenerator = createIdGenerator();
+    let savedViewCount = 0;
+    let catalogEntryCount = 0;
+    const inlineService = createRunrootOperatorService({
+      executionMode: "inline",
+      idGenerator,
+      now,
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+    const queuedService = createRunrootOperatorService({
+      executionMode: "queued",
+      idGenerator,
+      now,
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+    const worker = createRunrootWorkerService({
+      idGenerator,
+      now,
+      persistenceDriver: "sqlite",
+      sqlitePath,
+      workerId: "worker_review_assignments",
+    });
+    const ownerService = createRunrootOperatorService({
+      catalogEntryIdGenerator: () =>
+        `catalog_entry_assignment_${++catalogEntryCount}`,
+      idGenerator,
+      now,
+      operatorId: "ops_oncall",
+      operatorScopeId: "ops",
+      persistenceDriver: "sqlite",
+      savedViewIdGenerator: () => `saved_view_assignment_${++savedViewCount}`,
+      sqlitePath,
+    });
+    const peerService = createRunrootOperatorService({
+      idGenerator,
+      now,
+      operatorId: "ops_backup",
+      operatorScopeId: "ops",
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+
+    const inlineRun = await inlineService.startRun({
+      input: {
+        approvalRequired: false,
+        commandAlias: "print-ready",
+        runbookId: "node-health-check",
+      },
+      templateId: "shell-runbook-flow",
+    });
+    const queuedRun = await queuedService.startRun({
+      input: {
+        approvalRequired: false,
+        commandAlias: "print-ready",
+        runbookId: "node-health-check",
+      },
+      templateId: "shell-runbook-flow",
+    });
+
+    await worker.processNextJob();
+
+    const inlineSavedView = await ownerService.saveSavedView({
+      description: "Inline preset for owner assignment follow-up",
+      name: "Inline assignment preset",
+      navigation: {
+        drilldown: {
+          runId: inlineRun.id,
+        },
+        summary: {
+          executionMode: "inline",
+        },
+      },
+      refs: {
+        auditViewRunId: inlineRun.id,
+        drilldownRunId: inlineRun.id,
+      },
+    });
+    const queuedSavedView = await ownerService.saveSavedView({
+      description: "Queued preset for shared assignment follow-up",
+      name: "Queued assignment preset",
+      navigation: {
+        drilldown: {
+          workerId: "worker_review_assignments",
+        },
+        summary: {
+          executionMode: "queued",
+        },
+      },
+      refs: {
+        auditViewRunId: queuedRun.id,
+        drilldownRunId: queuedRun.id,
+      },
+    });
+    const inlineCatalogEntry = await ownerService.publishCatalogEntry({
+      savedViewId: inlineSavedView.id,
+    });
+    const queuedCatalogEntry = await ownerService.publishCatalogEntry({
+      savedViewId: queuedSavedView.id,
+    });
+
+    await ownerService.shareCatalogEntry(queuedCatalogEntry.entry.id);
+    await ownerService.reviewCatalogEntry(inlineCatalogEntry.entry.id, {
+      note: "Inline preset stays with the owner",
+      state: "reviewed",
+    });
+    await peerService.reviewCatalogEntry(queuedCatalogEntry.entry.id, {
+      note: "Queued preset handed off to the backup operator",
+      state: "recommended",
+    });
+
+    await ownerService.assignCatalogEntry(inlineCatalogEntry.entry.id, {
+      assigneeId: "ops_oncall",
+      handoffNote: "Inline preset remains with the owner",
+    });
+    await ownerService.assignCatalogEntry(queuedCatalogEntry.entry.id, {
+      assigneeId: "ops_backup",
+      handoffNote: "Queued handoff for overnight follow-up",
+    });
+
+    const ownerAssignments = await ownerService.listAssignedCatalogEntries();
+    const peerAssignments = await peerService.listAssignedCatalogEntries();
+    const inspectedAssignment = await ownerService.getCatalogReviewAssignment(
+      queuedCatalogEntry.entry.id,
+    );
+    const appliedAssignment = await peerService.applyCatalogEntry(
+      queuedCatalogEntry.entry.id,
+    );
+    const clearedAssignment = await ownerService.clearCatalogReviewAssignment(
+      queuedCatalogEntry.entry.id,
+    );
+    const peerAssignmentsAfterClear =
+      await peerService.listAssignedCatalogEntries();
+
+    expect(
+      ownerAssignments.items.map(
+        (item) => item.review.visibility.catalogEntry.entry.id,
+      ),
+    ).toEqual([queuedCatalogEntry.entry.id, inlineCatalogEntry.entry.id]);
+    expect(
+      peerAssignments.items.map(
+        (item) => item.review.visibility.catalogEntry.entry.id,
+      ),
+    ).toEqual([queuedCatalogEntry.entry.id]);
+    expect(inspectedAssignment.assignment).toMatchObject({
+      assigneeId: "ops_backup",
+      assignerId: "ops_oncall",
+      catalogEntryId: queuedCatalogEntry.entry.id,
+      handoffNote: "Queued handoff for overnight follow-up",
+      scopeId: "ops",
+      state: "assigned",
+    });
+    expect(appliedAssignment.catalogEntry.entry.id).toBe(
+      queuedCatalogEntry.entry.id,
+    );
+    expect(appliedAssignment.application.savedView.id).toBe(queuedSavedView.id);
+    expect(appliedAssignment.application.navigation.totalSummaryCount).toBe(1);
+    expect(
+      appliedAssignment.application.navigation.drilldowns[0]?.result.runId,
+    ).toBe(queuedRun.id);
+    expect(clearedAssignment.assignment.assigneeId).toBe("ops_backup");
+    expect(peerAssignmentsAfterClear.totalCount).toBe(0);
+  });
 });

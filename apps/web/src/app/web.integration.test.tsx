@@ -674,4 +674,223 @@ describe("@runroot/web integration", () => {
       await app.close();
     }
   });
+
+  it("renders, assigns, clears, and reapplies reviewed presets through the existing API surface", async () => {
+    const workspaceRoot = await mkdtemp(
+      join(tmpdir(), "runroot-web-review-assignments-"),
+    );
+    const sqlitePath = join(workspaceRoot, "runroot.sqlite");
+    const inlineOperator = createRunrootOperatorService({
+      executionMode: "inline",
+      operatorId: "ops_oncall",
+      operatorScopeId: "ops",
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+    const queuedOperator = createRunrootOperatorService({
+      executionMode: "queued",
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+    const workerService = (
+      await import("@runroot/sdk")
+    ).createRunrootWorkerService({
+      persistenceDriver: "sqlite",
+      sqlitePath,
+      workerId: "worker_web_assignment",
+    });
+    const ownerApp = buildServer({
+      operator: createRunrootOperatorService({
+        catalogEntryIdGenerator: () => "catalog_entry_assignment_web",
+        operatorId: "ops_oncall",
+        operatorScopeId: "ops",
+        persistenceDriver: "sqlite",
+        savedViewIdGenerator: () => "saved_view_assignment_web",
+        sqlitePath,
+      }),
+    });
+    const peerApp = buildServer({
+      operator: createRunrootOperatorService({
+        operatorId: "ops_backup",
+        operatorScopeId: "ops",
+        persistenceDriver: "sqlite",
+        sqlitePath,
+      }),
+    });
+
+    try {
+      const inlineRun = await inlineOperator.startRun({
+        input: {
+          approvalRequired: false,
+          commandAlias: "print-ready",
+          runbookId: "node-health-check",
+        },
+        templateId: "shell-runbook-flow",
+      });
+      const queuedRun = await queuedOperator.startRun({
+        input: {
+          approvalRequired: false,
+          commandAlias: "print-ready",
+          runbookId: "node-health-check",
+        },
+        templateId: "shell-runbook-flow",
+      });
+
+      await workerService.processNextJob();
+
+      const ownerAddress = await ownerApp.listen({
+        host: "127.0.0.1",
+        port: 0,
+      });
+      const peerAddress = await peerApp.listen({
+        host: "127.0.0.1",
+        port: 0,
+      });
+
+      process.env.RUNROOT_API_BASE_URL = ownerAddress;
+
+      const saveForm = new FormData();
+      saveForm.set("name", "Queued assignment preset");
+      saveForm.set("description", "Saved queued worker assignment preset");
+      saveForm.set("summaryExecutionMode", "queued");
+      saveForm.set("drilldownWorkerId", "worker_web_assignment");
+      saveForm.set("auditViewRunId", queuedRun.id);
+      saveForm.set("drilldownRunId", queuedRun.id);
+      saveForm.set("returnTo", "/runs");
+
+      const saveResponse = await saveSavedView(
+        new Request("http://localhost/runs/saved-views", {
+          body: saveForm,
+          method: "POST",
+        }),
+      );
+
+      expect(saveResponse.status).toBe(303);
+
+      const publishForm = new FormData();
+      publishForm.set("intent", "publish");
+      publishForm.set("savedViewId", "saved_view_assignment_web");
+
+      const publishResponse = await mutateCatalog(
+        new Request("http://localhost/runs/catalog", {
+          body: publishForm,
+          method: "POST",
+        }),
+      );
+
+      expect(publishResponse.status).toBe(303);
+
+      const shareForm = new FormData();
+      shareForm.set("catalogEntryId", "catalog_entry_assignment_web");
+      shareForm.set("intent", "share");
+
+      const shareResponse = await mutateCatalog(
+        new Request("http://localhost/runs/catalog", {
+          body: shareForm,
+          method: "POST",
+        }),
+      );
+
+      expect(shareResponse.status).toBe(303);
+
+      const reviewForm = new FormData();
+      reviewForm.set("catalogEntryId", "catalog_entry_assignment_web");
+      reviewForm.set("intent", "review");
+      reviewForm.set("note", `Reviewed after inline ${inlineRun.id}`);
+      reviewForm.set("reviewState", "recommended");
+      reviewForm.set(
+        "returnTo",
+        "/runs?catalogEntryId=catalog_entry_assignment_web",
+      );
+
+      const reviewResponse = await mutateCatalog(
+        new Request("http://localhost/runs/catalog", {
+          body: reviewForm,
+          method: "POST",
+        }),
+      );
+
+      expect(reviewResponse.status).toBe(303);
+
+      const assignForm = new FormData();
+      assignForm.set("catalogEntryId", "catalog_entry_assignment_web");
+      assignForm.set("intent", "assign");
+      assignForm.set("assigneeId", "ops_backup");
+      assignForm.set(
+        "handoffNote",
+        `Queued worker ${queuedRun.id} handed to backup`,
+      );
+      assignForm.set(
+        "returnTo",
+        "/runs?catalogEntryId=catalog_entry_assignment_web",
+      );
+
+      const assignResponse = await mutateCatalog(
+        new Request("http://localhost/runs/catalog", {
+          body: assignForm,
+          method: "POST",
+        }),
+      );
+
+      expect(assignResponse.status).toBe(303);
+
+      process.env.RUNROOT_API_BASE_URL = peerAddress;
+
+      const assignedMarkup = renderToStaticMarkup(
+        await RunsPage({
+          searchParams: Promise.resolve({
+            catalogEntryId: "catalog_entry_assignment_web",
+          }),
+        }),
+      );
+
+      expect(assignedMarkup).toContain("Catalog review assignments");
+      expect(assignedMarkup).toContain("Queued assignment preset");
+      expect(assignedMarkup).toContain("ops_backup");
+      expect(assignedMarkup).toContain(
+        `Queued worker ${queuedRun.id} handed to backup`,
+      );
+      expect(assignedMarkup).toContain(`Reviewed after inline ${inlineRun.id}`);
+      expect(assignedMarkup).toContain("Apply assigned preset");
+      expect(assignedMarkup).toContain("Currently applied");
+
+      process.env.RUNROOT_API_BASE_URL = ownerAddress;
+
+      const clearForm = new FormData();
+      clearForm.set("catalogEntryId", "catalog_entry_assignment_web");
+      clearForm.set("intent", "clear-assignment");
+      clearForm.set(
+        "returnTo",
+        "/runs?catalogEntryId=catalog_entry_assignment_web",
+      );
+
+      const clearResponse = await mutateCatalog(
+        new Request("http://localhost/runs/catalog", {
+          body: clearForm,
+          method: "POST",
+        }),
+      );
+
+      expect(clearResponse.status).toBe(303);
+
+      process.env.RUNROOT_API_BASE_URL = peerAddress;
+
+      const clearedMarkup = renderToStaticMarkup(
+        await RunsPage({
+          searchParams: Promise.resolve({
+            catalogEntryId: "catalog_entry_assignment_web",
+          }),
+        }),
+      );
+
+      expect(clearedMarkup).toContain("Catalog review assignments");
+      expect(clearedMarkup).toContain("No review assignments yet");
+      expect(clearedMarkup).not.toContain(
+        `Queued worker ${queuedRun.id} handed to backup`,
+      );
+    } finally {
+      await ownerApp.close();
+      await peerApp.close();
+    }
+  });
 });
