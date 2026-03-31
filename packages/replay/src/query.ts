@@ -48,6 +48,17 @@ import {
   type UpdateCrossRunAuditCatalogChecklistItemProgressInput,
 } from "./checklist-item-progress";
 import {
+  type CrossRunAuditCatalogChecklistItemResolution,
+  type CrossRunAuditCatalogChecklistItemResolutionApplication,
+  type CrossRunAuditCatalogChecklistItemResolutionCollection,
+  type CrossRunAuditCatalogChecklistItemResolutionStore,
+  type CrossRunAuditCatalogChecklistItemResolutionView,
+  compareCrossRunAuditCatalogChecklistItemResolution,
+  createCrossRunAuditCatalogChecklistItemResolution,
+  normalizeChecklistItemResolutionItems,
+  type UpdateCrossRunAuditCatalogChecklistItemResolutionInput,
+} from "./checklist-item-resolution";
+import {
   type CrossRunAuditQueryFilters,
   type CrossRunAuditResults,
   compareCrossRunAuditResults,
@@ -311,6 +322,32 @@ export interface CrossRunAuditCatalogChecklistItemBlockerQuery {
     input: UpdateCrossRunAuditCatalogChecklistItemBlockerInput,
     timestamp: string,
   ): Promise<CrossRunAuditCatalogChecklistItemBlockerView>;
+}
+
+export interface CrossRunAuditCatalogChecklistItemResolutionQuery {
+  applyCatalogEntry(
+    id: string,
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+  ): Promise<
+    CrossRunAuditCatalogChecklistItemResolutionApplication | undefined
+  >;
+  clearCatalogChecklistItemResolution(
+    id: string,
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+  ): Promise<CrossRunAuditCatalogChecklistItemResolutionView | undefined>;
+  getCatalogChecklistItemResolution(
+    id: string,
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+  ): Promise<CrossRunAuditCatalogChecklistItemResolutionView | undefined>;
+  listResolvedCatalogEntries(
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+  ): Promise<CrossRunAuditCatalogChecklistItemResolutionCollection>;
+  setCatalogChecklistItemResolution(
+    id: string,
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+    input: UpdateCrossRunAuditCatalogChecklistItemResolutionInput,
+    timestamp: string,
+  ): Promise<CrossRunAuditCatalogChecklistItemResolutionView>;
 }
 
 export function createRunTimelineQuery(
@@ -1369,6 +1406,153 @@ export function createCrossRunAuditCatalogChecklistItemBlockerQuery(
   };
 }
 
+export function createCrossRunAuditCatalogChecklistItemResolutionQuery(
+  store: CrossRunAuditCatalogChecklistItemResolutionStore,
+  blockers: CrossRunAuditCatalogChecklistItemBlockerQuery,
+): CrossRunAuditCatalogChecklistItemResolutionQuery {
+  return {
+    async applyCatalogEntry(id, viewer) {
+      const resolution = await resolveCatalogChecklistItemResolutionView(
+        store,
+        blockers,
+        id,
+        viewer,
+      );
+
+      if (!resolution) {
+        return undefined;
+      }
+
+      const application = await blockers.applyCatalogEntry(id, viewer);
+
+      if (!application) {
+        return undefined;
+      }
+
+      return {
+        application,
+        resolution,
+      };
+    },
+
+    async clearCatalogChecklistItemResolution(id, viewer) {
+      const resolution = await resolveCatalogChecklistItemResolutionView(
+        store,
+        blockers,
+        id,
+        viewer,
+      );
+
+      if (!resolution) {
+        return undefined;
+      }
+
+      await store.deleteCatalogChecklistItemResolution(id);
+
+      return resolution;
+    },
+
+    async getCatalogChecklistItemResolution(id, viewer) {
+      return resolveCatalogChecklistItemResolutionView(
+        store,
+        blockers,
+        id,
+        viewer,
+      );
+    },
+
+    async listResolvedCatalogEntries(viewer) {
+      const resolutions = [
+        ...(await store.listCatalogChecklistItemResolutions()),
+      ].sort(compareCrossRunAuditCatalogChecklistItemResolution);
+      const items = (
+        await Promise.all(
+          resolutions.map(async (resolution) =>
+            resolveCatalogChecklistItemResolutionFromValue(
+              blockers,
+              resolution,
+              viewer,
+            ),
+          ),
+        )
+      ).filter(
+        (
+          resolution,
+        ): resolution is CrossRunAuditCatalogChecklistItemResolutionView =>
+          resolution !== undefined,
+      );
+
+      return {
+        items,
+        totalCount: items.length,
+      };
+    },
+
+    async setCatalogChecklistItemResolution(id, viewer, input, timestamp) {
+      const blockerView = await blockers.getCatalogChecklistItemBlocker(
+        id,
+        viewer,
+      );
+
+      if (!blockerView) {
+        throw new Error(
+          `Catalog entry "${id}" is not blocked and visible to operator "${viewer.operatorId}".`,
+        );
+      }
+
+      const allowedItems = blockerView.blocker.items.map((item) => item.item);
+      const normalizedItems = normalizeChecklistItemResolutionItems(
+        input.items,
+        allowedItems,
+      );
+
+      if (normalizedItems.length === 0) {
+        throw new Error(
+          "Catalog checklist item resolutions require at least one checklist item resolution entry.",
+        );
+      }
+
+      const existingResolution =
+        await store.getCatalogChecklistItemResolution(id);
+      const normalizedResolutionNote = input.resolutionNote?.trim();
+      const resolution = existingResolution
+        ? {
+            ...(input.resolutionNote === undefined
+              ? existingResolution.resolutionNote
+                ? { resolutionNote: existingResolution.resolutionNote }
+                : {}
+              : normalizedResolutionNote
+                ? { resolutionNote: normalizedResolutionNote }
+                : {}),
+            catalogEntryId: id,
+            createdAt: existingResolution.createdAt,
+            items: normalizedItems,
+            kind: existingResolution.kind,
+            operatorId: viewer.operatorId,
+            scopeId: viewer.scopeId,
+            updatedAt: timestamp,
+          }
+        : createCrossRunAuditCatalogChecklistItemResolution({
+            ...(normalizedResolutionNote
+              ? { resolutionNote: normalizedResolutionNote }
+              : {}),
+            catalogEntryId: id,
+            items: normalizedItems,
+            operatorId: viewer.operatorId,
+            scopeId: viewer.scopeId,
+            timestamp,
+          });
+
+      await store.saveCatalogChecklistItemResolution(resolution);
+
+      return {
+        blocker: blockerView,
+        resolution,
+      };
+    },
+  };
+}
+
 async function resolveCatalogEntryView(
   store: CrossRunAuditCatalogStore,
   savedViews: CrossRunAuditSavedViewQuery,
@@ -1629,5 +1813,58 @@ async function resolveCatalogChecklistItemBlockerFromValue(
       items: normalizedItems,
     },
     progress,
+  };
+}
+
+async function resolveCatalogChecklistItemResolutionView(
+  store: CrossRunAuditCatalogChecklistItemResolutionStore,
+  blockers: CrossRunAuditCatalogChecklistItemBlockerQuery,
+  id: string,
+  viewer: CrossRunAuditCatalogVisibilityViewer,
+): Promise<CrossRunAuditCatalogChecklistItemResolutionView | undefined> {
+  const resolution = await store.getCatalogChecklistItemResolution(id);
+
+  return resolution
+    ? resolveCatalogChecklistItemResolutionFromValue(
+        blockers,
+        resolution,
+        viewer,
+      )
+    : undefined;
+}
+
+async function resolveCatalogChecklistItemResolutionFromValue(
+  blockerQuery: CrossRunAuditCatalogChecklistItemBlockerQuery,
+  resolution: CrossRunAuditCatalogChecklistItemResolution,
+  viewer: CrossRunAuditCatalogVisibilityViewer,
+): Promise<CrossRunAuditCatalogChecklistItemResolutionView | undefined> {
+  if (resolution.scopeId !== viewer.scopeId) {
+    return undefined;
+  }
+
+  const blocker = await blockerQuery.getCatalogChecklistItemBlocker(
+    resolution.catalogEntryId,
+    viewer,
+  );
+
+  if (!blocker) {
+    return undefined;
+  }
+
+  const normalizedItems = normalizeChecklistItemResolutionItems(
+    resolution.items,
+    blocker.blocker.items.map((item) => item.item),
+  );
+
+  if (normalizedItems.length === 0) {
+    return undefined;
+  }
+
+  return {
+    blocker,
+    resolution: {
+      ...resolution,
+      items: normalizedItems,
+    },
   };
 }
