@@ -8,6 +8,7 @@ export {
 } from "./errors";
 export {
   type AssignAuditCatalogEntryInput,
+  type BlockAuditCatalogEntryInput,
   type ChecklistAuditCatalogEntryInput,
   createRunrootOperatorService,
   createRunTimelineService,

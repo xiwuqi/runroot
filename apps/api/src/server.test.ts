@@ -25,7 +25,7 @@ describe("@runroot/api", () => {
     expect(response.json()).toEqual({
       status: "ok",
       project: "Runroot",
-      phase: 21,
+      phase: 22,
     });
   });
 
@@ -1346,6 +1346,280 @@ describe("@runroot/api", () => {
     expect(progressedAfterClearPayload.progressed.totalCount).toBe(0);
   });
 
+  it("blocks, lists-blocked, inspects, clears, and reapplies progressed catalog entries through the operator API", async () => {
+    const workspaceRoot = await mkdtemp(
+      join(tmpdir(), "runroot-api-blockers-"),
+    );
+    app = buildServer({
+      operator: createRunrootOperatorService({
+        catalogEntryIdGenerator: () => "catalog_entry_blocker_api",
+        operatorId: "ops_oncall",
+        operatorScopeId: "ops",
+        savedViewIdGenerator: () => "saved_view_blocker_api",
+        workspacePath: join(workspaceRoot, "workspace.json"),
+      }),
+    });
+
+    const createResponse = await app.inject({
+      method: "POST",
+      payload: {
+        input: {
+          approvalRequired: false,
+          commandAlias: "print-ready",
+          runbookId: "node-health-check",
+        },
+        templateId: "shell-runbook-flow",
+      },
+      url: "/runs",
+    });
+    const createdPayload = createResponse.json() as {
+      run: {
+        id: string;
+      };
+    };
+    const saveResponse = await app.inject({
+      method: "POST",
+      payload: {
+        name: "Saved blocker detail",
+        navigation: {
+          drilldown: {
+            runId: createdPayload.run.id,
+          },
+          summary: {
+            definitionId: "shell-runbook-flow",
+          },
+        },
+        refs: {
+          auditViewRunId: createdPayload.run.id,
+        },
+      },
+      url: "/audit/saved-views",
+    });
+    const savedViewPayload = saveResponse.json() as {
+      savedView: {
+        id: string;
+      };
+    };
+    const publishResponse = await app.inject({
+      method: "POST",
+      payload: {
+        savedViewId: savedViewPayload.savedView.id,
+      },
+      url: "/audit/catalog",
+    });
+    const publishedPayload = publishResponse.json() as {
+      catalogEntry: {
+        entry: {
+          id: string;
+        };
+      };
+    };
+    const reviewResponse = await app.inject({
+      method: "POST",
+      payload: {
+        note: "Blocker-ready inline follow-up",
+        state: "reviewed",
+      },
+      url: `/audit/catalog/${publishedPayload.catalogEntry.entry.id}/review`,
+    });
+    const assignmentResponse = await app.inject({
+      method: "POST",
+      payload: {
+        assigneeId: "ops_oncall",
+        handoffNote: "Inline blockers remain with the owner",
+      },
+      url: `/audit/catalog/${publishedPayload.catalogEntry.entry.id}/assignment`,
+    });
+    const checklistResponse = await app.inject({
+      method: "POST",
+      payload: {
+        items: ["Confirm inline handoff", "Close follow-up"],
+        state: "pending",
+      },
+      url: `/audit/catalog/${publishedPayload.catalogEntry.entry.id}/checklist`,
+    });
+    const progressResponse = await app.inject({
+      method: "POST",
+      payload: {
+        completionNote: "Inline blocker follow-up is underway",
+        items: [
+          {
+            item: "Confirm inline handoff",
+            state: "completed",
+          },
+          {
+            item: "Close follow-up",
+            state: "pending",
+          },
+        ],
+      },
+      url: `/audit/catalog/${publishedPayload.catalogEntry.entry.id}/progress`,
+    });
+    const blockerResponse = await app.inject({
+      method: "POST",
+      payload: {
+        blockerNote: "Waiting for overnight confirmation",
+        items: [
+          {
+            item: "Confirm inline handoff",
+            state: "cleared",
+          },
+          {
+            item: "Close follow-up",
+            state: "blocked",
+          },
+        ],
+      },
+      url: `/audit/catalog/${publishedPayload.catalogEntry.entry.id}/blocker`,
+    });
+    const blockedResponse = await app.inject({
+      method: "GET",
+      url: "/audit/catalog/blocked",
+    });
+    const inspectResponse = await app.inject({
+      method: "GET",
+      url: `/audit/catalog/${publishedPayload.catalogEntry.entry.id}/blocker`,
+    });
+    const applyResponse = await app.inject({
+      method: "GET",
+      url: `/audit/catalog/${publishedPayload.catalogEntry.entry.id}/apply`,
+    });
+    const clearResponse = await app.inject({
+      method: "POST",
+      url: `/audit/catalog/${publishedPayload.catalogEntry.entry.id}/blocker/clear`,
+    });
+    const blockedAfterClearResponse = await app.inject({
+      method: "GET",
+      url: "/audit/catalog/blocked",
+    });
+    const blockerPayload = blockerResponse.json() as {
+      blocker: {
+        blocker: {
+          blockerNote?: string;
+          items: Array<{
+            item: string;
+            state: "blocked" | "cleared";
+          }>;
+        };
+        progress: {
+          progress: {
+            completionNote?: string;
+          };
+        };
+      };
+    };
+    const blockedPayload = blockedResponse.json() as {
+      blocked: {
+        items: Array<{
+          blocker: {
+            blockerNote?: string;
+          };
+          progress: {
+            checklist: {
+              assignment: {
+                review: {
+                  visibility: {
+                    catalogEntry: {
+                      entry: {
+                        id: string;
+                      };
+                    };
+                  };
+                };
+              };
+            };
+          };
+        }>;
+        totalCount: number;
+      };
+    };
+    const inspectPayload = inspectResponse.json() as {
+      blocker: {
+        blocker: {
+          blockerNote?: string;
+          items: Array<{
+            item: string;
+            state: "blocked" | "cleared";
+          }>;
+        };
+      };
+    };
+    const applyPayload = applyResponse.json() as {
+      application: {
+        application: {
+          savedView: {
+            id: string;
+          };
+        };
+      };
+    };
+    const clearPayload = clearResponse.json() as {
+      blocker: {
+        blocker: {
+          blockerNote?: string;
+        };
+      };
+    };
+    const blockedAfterClearPayload = blockedAfterClearResponse.json() as {
+      blocked: {
+        totalCount: number;
+      };
+    };
+
+    expect(createResponse.statusCode).toBe(201);
+    expect(reviewResponse.statusCode).toBe(200);
+    expect(assignmentResponse.statusCode).toBe(200);
+    expect(checklistResponse.statusCode).toBe(200);
+    expect(progressResponse.statusCode).toBe(200);
+    expect(blockerResponse.statusCode).toBe(200);
+    expect(blockerPayload.blocker.progress.progress.completionNote).toBe(
+      "Inline blocker follow-up is underway",
+    );
+    expect(blockerPayload.blocker.blocker.blockerNote).toBe(
+      "Waiting for overnight confirmation",
+    );
+    expect(blockerPayload.blocker.blocker.items).toEqual([
+      {
+        item: "Confirm inline handoff",
+        state: "cleared",
+      },
+      {
+        item: "Close follow-up",
+        state: "blocked",
+      },
+    ]);
+    expect(blockedResponse.statusCode).toBe(200);
+    expect(blockedPayload.blocked.totalCount).toBe(1);
+    expect(
+      blockedPayload.blocked.items[0]?.progress.checklist.assignment.review
+        .visibility.catalogEntry.entry.id,
+    ).toBe("catalog_entry_blocker_api");
+    expect(inspectResponse.statusCode).toBe(200);
+    expect(inspectPayload.blocker.blocker.blockerNote).toBe(
+      "Waiting for overnight confirmation",
+    );
+    expect(inspectPayload.blocker.blocker.items).toEqual([
+      {
+        item: "Confirm inline handoff",
+        state: "cleared",
+      },
+      {
+        item: "Close follow-up",
+        state: "blocked",
+      },
+    ]);
+    expect(applyResponse.statusCode).toBe(200);
+    expect(applyPayload.application.application.savedView.id).toBe(
+      savedViewPayload.savedView.id,
+    );
+    expect(clearResponse.statusCode).toBe(200);
+    expect(clearPayload.blocker.blocker.blockerNote).toBe(
+      "Waiting for overnight confirmation",
+    );
+    expect(blockedAfterClearResponse.statusCode).toBe(200);
+    expect(blockedAfterClearPayload.blocked.totalCount).toBe(0);
+  });
+
   it("rejects invalid catalog review state through the operator API", async () => {
     const workspaceRoot = await mkdtemp(
       join(tmpdir(), "runroot-api-review-invalid-"),
@@ -1420,6 +1694,35 @@ describe("@runroot/api", () => {
     expect(progressResponse.statusCode).toBe(400);
     expect(progressResponse.body).toContain(
       "items must be an array of { item, state } objects with state pending|completed.",
+    );
+  });
+
+  it("rejects invalid catalog checklist item blockers through the operator API", async () => {
+    const workspaceRoot = await mkdtemp(
+      join(tmpdir(), "runroot-api-blocker-invalid-"),
+    );
+    app = buildServer({
+      operator: createRunrootOperatorService({
+        workspacePath: join(workspaceRoot, "workspace.json"),
+      }),
+    });
+
+    const blockerResponse = await app.inject({
+      method: "POST",
+      payload: {
+        items: [
+          {
+            item: "Validate queued follow-up",
+            state: "invalid",
+          },
+        ],
+      },
+      url: "/audit/catalog/catalog_entry_invalid/blocker",
+    });
+
+    expect(blockerResponse.statusCode).toBe(400);
+    expect(blockerResponse.body).toContain(
+      "items must be an array of { item, state } objects with state blocked|cleared.",
     );
   });
 });

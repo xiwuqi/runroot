@@ -35,6 +35,20 @@ export {
   type PublishCrossRunAuditCatalogEntryInput,
 } from "./catalog";
 export {
+  type CreateCrossRunAuditCatalogChecklistItemBlockerInput,
+  type CrossRunAuditCatalogChecklistItemBlocker,
+  type CrossRunAuditCatalogChecklistItemBlockerApplication,
+  type CrossRunAuditCatalogChecklistItemBlockerCollection,
+  type CrossRunAuditCatalogChecklistItemBlockerItem,
+  type CrossRunAuditCatalogChecklistItemBlockerState,
+  type CrossRunAuditCatalogChecklistItemBlockerStore,
+  type CrossRunAuditCatalogChecklistItemBlockerView,
+  compareCrossRunAuditCatalogChecklistItemBlocker,
+  createCrossRunAuditCatalogChecklistItemBlocker,
+  normalizeChecklistItemBlockerItems,
+  type UpdateCrossRunAuditCatalogChecklistItemBlockerInput,
+} from "./checklist-item-blocker";
+export {
   type CreateCrossRunAuditCatalogChecklistItemProgressInput,
   type CrossRunAuditCatalogChecklistItemProgress,
   type CrossRunAuditCatalogChecklistItemProgressApplication,
@@ -81,6 +95,7 @@ export {
 } from "./navigation";
 export {
   type CrossRunAuditCatalogAssignmentChecklistQuery,
+  type CrossRunAuditCatalogChecklistItemBlockerQuery,
   type CrossRunAuditCatalogChecklistItemProgressQuery,
   type CrossRunAuditCatalogQuery,
   type CrossRunAuditCatalogReviewAssignmentQuery,
@@ -92,6 +107,7 @@ export {
   type CrossRunAuditReader,
   type CrossRunAuditSavedViewQuery,
   createCrossRunAuditCatalogAssignmentChecklistQuery,
+  createCrossRunAuditCatalogChecklistItemBlockerQuery,
   createCrossRunAuditCatalogChecklistItemProgressQuery,
   createCrossRunAuditCatalogQuery,
   createCrossRunAuditCatalogReviewAssignmentQuery,

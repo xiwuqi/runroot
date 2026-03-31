@@ -1499,4 +1499,238 @@ describe("@runroot/sdk operator service integration", () => {
     );
     expect(peerProgressAfterClear.totalCount).toBe(0);
   });
+
+  it("blocks, lists-blocked, inspects, clears, and reapplies progressed presets for inline and queued runs through the operator seam", async () => {
+    const workspaceRoot = await mkdtemp(
+      join(tmpdir(), "runroot-sdk-checklist-blockers-"),
+    );
+    const sqlitePath = join(workspaceRoot, "runroot.sqlite");
+    const now = createClock();
+    const idGenerator = createIdGenerator();
+    let savedViewCount = 0;
+    let catalogEntryCount = 0;
+    const inlineService = createRunrootOperatorService({
+      executionMode: "inline",
+      idGenerator,
+      now,
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+    const queuedService = createRunrootOperatorService({
+      executionMode: "queued",
+      idGenerator,
+      now,
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+    const worker = createRunrootWorkerService({
+      idGenerator,
+      now,
+      persistenceDriver: "sqlite",
+      sqlitePath,
+      workerId: "worker_checklist_blockers",
+    });
+    const ownerService = createRunrootOperatorService({
+      catalogEntryIdGenerator: () =>
+        `catalog_entry_blocker_${++catalogEntryCount}`,
+      idGenerator,
+      now,
+      operatorId: "ops_oncall",
+      operatorScopeId: "ops",
+      persistenceDriver: "sqlite",
+      savedViewIdGenerator: () => `saved_view_blocker_${++savedViewCount}`,
+      sqlitePath,
+    });
+    const peerService = createRunrootOperatorService({
+      idGenerator,
+      now,
+      operatorId: "ops_backup",
+      operatorScopeId: "ops",
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+
+    const inlineRun = await inlineService.startRun({
+      input: {
+        approvalRequired: false,
+        commandAlias: "print-ready",
+        runbookId: "node-health-check",
+      },
+      templateId: "shell-runbook-flow",
+    });
+    const queuedRun = await queuedService.startRun({
+      input: {
+        approvalRequired: false,
+        commandAlias: "print-ready",
+        runbookId: "node-health-check",
+      },
+      templateId: "shell-runbook-flow",
+    });
+
+    await worker.processNextJob();
+
+    const inlineSavedView = await ownerService.saveSavedView({
+      description: "Inline blocker preset for owner follow-up",
+      name: "Inline blocker preset",
+      navigation: {
+        drilldown: {
+          runId: inlineRun.id,
+        },
+        summary: {
+          executionMode: "inline",
+        },
+      },
+      refs: {
+        auditViewRunId: inlineRun.id,
+        drilldownRunId: inlineRun.id,
+      },
+    });
+    const queuedSavedView = await ownerService.saveSavedView({
+      description: "Queued blocker preset for shared follow-up",
+      name: "Queued blocker preset",
+      navigation: {
+        drilldown: {
+          workerId: "worker_checklist_blockers",
+        },
+        summary: {
+          executionMode: "queued",
+        },
+      },
+      refs: {
+        auditViewRunId: queuedRun.id,
+        drilldownRunId: queuedRun.id,
+      },
+    });
+    const inlineCatalogEntry = await ownerService.publishCatalogEntry({
+      savedViewId: inlineSavedView.id,
+    });
+    const queuedCatalogEntry = await ownerService.publishCatalogEntry({
+      savedViewId: queuedSavedView.id,
+    });
+
+    await ownerService.shareCatalogEntry(queuedCatalogEntry.entry.id);
+    await ownerService.reviewCatalogEntry(inlineCatalogEntry.entry.id, {
+      note: "Inline blocker preset verified by the owner",
+      state: "reviewed",
+    });
+    await peerService.reviewCatalogEntry(queuedCatalogEntry.entry.id, {
+      note: "Queued blocker preset ready for backup follow-up",
+      state: "recommended",
+    });
+    await ownerService.assignCatalogEntry(inlineCatalogEntry.entry.id, {
+      assigneeId: "ops_oncall",
+      handoffNote: "Inline blocker preset remains with the owner",
+    });
+    await ownerService.assignCatalogEntry(queuedCatalogEntry.entry.id, {
+      assigneeId: "ops_backup",
+      handoffNote: "Queued blocker preset handed to the backup operator",
+    });
+    await ownerService.checklistCatalogEntry(inlineCatalogEntry.entry.id, {
+      items: ["Confirm inline owner follow-up"],
+      state: "completed",
+    });
+    await ownerService.checklistCatalogEntry(queuedCatalogEntry.entry.id, {
+      items: ["Validate queued follow-up", "Close backup handoff"],
+      state: "pending",
+    });
+    await ownerService.progressCatalogEntry(inlineCatalogEntry.entry.id, {
+      items: [
+        {
+          item: "Confirm inline owner follow-up",
+          state: "completed",
+        },
+      ],
+    });
+    await ownerService.progressCatalogEntry(queuedCatalogEntry.entry.id, {
+      completionNote: "Queued follow-up is almost complete",
+      items: [
+        {
+          item: "Validate queued follow-up",
+          state: "completed",
+        },
+        {
+          item: "Close backup handoff",
+          state: "pending",
+        },
+      ],
+    });
+    await ownerService.blockCatalogEntry(inlineCatalogEntry.entry.id, {
+      items: [
+        {
+          item: "Confirm inline owner follow-up",
+          state: "blocked",
+        },
+      ],
+    });
+    await ownerService.blockCatalogEntry(queuedCatalogEntry.entry.id, {
+      blockerNote: "Waiting for the overnight handoff",
+      items: [
+        {
+          item: "Validate queued follow-up",
+          state: "cleared",
+        },
+        {
+          item: "Close backup handoff",
+          state: "blocked",
+        },
+      ],
+    });
+
+    const ownerBlockers = await ownerService.listBlockedCatalogEntries();
+    const peerBlockers = await peerService.listBlockedCatalogEntries();
+    const inspectedBlocker = await ownerService.getCatalogChecklistItemBlocker(
+      queuedCatalogEntry.entry.id,
+    );
+    const appliedBlocker = await peerService.applyCatalogEntry(
+      queuedCatalogEntry.entry.id,
+    );
+    const clearedBlocker = await ownerService.clearCatalogChecklistItemBlocker(
+      queuedCatalogEntry.entry.id,
+    );
+    const peerBlockersAfterClear =
+      await peerService.listBlockedCatalogEntries();
+
+    expect(
+      ownerBlockers.items.map(
+        (item) =>
+          item.progress.checklist.assignment.review.visibility.catalogEntry
+            .entry.id,
+      ),
+    ).toEqual([queuedCatalogEntry.entry.id, inlineCatalogEntry.entry.id]);
+    expect(
+      peerBlockers.items.map(
+        (item) =>
+          item.progress.checklist.assignment.review.visibility.catalogEntry
+            .entry.id,
+      ),
+    ).toEqual([queuedCatalogEntry.entry.id]);
+    expect(inspectedBlocker.blocker).toMatchObject({
+      blockerNote: "Waiting for the overnight handoff",
+      catalogEntryId: queuedCatalogEntry.entry.id,
+      operatorId: "ops_oncall",
+      scopeId: "ops",
+    });
+    expect(inspectedBlocker.blocker.items).toEqual([
+      {
+        item: "Validate queued follow-up",
+        state: "cleared",
+      },
+      {
+        item: "Close backup handoff",
+        state: "blocked",
+      },
+    ]);
+    expect(appliedBlocker.catalogEntry.entry.id).toBe(
+      queuedCatalogEntry.entry.id,
+    );
+    expect(appliedBlocker.application.savedView.id).toBe(queuedSavedView.id);
+    expect(appliedBlocker.application.navigation.totalSummaryCount).toBe(1);
+    expect(
+      appliedBlocker.application.navigation.drilldowns[0]?.result.runId,
+    ).toBe(queuedRun.id);
+    expect(clearedBlocker.blocker.catalogEntryId).toBe(
+      queuedCatalogEntry.entry.id,
+    );
+    expect(peerBlockersAfterClear.totalCount).toBe(0);
+  });
 });

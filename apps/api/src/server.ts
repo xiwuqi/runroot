@@ -249,6 +249,12 @@ export function buildServer(options: BuildServerOptions = {}) {
     })),
   );
 
+  app.get("/audit/catalog/blocked", async (_request, reply) =>
+    handleOperatorResponse(reply, async () => ({
+      blocked: await operator.listBlockedCatalogEntries(),
+    })),
+  );
+
   app.post("/audit/saved-views", async (request, reply) =>
     handleOperatorResponse(reply, async () => {
       const body = request.body as {
@@ -408,6 +414,20 @@ export function buildServer(options: BuildServerOptions = {}) {
     }),
   );
 
+  app.get("/audit/catalog/:catalogEntryId/blocker", async (request, reply) =>
+    handleOperatorResponse(reply, async () => {
+      const params = request.params as {
+        readonly catalogEntryId: string;
+      };
+
+      return {
+        blocker: await operator.getCatalogChecklistItemBlocker(
+          params.catalogEntryId,
+        ),
+      };
+    }),
+  );
+
   app.get("/audit/catalog/:catalogEntryId", async (request, reply) =>
     handleOperatorResponse(reply, async () => {
       const params = request.params as {
@@ -550,6 +570,34 @@ export function buildServer(options: BuildServerOptions = {}) {
     }),
   );
 
+  app.post("/audit/catalog/:catalogEntryId/blocker", async (request, reply) =>
+    handleOperatorResponse(reply, async () => {
+      const params = request.params as {
+        readonly catalogEntryId: string;
+      };
+      const body = request.body as {
+        readonly blockerNote?: string;
+        readonly items?: unknown;
+      };
+      const items = readChecklistItemBlockerItems(body?.items, "items");
+
+      if (items.length === 0) {
+        throw new OperatorInputError(
+          "items must include at least one checklist item blocker entry.",
+        );
+      }
+
+      return {
+        blocker: await operator.blockCatalogEntry(params.catalogEntryId, {
+          ...(body?.blockerNote !== undefined
+            ? { blockerNote: body.blockerNote }
+            : {}),
+          items,
+        }),
+      };
+    }),
+  );
+
   app.post(
     "/audit/catalog/:catalogEntryId/review/clear",
     async (request, reply) =>
@@ -608,6 +656,22 @@ export function buildServer(options: BuildServerOptions = {}) {
 
         return {
           progress: await operator.clearCatalogChecklistItemProgress(
+            params.catalogEntryId,
+          ),
+        };
+      }),
+  );
+
+  app.post(
+    "/audit/catalog/:catalogEntryId/blocker/clear",
+    async (request, reply) =>
+      handleOperatorResponse(reply, async () => {
+        const params = request.params as {
+          readonly catalogEntryId: string;
+        };
+
+        return {
+          blocker: await operator.clearCatalogChecklistItemBlocker(
             params.catalogEntryId,
           ),
         };
@@ -1011,6 +1075,33 @@ function readChecklistItemProgressItems(
   ) {
     throw new OperatorInputError(
       `${fieldName} must be an array of { item, state } objects with state pending|completed.`,
+    );
+  }
+
+  return value;
+}
+
+function readChecklistItemBlockerItems(
+  value: unknown,
+  fieldName: string,
+): readonly {
+  readonly item: string;
+  readonly state: "blocked" | "cleared";
+}[] {
+  if (
+    !Array.isArray(value) ||
+    !value.every(
+      (entry) =>
+        typeof entry === "object" &&
+        entry !== null &&
+        "item" in entry &&
+        typeof entry.item === "string" &&
+        "state" in entry &&
+        (entry.state === "blocked" || entry.state === "cleared"),
+    )
+  ) {
+    throw new OperatorInputError(
+      `${fieldName} must be an array of { item, state } objects with state blocked|cleared.`,
     );
   }
 

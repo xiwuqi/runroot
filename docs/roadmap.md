@@ -315,4 +315,4 @@ Status: completed
   broader multi-user curation, or broad observability and analytics platform
   work
 
-Status: scope frozen on branch
+Status: implemented on branch

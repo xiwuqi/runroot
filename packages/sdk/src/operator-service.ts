@@ -19,6 +19,7 @@ import type { JsonValue, WorkflowRun } from "@runroot/domain";
 import type { RunrootLogger, RunrootTracer } from "@runroot/observability";
 import {
   createConfiguredAuditCatalogAssignmentChecklistStore,
+  createConfiguredAuditCatalogChecklistItemBlockerStore,
   createConfiguredAuditCatalogChecklistItemProgressStore,
   createConfiguredAuditCatalogReviewAssignmentStore,
   createConfiguredAuditCatalogReviewSignalStore,
@@ -35,6 +36,10 @@ import {
   type CrossRunAuditCatalogAssignmentChecklistState,
   type CrossRunAuditCatalogAssignmentChecklistStore,
   type CrossRunAuditCatalogAssignmentChecklistView,
+  type CrossRunAuditCatalogChecklistItemBlockerCollection,
+  type CrossRunAuditCatalogChecklistItemBlockerItem,
+  type CrossRunAuditCatalogChecklistItemBlockerStore,
+  type CrossRunAuditCatalogChecklistItemBlockerView,
   type CrossRunAuditCatalogChecklistItemProgressCollection,
   type CrossRunAuditCatalogChecklistItemProgressItem,
   type CrossRunAuditCatalogChecklistItemProgressStore,
@@ -66,6 +71,7 @@ import {
   type CrossRunAuditSavedViewNavigationRefs,
   type CrossRunAuditSavedViewStore,
   createCrossRunAuditCatalogAssignmentChecklistQuery,
+  createCrossRunAuditCatalogChecklistItemBlockerQuery,
   createCrossRunAuditCatalogChecklistItemProgressQuery,
   createCrossRunAuditCatalogQuery,
   createCrossRunAuditCatalogReviewAssignmentQuery,
@@ -151,6 +157,11 @@ export interface ProgressAuditCatalogEntryInput {
   readonly items: readonly CrossRunAuditCatalogChecklistItemProgressItem[];
 }
 
+export interface BlockAuditCatalogEntryInput {
+  readonly blockerNote?: string;
+  readonly items: readonly CrossRunAuditCatalogChecklistItemBlockerItem[];
+}
+
 export interface ReviewAuditCatalogEntryInput {
   readonly note?: string;
   readonly state: CrossRunAuditCatalogReviewState;
@@ -163,6 +174,10 @@ export interface RunrootOperatorService {
     id: string,
     input: AssignAuditCatalogEntryInput,
   ): Promise<CrossRunAuditCatalogReviewAssignmentView>;
+  blockCatalogEntry(
+    id: string,
+    input: BlockAuditCatalogEntryInput,
+  ): Promise<CrossRunAuditCatalogChecklistItemBlockerView>;
   archiveCatalogEntry(id: string): Promise<CrossRunAuditCatalogEntryView>;
   checklistCatalogEntry(
     id: string,
@@ -171,6 +186,9 @@ export interface RunrootOperatorService {
   clearCatalogAssignmentChecklist(
     id: string,
   ): Promise<CrossRunAuditCatalogAssignmentChecklistView>;
+  clearCatalogChecklistItemBlocker(
+    id: string,
+  ): Promise<CrossRunAuditCatalogChecklistItemBlockerView>;
   clearCatalogChecklistItemProgress(
     id: string,
   ): Promise<CrossRunAuditCatalogChecklistItemProgressView>;
@@ -183,6 +201,9 @@ export interface RunrootOperatorService {
   getCatalogAssignmentChecklist(
     id: string,
   ): Promise<CrossRunAuditCatalogAssignmentChecklistView>;
+  getCatalogChecklistItemBlocker(
+    id: string,
+  ): Promise<CrossRunAuditCatalogChecklistItemBlockerView>;
   getCatalogChecklistItemProgress(
     id: string,
   ): Promise<CrossRunAuditCatalogChecklistItemProgressView>;
@@ -214,6 +235,7 @@ export interface RunrootOperatorService {
     filters?: CrossRunAuditDrilldownFilters,
   ): Promise<CrossRunAuditDrilldownResults>;
   listAssignedCatalogEntries(): Promise<CrossRunAuditCatalogReviewAssignmentCollection>;
+  listBlockedCatalogEntries(): Promise<CrossRunAuditCatalogChecklistItemBlockerCollection>;
   listChecklistedCatalogEntries(): Promise<CrossRunAuditCatalogAssignmentChecklistCollection>;
   listCatalogEntries(): Promise<CrossRunAuditCatalogEntryCollection>;
   listProgressedCatalogEntries(): Promise<CrossRunAuditCatalogChecklistItemProgressCollection>;
@@ -248,6 +270,7 @@ export interface RunrootOperatorService {
 export interface RunrootOperatorServiceOptions {
   readonly approvalIdGenerator?: () => string;
   readonly catalogAssignmentChecklistStore?: CrossRunAuditCatalogAssignmentChecklistStore;
+  readonly catalogChecklistItemBlockerStore?: CrossRunAuditCatalogChecklistItemBlockerStore;
   readonly catalogChecklistItemProgressStore?: CrossRunAuditCatalogChecklistItemProgressStore;
   readonly catalogEntryIdGenerator?: () => string;
   readonly catalogReviewAssignmentStore?: CrossRunAuditCatalogReviewAssignmentStore;
@@ -411,6 +434,19 @@ export function createRunrootOperatorService(
         ? { workspacePath: options.workspacePath }
         : {}),
     });
+  const catalogChecklistItemBlockerStore =
+    options.catalogChecklistItemBlockerStore ??
+    createConfiguredAuditCatalogChecklistItemBlockerStore({
+      ...(options.databaseUrl ? { databaseUrl: options.databaseUrl } : {}),
+      ...(options.env ? { env: options.env } : {}),
+      ...(options.persistenceDriver
+        ? { driver: options.persistenceDriver }
+        : {}),
+      ...(options.sqlitePath ? { sqlitePath: options.sqlitePath } : {}),
+      ...(options.workspacePath
+        ? { workspacePath: options.workspacePath }
+        : {}),
+    });
   const templateRuntimeOptions: CreateTemplateRuntimeBundleOptions = {
     toolObserver: createToolTelemetryObserver({
       history: toolHistory,
@@ -526,6 +562,11 @@ export function createRunrootOperatorService(
       catalogChecklistItemProgressStore,
       crossRunAuditCatalogAssignmentChecklists,
     );
+  const crossRunAuditCatalogChecklistItemBlockers =
+    createCrossRunAuditCatalogChecklistItemBlockerQuery(
+      catalogChecklistItemBlockerStore,
+      crossRunAuditCatalogChecklistItemProgress,
+    );
   const persistenceLocation = persistenceConfig.location;
 
   return {
@@ -563,6 +604,19 @@ export function createRunrootOperatorService(
         );
       } catch (error) {
         throw normalizeCatalogReviewAssignmentError(error, id);
+      }
+    },
+
+    async blockCatalogEntry(id, input) {
+      try {
+        return await crossRunAuditCatalogChecklistItemBlockers.setCatalogChecklistItemBlocker(
+          id,
+          operatorIdentity,
+          input,
+          now(),
+        );
+      } catch (error) {
+        throw normalizeCatalogChecklistItemBlockerError(error, id);
       }
     },
 
@@ -609,6 +663,20 @@ export function createRunrootOperatorService(
       }
 
       return checklist;
+    },
+
+    async clearCatalogChecklistItemBlocker(id) {
+      const blocker =
+        await crossRunAuditCatalogChecklistItemBlockers.clearCatalogChecklistItemBlocker(
+          id,
+          operatorIdentity,
+        );
+
+      if (!blocker) {
+        throw new OperatorNotFoundError("catalog checklist item blocker", id);
+      }
+
+      return blocker;
     },
 
     async clearCatalogChecklistItemProgress(id) {
@@ -721,6 +789,20 @@ export function createRunrootOperatorService(
       return checklist;
     },
 
+    async getCatalogChecklistItemBlocker(id) {
+      const blocker =
+        await crossRunAuditCatalogChecklistItemBlockers.getCatalogChecklistItemBlocker(
+          id,
+          operatorIdentity,
+        );
+
+      if (!blocker) {
+        throw new OperatorNotFoundError("catalog checklist item blocker", id);
+      }
+
+      return blocker;
+    },
+
     async getCatalogChecklistItemProgress(id) {
       const progress =
         await crossRunAuditCatalogChecklistItemProgress.getCatalogChecklistItemProgress(
@@ -831,6 +913,12 @@ export function createRunrootOperatorService(
 
     async listAssignedCatalogEntries() {
       return crossRunAuditCatalogReviewAssignments.listAssignedCatalogEntries(
+        operatorIdentity,
+      );
+    },
+
+    async listBlockedCatalogEntries() {
+      return crossRunAuditCatalogChecklistItemBlockers.listBlockedCatalogEntries(
         operatorIdentity,
       );
     },
@@ -1269,6 +1357,44 @@ function normalizeCatalogChecklistItemProgressError(
   ) {
     return new OperatorNotFoundError(
       "catalog checklist item progress",
+      catalogEntryId,
+    );
+  }
+
+  return normalizeOperatorError(error);
+}
+
+function normalizeCatalogChecklistItemBlockerError(
+  error: unknown,
+  catalogEntryId: string,
+): Error {
+  if (
+    error instanceof OperatorConflictError ||
+    error instanceof OperatorInputError ||
+    error instanceof OperatorNotFoundError
+  ) {
+    return error;
+  }
+
+  if (
+    error instanceof Error &&
+    (error.message.startsWith("Catalog checklist item blockers require") ||
+      error.message.startsWith(`Catalog checklist item blocker "`) ||
+      error.message.startsWith(
+        `Catalog entry "${catalogEntryId}" does not define checklist item progress entries`,
+      ))
+  ) {
+    return new OperatorInputError(error.message);
+  }
+
+  if (
+    error instanceof Error &&
+    error.message.startsWith(
+      `Catalog entry "${catalogEntryId}" is not progressed and visible to operator`,
+    )
+  ) {
+    return new OperatorNotFoundError(
+      "catalog checklist item blocker",
       catalogEntryId,
     );
   }

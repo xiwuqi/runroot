@@ -26,6 +26,17 @@ import {
   type PublishCrossRunAuditCatalogEntryInput,
 } from "./catalog";
 import {
+  type CrossRunAuditCatalogChecklistItemBlocker,
+  type CrossRunAuditCatalogChecklistItemBlockerApplication,
+  type CrossRunAuditCatalogChecklistItemBlockerCollection,
+  type CrossRunAuditCatalogChecklistItemBlockerStore,
+  type CrossRunAuditCatalogChecklistItemBlockerView,
+  compareCrossRunAuditCatalogChecklistItemBlocker,
+  createCrossRunAuditCatalogChecklistItemBlocker,
+  normalizeChecklistItemBlockerItems,
+  type UpdateCrossRunAuditCatalogChecklistItemBlockerInput,
+} from "./checklist-item-blocker";
+import {
   type CrossRunAuditCatalogChecklistItemProgress,
   type CrossRunAuditCatalogChecklistItemProgressApplication,
   type CrossRunAuditCatalogChecklistItemProgressCollection,
@@ -276,6 +287,30 @@ export interface CrossRunAuditCatalogChecklistItemProgressQuery {
     input: UpdateCrossRunAuditCatalogChecklistItemProgressInput,
     timestamp: string,
   ): Promise<CrossRunAuditCatalogChecklistItemProgressView>;
+}
+
+export interface CrossRunAuditCatalogChecklistItemBlockerQuery {
+  applyCatalogEntry(
+    id: string,
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+  ): Promise<CrossRunAuditCatalogChecklistItemBlockerApplication | undefined>;
+  clearCatalogChecklistItemBlocker(
+    id: string,
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+  ): Promise<CrossRunAuditCatalogChecklistItemBlockerView | undefined>;
+  getCatalogChecklistItemBlocker(
+    id: string,
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+  ): Promise<CrossRunAuditCatalogChecklistItemBlockerView | undefined>;
+  listBlockedCatalogEntries(
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+  ): Promise<CrossRunAuditCatalogChecklistItemBlockerCollection>;
+  setCatalogChecklistItemBlocker(
+    id: string,
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+    input: UpdateCrossRunAuditCatalogChecklistItemBlockerInput,
+    timestamp: string,
+  ): Promise<CrossRunAuditCatalogChecklistItemBlockerView>;
 }
 
 export function createRunTimelineQuery(
@@ -1190,6 +1225,150 @@ export function createCrossRunAuditCatalogChecklistItemProgressQuery(
   };
 }
 
+export function createCrossRunAuditCatalogChecklistItemBlockerQuery(
+  store: CrossRunAuditCatalogChecklistItemBlockerStore,
+  progress: CrossRunAuditCatalogChecklistItemProgressQuery,
+): CrossRunAuditCatalogChecklistItemBlockerQuery {
+  return {
+    async applyCatalogEntry(id, viewer) {
+      const blocker = await resolveCatalogChecklistItemBlockerView(
+        store,
+        progress,
+        id,
+        viewer,
+      );
+
+      if (!blocker) {
+        return undefined;
+      }
+
+      const application = await progress.applyCatalogEntry(id, viewer);
+
+      if (!application) {
+        return undefined;
+      }
+
+      return {
+        application,
+        blocker,
+      };
+    },
+
+    async clearCatalogChecklistItemBlocker(id, viewer) {
+      const blocker = await resolveCatalogChecklistItemBlockerView(
+        store,
+        progress,
+        id,
+        viewer,
+      );
+
+      if (!blocker) {
+        return undefined;
+      }
+
+      await store.deleteCatalogChecklistItemBlocker(id);
+
+      return blocker;
+    },
+
+    async getCatalogChecklistItemBlocker(id, viewer) {
+      return resolveCatalogChecklistItemBlockerView(
+        store,
+        progress,
+        id,
+        viewer,
+      );
+    },
+
+    async listBlockedCatalogEntries(viewer) {
+      const blockers = [
+        ...(await store.listCatalogChecklistItemBlockers()),
+      ].sort(compareCrossRunAuditCatalogChecklistItemBlocker);
+      const items = (
+        await Promise.all(
+          blockers.map(async (blocker) =>
+            resolveCatalogChecklistItemBlockerFromValue(
+              progress,
+              blocker,
+              viewer,
+            ),
+          ),
+        )
+      ).filter(
+        (blocker): blocker is CrossRunAuditCatalogChecklistItemBlockerView =>
+          blocker !== undefined,
+      );
+
+      return {
+        items,
+        totalCount: items.length,
+      };
+    },
+
+    async setCatalogChecklistItemBlocker(id, viewer, input, timestamp) {
+      const progressView = await progress.getCatalogChecklistItemProgress(
+        id,
+        viewer,
+      );
+
+      if (!progressView) {
+        throw new Error(
+          `Catalog entry "${id}" is not progressed and visible to operator "${viewer.operatorId}".`,
+        );
+      }
+
+      const allowedItems = progressView.progress.items.map((item) => item.item);
+      const normalizedItems = normalizeChecklistItemBlockerItems(
+        input.items,
+        allowedItems,
+      );
+
+      if (normalizedItems.length === 0) {
+        throw new Error(
+          "Catalog checklist item blockers require at least one checklist item blocker entry.",
+        );
+      }
+
+      const existingBlocker = await store.getCatalogChecklistItemBlocker(id);
+      const normalizedBlockerNote = input.blockerNote?.trim();
+      const blocker = existingBlocker
+        ? {
+            ...(input.blockerNote === undefined
+              ? existingBlocker.blockerNote
+                ? { blockerNote: existingBlocker.blockerNote }
+                : {}
+              : normalizedBlockerNote
+                ? { blockerNote: normalizedBlockerNote }
+                : {}),
+            catalogEntryId: id,
+            createdAt: existingBlocker.createdAt,
+            items: normalizedItems,
+            kind: existingBlocker.kind,
+            operatorId: viewer.operatorId,
+            scopeId: viewer.scopeId,
+            updatedAt: timestamp,
+          }
+        : createCrossRunAuditCatalogChecklistItemBlocker({
+            ...(normalizedBlockerNote
+              ? { blockerNote: normalizedBlockerNote }
+              : {}),
+            catalogEntryId: id,
+            items: normalizedItems,
+            operatorId: viewer.operatorId,
+            scopeId: viewer.scopeId,
+            timestamp,
+          });
+
+      await store.saveCatalogChecklistItemBlocker(blocker);
+
+      return {
+        blocker,
+        progress: progressView,
+      };
+    },
+  };
+}
+
 async function resolveCatalogEntryView(
   store: CrossRunAuditCatalogStore,
   savedViews: CrossRunAuditSavedViewQuery,
@@ -1401,5 +1580,54 @@ async function resolveCatalogChecklistItemProgressFromValue(
       ...progress,
       items: normalizedItems,
     },
+  };
+}
+
+async function resolveCatalogChecklistItemBlockerView(
+  store: CrossRunAuditCatalogChecklistItemBlockerStore,
+  progress: CrossRunAuditCatalogChecklistItemProgressQuery,
+  id: string,
+  viewer: CrossRunAuditCatalogVisibilityViewer,
+): Promise<CrossRunAuditCatalogChecklistItemBlockerView | undefined> {
+  const blocker = await store.getCatalogChecklistItemBlocker(id);
+
+  return blocker
+    ? resolveCatalogChecklistItemBlockerFromValue(progress, blocker, viewer)
+    : undefined;
+}
+
+async function resolveCatalogChecklistItemBlockerFromValue(
+  progressQuery: CrossRunAuditCatalogChecklistItemProgressQuery,
+  blocker: CrossRunAuditCatalogChecklistItemBlocker,
+  viewer: CrossRunAuditCatalogVisibilityViewer,
+): Promise<CrossRunAuditCatalogChecklistItemBlockerView | undefined> {
+  if (blocker.scopeId !== viewer.scopeId) {
+    return undefined;
+  }
+
+  const progress = await progressQuery.getCatalogChecklistItemProgress(
+    blocker.catalogEntryId,
+    viewer,
+  );
+
+  if (!progress) {
+    return undefined;
+  }
+
+  const normalizedItems = normalizeChecklistItemBlockerItems(
+    blocker.items,
+    progress.progress.items.map((item) => item.item),
+  );
+
+  if (normalizedItems.length === 0) {
+    return undefined;
+  }
+
+  return {
+    blocker: {
+      ...blocker,
+      items: normalizedItems,
+    },
+    progress,
   };
 }
