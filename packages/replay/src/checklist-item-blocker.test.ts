@@ -607,15 +607,12 @@ describe("@runroot/replay audit catalog checklist item blockers", () => {
       "2026-03-31T03:00:15.000Z",
     );
 
-    const ownerBlockers = await blockerQuery.listBlockedCatalogEntries(
-      ownerViewer,
-    );
-    const peerBlockers = await blockerQuery.listBlockedCatalogEntries(
-      peerViewer,
-    );
-    const otherScopeBlockers = await blockerQuery.listBlockedCatalogEntries(
-      otherScopeViewer,
-    );
+    const ownerBlockers =
+      await blockerQuery.listBlockedCatalogEntries(ownerViewer);
+    const peerBlockers =
+      await blockerQuery.listBlockedCatalogEntries(peerViewer);
+    const otherScopeBlockers =
+      await blockerQuery.listBlockedCatalogEntries(otherScopeViewer);
     const inspectedBlocker = await blockerQuery.getCatalogChecklistItemBlocker(
       "catalog_queued",
       ownerViewer,
@@ -628,22 +625,21 @@ describe("@runroot/replay audit catalog checklist item blockers", () => {
       "catalog_queued",
       ownerViewer,
     );
-    const peerBlockersAfterClear = await blockerQuery.listBlockedCatalogEntries(
-      peerViewer,
-    );
+    const peerBlockersAfterClear =
+      await blockerQuery.listBlockedCatalogEntries(peerViewer);
 
     expect(
       ownerBlockers.items.map(
         (item) =>
-          item.progress.checklist.assignment.review.visibility.catalogEntry.entry
-            .id,
+          item.progress.checklist.assignment.review.visibility.catalogEntry
+            .entry.id,
       ),
     ).toEqual(["catalog_queued", "catalog_inline"]);
     expect(
       peerBlockers.items.map(
         (item) =>
-          item.progress.checklist.assignment.review.visibility.catalogEntry.entry
-            .id,
+          item.progress.checklist.assignment.review.visibility.catalogEntry
+            .entry.id,
       ),
     ).toEqual(["catalog_queued"]);
     expect(otherScopeBlockers.totalCount).toBe(0);

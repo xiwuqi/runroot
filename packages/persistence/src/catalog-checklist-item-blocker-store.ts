@@ -461,8 +461,7 @@ async function withReadOnlySnapshot<TValue>(
     snapshot: AuditCatalogChecklistItemBlockerSnapshot,
   ) => TValue | Promise<TValue>,
 ): Promise<TValue> {
-  const snapshot =
-    await readAuditCatalogChecklistItemBlockerSnapshot(filePath);
+  const snapshot = await readAuditCatalogChecklistItemBlockerSnapshot(filePath);
 
   return action(snapshot);
 }
