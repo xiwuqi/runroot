@@ -9,6 +9,7 @@ import {
   createRunrootOperatorService,
   type DecideApprovalInput,
   OperatorError,
+  type ProgressAuditCatalogEntryInput,
   type PublishAuditViewCatalogEntryInput,
   resolveWorkspacePath,
   type SaveAuditSavedViewInput,
@@ -155,6 +156,16 @@ export async function runCli(
           return writeJson(io.stdout.write, {
             checklisted: await service.listChecklistedCatalogEntries(),
           });
+        case "clear-progress":
+          if (!detail) {
+            throw new Error(
+              "audit catalog clear-progress requires a catalog entry id.",
+            );
+          }
+
+          return writeJson(io.stdout.write, {
+            progress: await service.clearCatalogChecklistItemProgress(detail),
+          });
         case "clear-assignment":
           if (!detail) {
             throw new Error(
@@ -215,6 +226,16 @@ export async function runCli(
           return writeJson(io.stdout.write, {
             checklist: await service.getCatalogAssignmentChecklist(detail),
           });
+        case "inspect-progress":
+          if (!detail) {
+            throw new Error(
+              "audit catalog inspect-progress requires a catalog entry id.",
+            );
+          }
+
+          return writeJson(io.stdout.write, {
+            progress: await service.getCatalogChecklistItemProgress(detail),
+          });
         case "inspect-review":
           if (!detail) {
             throw new Error(
@@ -228,6 +249,23 @@ export async function runCli(
         case "list":
           return writeJson(io.stdout.write, {
             catalog: await service.listCatalogEntries(),
+          });
+        case "progress":
+          if (!detail) {
+            throw new Error(
+              "audit catalog progress requires a catalog entry id.",
+            );
+          }
+
+          return writeJson(io.stdout.write, {
+            progress: await service.progressCatalogEntry(
+              detail,
+              resolveProgressAuditCatalogEntryInput(flags),
+            ),
+          });
+        case "progressed":
+          return writeJson(io.stdout.write, {
+            progressed: await service.listProgressedCatalogEntries(),
           });
         case "publish":
           return writeJson(io.stdout.write, {
@@ -616,6 +654,24 @@ function resolveChecklistAuditCatalogEntryInput(
   };
 }
 
+function resolveProgressAuditCatalogEntryInput(
+  flags: ReadonlyMap<string, string | boolean>,
+): ProgressAuditCatalogEntryInput {
+  const itemsJson = getStringFlag(flags, "items-json");
+  const completionNote = getStringFlag(flags, "completion-note");
+
+  if (!itemsJson) {
+    throw new Error(
+      "audit catalog progress requires --items-json <json-array>.",
+    );
+  }
+
+  return {
+    ...(completionNote !== undefined ? { completionNote } : {}),
+    items: resolveChecklistItemProgressItems(itemsJson),
+  };
+}
+
 function resolveChecklistItems(itemsJson: string): readonly string[] {
   const parsedItems = JSON.parse(itemsJson) as unknown;
 
@@ -624,6 +680,32 @@ function resolveChecklistItems(itemsJson: string): readonly string[] {
     !parsedItems.every((item) => typeof item === "string")
   ) {
     throw new Error("--items-json must decode to an array of strings.");
+  }
+
+  return parsedItems;
+}
+
+function resolveChecklistItemProgressItems(itemsJson: string): readonly {
+  readonly item: string;
+  readonly state: "completed" | "pending";
+}[] {
+  const parsedItems = JSON.parse(itemsJson) as unknown;
+
+  if (
+    !Array.isArray(parsedItems) ||
+    !parsedItems.every(
+      (item) =>
+        typeof item === "object" &&
+        item !== null &&
+        "item" in item &&
+        typeof item.item === "string" &&
+        "state" in item &&
+        (item.state === "completed" || item.state === "pending"),
+    )
+  ) {
+    throw new Error(
+      "--items-json must decode to an array of { item, state } objects with state pending|completed.",
+    );
   }
 
   return parsedItems;
@@ -736,16 +818,20 @@ Commands:
   audit catalog reviewed
   audit catalog assigned
   audit catalog checklisted
+  audit catalog progressed
   audit catalog publish <saved-view-id> [--name <name>] [--description <text>]
   audit catalog show <catalog-entry-id>
   audit catalog inspect <catalog-entry-id>
   audit catalog inspect-assignment <catalog-entry-id>
   audit catalog inspect-checklist <catalog-entry-id>
+  audit catalog inspect-progress <catalog-entry-id>
   audit catalog inspect-review <catalog-entry-id>
   audit catalog assign <catalog-entry-id> --assignee <operator-id> [--handoff-note <text>]
   audit catalog checklist <catalog-entry-id> --status <pending|completed> [--items-json <json-array>]
+  audit catalog progress <catalog-entry-id> --items-json <json-array> [--completion-note <text>]
   audit catalog clear-assignment <catalog-entry-id>
   audit catalog clear-checklist <catalog-entry-id>
+  audit catalog clear-progress <catalog-entry-id>
   audit catalog review <catalog-entry-id> --state <recommended|reviewed> [--note <text>]
   audit catalog clear-review <catalog-entry-id>
   audit catalog share <catalog-entry-id>

@@ -4,6 +4,9 @@ import type {
   ApiApproval,
   ApiAuditCatalogAssignmentChecklistCollection,
   ApiAuditCatalogAssignmentChecklistView,
+  ApiAuditCatalogChecklistItemProgressCollection,
+  ApiAuditCatalogChecklistItemProgressItem,
+  ApiAuditCatalogChecklistItemProgressView,
   ApiAuditCatalogReviewAssignmentCollection,
   ApiAuditCatalogReviewAssignmentView,
   ApiAuditCatalogReviewSignalCollection,
@@ -283,6 +286,149 @@ export function AssignmentChecklistsView({
   );
 }
 
+export function ChecklistItemProgressView({
+  activeCatalogChecklistItemProgress,
+  progressedEntries,
+}: Readonly<{
+  activeCatalogChecklistItemProgress?: ApiAuditCatalogChecklistItemProgressView;
+  progressedEntries: ApiAuditCatalogChecklistItemProgressCollection;
+}>) {
+  return (
+    <section className="card">
+      <div className="row spread">
+        <div>
+          <div className="card-eyebrow">Phase 21 / Checklist Item Progress</div>
+          <h2>Checklist item progress</h2>
+          <p className="empty-copy">
+            Track thin per-item checklist progress and a single completion note
+            on assigned reviewed presets without turning the console into a
+            broader workflow engine or collaboration product.
+          </p>
+        </div>
+        <div className="timeline-count">
+          {progressedEntries.totalCount} progressed preset(s)
+        </div>
+      </div>
+
+      {activeCatalogChecklistItemProgress ? (
+        <div className="inline-note">
+          Active progress:{" "}
+          <strong>
+            {
+              activeCatalogChecklistItemProgress.checklist.assignment.review
+                .visibility.catalogEntry.entry.name
+            }
+          </strong>
+          {" · "}
+          {formatProgressSummary(
+            activeCatalogChecklistItemProgress.progress.items,
+          )}
+          {activeCatalogChecklistItemProgress.progress.completionNote
+            ? ` · ${activeCatalogChecklistItemProgress.progress.completionNote}`
+            : ""}
+        </div>
+      ) : null}
+
+      {progressedEntries.items.length === 0 ? (
+        <p className="empty-copy">
+          No checklist item progress yet. Save an assignment checklist first,
+          then record thin per-item progress through the shared operator seam.
+        </p>
+      ) : (
+        <ol className="timeline-list">
+          {progressedEntries.items.map((progressView) => (
+            <li
+              className="timeline-entry"
+              key={
+                progressView.checklist.assignment.review.visibility.catalogEntry
+                  .entry.id
+              }
+            >
+              <div className="row spread">
+                <div>
+                  <strong>
+                    {
+                      progressView.checklist.assignment.review.visibility
+                        .catalogEntry.entry.name
+                    }
+                  </strong>
+                  <div className="timeline-meta">
+                    {formatProgressSummary(progressView.progress.items)}
+                    {" · "}
+                    {progressView.checklist.checklist.state}
+                    {" · "}
+                    {progressView.checklist.assignment.assignment.state}
+                  </div>
+                </div>
+                <span>{formatTimestamp(progressView.progress.updatedAt)}</span>
+              </div>
+              <ul className="approval-history">
+                {progressView.progress.items.map((item) => (
+                  <li
+                    key={`${progressView.progress.catalogEntryId}:${item.item}`}
+                  >
+                    <strong>{item.state}</strong>: {item.item}
+                  </li>
+                ))}
+              </ul>
+              {progressView.progress.completionNote ? (
+                <p className="empty-copy">
+                  {progressView.progress.completionNote}
+                </p>
+              ) : null}
+              <div className="timeline-meta">
+                operator {progressView.progress.operatorId} · scope{" "}
+                {progressView.progress.scopeId}
+              </div>
+              <div className="row spread">
+                <a
+                  className="link-button"
+                  href={buildCatalogEntryHref(
+                    progressView.checklist.assignment.review.visibility
+                      .catalogEntry.entry.id,
+                  )}
+                >
+                  Apply progressed preset
+                </a>
+                <form
+                  action="/runs/catalog"
+                  className="action-form"
+                  method="post"
+                >
+                  <input
+                    name="returnTo"
+                    type="hidden"
+                    value={buildCatalogEntryHref(
+                      progressView.checklist.assignment.review.visibility
+                        .catalogEntry.entry.id,
+                    )}
+                  />
+                  <input name="intent" type="hidden" value="clear-progress" />
+                  <input
+                    name="catalogEntryId"
+                    type="hidden"
+                    value={
+                      progressView.checklist.assignment.review.visibility
+                        .catalogEntry.entry.id
+                    }
+                  />
+                  <button type="submit">Clear progress</button>
+                </form>
+              </div>
+              {activeCatalogChecklistItemProgress?.checklist.assignment.review
+                .visibility.catalogEntry.entry.id ===
+              progressView.checklist.assignment.review.visibility.catalogEntry
+                .entry.id ? (
+                <div className="timeline-meta">Currently applied</div>
+              ) : null}
+            </li>
+          ))}
+        </ol>
+      )}
+    </section>
+  );
+}
+
 export function CatalogReviewAssignmentsView({
   activeCatalogReviewAssignment,
   assignedEntries,
@@ -520,12 +666,14 @@ export function AuditViewCatalogsView({
   assignedEntries,
   catalogEntries,
   checklistedEntries,
+  progressedEntries,
   reviewedEntries,
 }: Readonly<{
   activeCatalogEntry?: ApiAuditCatalogVisibilityView;
   assignedEntries: ApiAuditCatalogReviewAssignmentCollection;
   catalogEntries: ApiAuditCatalogVisibilityCollection;
   checklistedEntries: ApiAuditCatalogAssignmentChecklistCollection;
+  progressedEntries: ApiAuditCatalogChecklistItemProgressCollection;
   reviewedEntries: ApiAuditCatalogReviewSignalCollection;
 }>) {
   const assignmentsByCatalogEntryId = new Map(
@@ -543,6 +691,15 @@ export function AuditViewCatalogsView({
       (item) =>
         [
           item.assignment.review.visibility.catalogEntry.entry.id,
+          item,
+        ] as const,
+    ),
+  );
+  const progressByCatalogEntryId = new Map(
+    progressedEntries.items.map(
+      (item) =>
+        [
+          item.checklist.assignment.review.visibility.catalogEntry.entry.id,
           item,
         ] as const,
     ),
@@ -594,6 +751,9 @@ export function AuditViewCatalogsView({
                 const checklist = checklistsByCatalogEntryId.get(
                   catalogEntry.catalogEntry.entry.id,
                 );
+                const progress = progressByCatalogEntryId.get(
+                  catalogEntry.catalogEntry.entry.id,
+                );
                 const reviewSignal = reviewSignalsByCatalogEntryId.get(
                   catalogEntry.catalogEntry.entry.id,
                 );
@@ -614,6 +774,9 @@ export function AuditViewCatalogsView({
                             : ""}
                           {checklist
                             ? ` · checklist ${checklist.checklist.state}`
+                            : ""}
+                          {progress
+                            ? ` · ${formatProgressSummary(progress.progress.items)}`
                             : ""}
                         </div>
                       </div>
@@ -639,6 +802,19 @@ export function AuditViewCatalogsView({
                         checklist: {checklist.checklist.items.join(", ")}
                       </p>
                     ) : null}
+                    {progress?.progress.items.length ? (
+                      <p className="empty-copy">
+                        progress:{" "}
+                        {progress.progress.items
+                          .map((item) => `${item.state}: ${item.item}`)
+                          .join(", ")}
+                      </p>
+                    ) : null}
+                    {progress?.progress.completionNote ? (
+                      <p className="empty-copy">
+                        completion note: {progress.progress.completionNote}
+                      </p>
+                    ) : null}
                     <div className="timeline-meta">
                       saved view {catalogEntry.catalogEntry.savedView.id}
                       {catalogEntry.catalogEntry.savedView.refs.auditViewRunId
@@ -659,6 +835,9 @@ export function AuditViewCatalogsView({
                         : ""}
                       {checklist
                         ? ` · checklist owner ${checklist.checklist.operatorId}`
+                        : ""}
+                      {progress
+                        ? ` · progress owner ${progress.progress.operatorId}`
                         : ""}
                     </div>
                     <div className="timeline-meta">
@@ -824,6 +1003,59 @@ export function AuditViewCatalogsView({
                         </div>
                       </form>
                     ) : null}
+                    {checklist ? (
+                      <form
+                        action="/runs/catalog"
+                        className="decision-form"
+                        method="post"
+                      >
+                        <input
+                          name="returnTo"
+                          type="hidden"
+                          value={buildCatalogEntryHref(
+                            catalogEntry.catalogEntry.entry.id,
+                          )}
+                        />
+                        <input name="intent" type="hidden" value="progress" />
+                        <input
+                          name="catalogEntryId"
+                          type="hidden"
+                          value={catalogEntry.catalogEntry.entry.id}
+                        />
+                        <div className="data-grid">
+                          <label>
+                            <span>Checklist item progress</span>
+                            <textarea
+                              className="note-input"
+                              defaultValue={formatChecklistItemProgressLines(
+                                checklist.checklist.items ?? [],
+                                progress?.progress.items,
+                              )}
+                              name="progressItems"
+                              placeholder="pending: Validate queued follow-up"
+                              rows={4}
+                            />
+                          </label>
+                          <label>
+                            <span>Completion note</span>
+                            <input
+                              defaultValue={
+                                progress?.progress.completionNote ?? ""
+                              }
+                              name="completionNote"
+                              placeholder="Optional thin completion note"
+                              type="text"
+                            />
+                          </label>
+                        </div>
+                        <div className="row spread">
+                          <div />
+                          <button type="submit">
+                            {progress ? "Update progress" : "Save progress"}
+                          </button>
+                        </div>
+                      </form>
+                    ) : null}
                     <div className="row spread">
                       <a
                         className="link-button"
@@ -910,6 +1142,32 @@ export function AuditViewCatalogsView({
                               value={catalogEntry.catalogEntry.entry.id}
                             />
                             <button type="submit">Clear checklist</button>
+                          </form>
+                        ) : null}
+                        {progress ? (
+                          <form
+                            action="/runs/catalog"
+                            className="action-form"
+                            method="post"
+                          >
+                            <input
+                              name="returnTo"
+                              type="hidden"
+                              value={buildCatalogEntryHref(
+                                catalogEntry.catalogEntry.entry.id,
+                              )}
+                            />
+                            <input
+                              name="intent"
+                              type="hidden"
+                              value="clear-progress"
+                            />
+                            <input
+                              name="catalogEntryId"
+                              type="hidden"
+                              value={catalogEntry.catalogEntry.entry.id}
+                            />
+                            <button type="submit">Clear progress</button>
                           </form>
                         ) : null}
                         <form
@@ -2258,6 +2516,31 @@ function countSavedViewDrilldownFilters(
     filters.toolId,
     filters.workerId,
   ].filter(Boolean).length;
+}
+
+function formatProgressSummary(
+  items: readonly ApiAuditCatalogChecklistItemProgressItem[],
+): string {
+  const completedCount = items.filter(
+    (item) => item.state === "completed",
+  ).length;
+
+  return `${completedCount}/${items.length} completed`;
+}
+
+function formatChecklistItemProgressLines(
+  checklistItems: readonly string[],
+  progressItems:
+    | readonly ApiAuditCatalogChecklistItemProgressItem[]
+    | undefined,
+): string {
+  const progressByItem = new Map(
+    (progressItems ?? []).map((item) => [item.item, item.state] as const),
+  );
+
+  return checklistItems
+    .map((item) => `${progressByItem.get(item) ?? "pending"}: ${item}`)
+    .join("\n");
 }
 
 function buildSavedAuditViewHref(savedViewId: string): string {

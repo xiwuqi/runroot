@@ -243,6 +243,12 @@ export function buildServer(options: BuildServerOptions = {}) {
     })),
   );
 
+  app.get("/audit/catalog/progressed", async (_request, reply) =>
+    handleOperatorResponse(reply, async () => ({
+      progressed: await operator.listProgressedCatalogEntries(),
+    })),
+  );
+
   app.post("/audit/saved-views", async (request, reply) =>
     handleOperatorResponse(reply, async () => {
       const body = request.body as {
@@ -388,6 +394,20 @@ export function buildServer(options: BuildServerOptions = {}) {
     }),
   );
 
+  app.get("/audit/catalog/:catalogEntryId/progress", async (request, reply) =>
+    handleOperatorResponse(reply, async () => {
+      const params = request.params as {
+        readonly catalogEntryId: string;
+      };
+
+      return {
+        progress: await operator.getCatalogChecklistItemProgress(
+          params.catalogEntryId,
+        ),
+      };
+    }),
+  );
+
   app.get("/audit/catalog/:catalogEntryId", async (request, reply) =>
     handleOperatorResponse(reply, async () => {
       const params = request.params as {
@@ -502,6 +522,34 @@ export function buildServer(options: BuildServerOptions = {}) {
     }),
   );
 
+  app.post("/audit/catalog/:catalogEntryId/progress", async (request, reply) =>
+    handleOperatorResponse(reply, async () => {
+      const params = request.params as {
+        readonly catalogEntryId: string;
+      };
+      const body = request.body as {
+        readonly completionNote?: string;
+        readonly items?: unknown;
+      };
+      const items = readChecklistItemProgressItems(body?.items, "items");
+
+      if (items.length === 0) {
+        throw new OperatorInputError(
+          "items must include at least one checklist item progress entry.",
+        );
+      }
+
+      return {
+        progress: await operator.progressCatalogEntry(params.catalogEntryId, {
+          ...(body?.completionNote !== undefined
+            ? { completionNote: body.completionNote }
+            : {}),
+          items,
+        }),
+      };
+    }),
+  );
+
   app.post(
     "/audit/catalog/:catalogEntryId/review/clear",
     async (request, reply) =>
@@ -544,6 +592,22 @@ export function buildServer(options: BuildServerOptions = {}) {
 
         return {
           checklist: await operator.clearCatalogAssignmentChecklist(
+            params.catalogEntryId,
+          ),
+        };
+      }),
+  );
+
+  app.post(
+    "/audit/catalog/:catalogEntryId/progress/clear",
+    async (request, reply) =>
+      handleOperatorResponse(reply, async () => {
+        const params = request.params as {
+          readonly catalogEntryId: string;
+        };
+
+        return {
+          progress: await operator.clearCatalogChecklistItemProgress(
             params.catalogEntryId,
           ),
         };
@@ -921,6 +985,33 @@ function readChecklistItems(
     !value.every((item) => typeof item === "string")
   ) {
     throw new OperatorInputError(`${fieldName} must be an array of strings.`);
+  }
+
+  return value;
+}
+
+function readChecklistItemProgressItems(
+  value: unknown,
+  fieldName: string,
+): readonly {
+  readonly item: string;
+  readonly state: "completed" | "pending";
+}[] {
+  if (
+    !Array.isArray(value) ||
+    !value.every(
+      (entry) =>
+        typeof entry === "object" &&
+        entry !== null &&
+        "item" in entry &&
+        typeof entry.item === "string" &&
+        "state" in entry &&
+        (entry.state === "completed" || entry.state === "pending"),
+    )
+  ) {
+    throw new OperatorInputError(
+      `${fieldName} must be an array of { item, state } objects with state pending|completed.`,
+    );
   }
 
   return value;

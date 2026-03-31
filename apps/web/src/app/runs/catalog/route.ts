@@ -222,6 +222,53 @@ export async function POST(request: Request) {
       return Response.redirect(redirectUrl, 303);
     }
 
+    if (intent === "progress") {
+      const catalogEntryId = readTrimmedFormValue(formData, "catalogEntryId");
+      const progressItems = readChecklistItemProgressItems(
+        formData.get("progressItems"),
+      );
+      const completionNoteValue = formData.get("completionNote");
+
+      if (!catalogEntryId) {
+        appendFlashMessage(
+          redirectUrl,
+          "error",
+          "A catalog entry id is required to update checklist item progress metadata.",
+        );
+
+        return Response.redirect(redirectUrl, 303);
+      }
+
+      if (progressItems.length === 0) {
+        appendFlashMessage(
+          redirectUrl,
+          "error",
+          "At least one checklist item progress entry is required.",
+        );
+
+        return Response.redirect(redirectUrl, 303);
+      }
+
+      const progress =
+        await createRunrootApiClient().setAuditCatalogChecklistItemProgress(
+          catalogEntryId,
+          {
+            ...(typeof completionNoteValue === "string"
+              ? { completionNote: completionNoteValue }
+              : {}),
+            items: progressItems,
+          },
+        );
+
+      appendFlashMessage(
+        redirectUrl,
+        "notice",
+        `Checklist item progress for ${progress.checklist.assignment.review.visibility.catalogEntry.entry.name} updated.`,
+      );
+
+      return Response.redirect(redirectUrl, 303);
+    }
+
     if (intent === "clear-review") {
       const catalogEntryId = readTrimmedFormValue(formData, "catalogEntryId");
 
@@ -271,6 +318,33 @@ export async function POST(request: Request) {
         redirectUrl,
         "notice",
         `Checklist for ${checklist.assignment.review.visibility.catalogEntry.entry.name} cleared.`,
+      );
+
+      return Response.redirect(redirectUrl, 303);
+    }
+
+    if (intent === "clear-progress") {
+      const catalogEntryId = readTrimmedFormValue(formData, "catalogEntryId");
+
+      if (!catalogEntryId) {
+        appendFlashMessage(
+          redirectUrl,
+          "error",
+          "A catalog entry id is required to clear checklist item progress metadata.",
+        );
+
+        return Response.redirect(redirectUrl, 303);
+      }
+
+      const progress =
+        await createRunrootApiClient().clearAuditCatalogChecklistItemProgress(
+          catalogEntryId,
+        );
+
+      appendFlashMessage(
+        redirectUrl,
+        "notice",
+        `Checklist item progress for ${progress.checklist.assignment.review.visibility.catalogEntry.entry.name} cleared.`,
       );
 
       return Response.redirect(redirectUrl, 303);
@@ -372,4 +446,50 @@ function readChecklistItems(
     .split(/\r?\n/u)
     .map((item) => item.trim())
     .filter((item) => item.length > 0);
+}
+
+function readChecklistItemProgressItems(
+  value: FormDataEntryValue | null,
+): readonly {
+  readonly item: string;
+  readonly state: "completed" | "pending";
+}[] {
+  if (typeof value !== "string") {
+    return [];
+  }
+
+  return value
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .map((line) => {
+      const separatorIndex = line.indexOf(":");
+
+      if (separatorIndex < 0) {
+        return {
+          item: line,
+          state: "pending" as const,
+        };
+      }
+
+      const rawState = line.slice(0, separatorIndex).trim();
+      const item = line.slice(separatorIndex + 1).trim();
+
+      if (item.length === 0) {
+        throw new Error(
+          "Checklist item progress lines require a non-empty item.",
+        );
+      }
+
+      if (rawState !== "completed" && rawState !== "pending") {
+        throw new Error(
+          `Checklist item progress state must be pending or completed for "${item}".`,
+        );
+      }
+
+      return {
+        item,
+        state: rawState,
+      };
+    });
 }

@@ -19,6 +19,7 @@ import type { JsonValue, WorkflowRun } from "@runroot/domain";
 import type { RunrootLogger, RunrootTracer } from "@runroot/observability";
 import {
   createConfiguredAuditCatalogAssignmentChecklistStore,
+  createConfiguredAuditCatalogChecklistItemProgressStore,
   createConfiguredAuditCatalogReviewAssignmentStore,
   createConfiguredAuditCatalogReviewSignalStore,
   createConfiguredAuditCatalogVisibilityStore,
@@ -34,6 +35,10 @@ import {
   type CrossRunAuditCatalogAssignmentChecklistState,
   type CrossRunAuditCatalogAssignmentChecklistStore,
   type CrossRunAuditCatalogAssignmentChecklistView,
+  type CrossRunAuditCatalogChecklistItemProgressCollection,
+  type CrossRunAuditCatalogChecklistItemProgressItem,
+  type CrossRunAuditCatalogChecklistItemProgressStore,
+  type CrossRunAuditCatalogChecklistItemProgressView,
   type CrossRunAuditCatalogEntryApplication,
   type CrossRunAuditCatalogEntryCollection,
   type CrossRunAuditCatalogEntryView,
@@ -61,6 +66,7 @@ import {
   type CrossRunAuditSavedViewNavigationRefs,
   type CrossRunAuditSavedViewStore,
   createCrossRunAuditCatalogAssignmentChecklistQuery,
+  createCrossRunAuditCatalogChecklistItemProgressQuery,
   createCrossRunAuditCatalogQuery,
   createCrossRunAuditCatalogReviewAssignmentQuery,
   createCrossRunAuditCatalogReviewSignalQuery,
@@ -140,6 +146,11 @@ export interface ChecklistAuditCatalogEntryInput {
   readonly state: CrossRunAuditCatalogAssignmentChecklistState;
 }
 
+export interface ProgressAuditCatalogEntryInput {
+  readonly completionNote?: string;
+  readonly items: readonly CrossRunAuditCatalogChecklistItemProgressItem[];
+}
+
 export interface ReviewAuditCatalogEntryInput {
   readonly note?: string;
   readonly state: CrossRunAuditCatalogReviewState;
@@ -160,6 +171,9 @@ export interface RunrootOperatorService {
   clearCatalogAssignmentChecklist(
     id: string,
   ): Promise<CrossRunAuditCatalogAssignmentChecklistView>;
+  clearCatalogChecklistItemProgress(
+    id: string,
+  ): Promise<CrossRunAuditCatalogChecklistItemProgressView>;
   clearCatalogReviewAssignment(
     id: string,
   ): Promise<CrossRunAuditCatalogReviewAssignmentView>;
@@ -169,6 +183,9 @@ export interface RunrootOperatorService {
   getCatalogAssignmentChecklist(
     id: string,
   ): Promise<CrossRunAuditCatalogAssignmentChecklistView>;
+  getCatalogChecklistItemProgress(
+    id: string,
+  ): Promise<CrossRunAuditCatalogChecklistItemProgressView>;
   getCatalogEntry(id: string): Promise<CrossRunAuditCatalogEntryView>;
   getCatalogReviewAssignment(
     id: string,
@@ -199,6 +216,7 @@ export interface RunrootOperatorService {
   listAssignedCatalogEntries(): Promise<CrossRunAuditCatalogReviewAssignmentCollection>;
   listChecklistedCatalogEntries(): Promise<CrossRunAuditCatalogAssignmentChecklistCollection>;
   listCatalogEntries(): Promise<CrossRunAuditCatalogEntryCollection>;
+  listProgressedCatalogEntries(): Promise<CrossRunAuditCatalogChecklistItemProgressCollection>;
   listReviewedCatalogEntries(): Promise<CrossRunAuditCatalogReviewSignalCollection>;
   listVisibleCatalogEntries(): Promise<CrossRunAuditCatalogVisibilityCollection>;
   listAuditResults(
@@ -210,6 +228,10 @@ export interface RunrootOperatorService {
   publishCatalogEntry(
     input: PublishAuditViewCatalogEntryInput,
   ): Promise<CrossRunAuditCatalogEntryView>;
+  progressCatalogEntry(
+    id: string,
+    input: ProgressAuditCatalogEntryInput,
+  ): Promise<CrossRunAuditCatalogChecklistItemProgressView>;
   reviewCatalogEntry(
     id: string,
     input: ReviewAuditCatalogEntryInput,
@@ -226,6 +248,7 @@ export interface RunrootOperatorService {
 export interface RunrootOperatorServiceOptions {
   readonly approvalIdGenerator?: () => string;
   readonly catalogAssignmentChecklistStore?: CrossRunAuditCatalogAssignmentChecklistStore;
+  readonly catalogChecklistItemProgressStore?: CrossRunAuditCatalogChecklistItemProgressStore;
   readonly catalogEntryIdGenerator?: () => string;
   readonly catalogReviewAssignmentStore?: CrossRunAuditCatalogReviewAssignmentStore;
   readonly catalogReviewSignalStore?: CrossRunAuditCatalogReviewSignalStore;
@@ -375,6 +398,19 @@ export function createRunrootOperatorService(
         ? { workspacePath: options.workspacePath }
         : {}),
     });
+  const catalogChecklistItemProgressStore =
+    options.catalogChecklistItemProgressStore ??
+    createConfiguredAuditCatalogChecklistItemProgressStore({
+      ...(options.databaseUrl ? { databaseUrl: options.databaseUrl } : {}),
+      ...(options.env ? { env: options.env } : {}),
+      ...(options.persistenceDriver
+        ? { driver: options.persistenceDriver }
+        : {}),
+      ...(options.sqlitePath ? { sqlitePath: options.sqlitePath } : {}),
+      ...(options.workspacePath
+        ? { workspacePath: options.workspacePath }
+        : {}),
+    });
   const templateRuntimeOptions: CreateTemplateRuntimeBundleOptions = {
     toolObserver: createToolTelemetryObserver({
       history: toolHistory,
@@ -485,6 +521,11 @@ export function createRunrootOperatorService(
       catalogAssignmentChecklistStore,
       crossRunAuditCatalogReviewAssignments,
     );
+  const crossRunAuditCatalogChecklistItemProgress =
+    createCrossRunAuditCatalogChecklistItemProgressQuery(
+      catalogChecklistItemProgressStore,
+      crossRunAuditCatalogAssignmentChecklists,
+    );
   const persistenceLocation = persistenceConfig.location;
 
   return {
@@ -568,6 +609,20 @@ export function createRunrootOperatorService(
       }
 
       return checklist;
+    },
+
+    async clearCatalogChecklistItemProgress(id) {
+      const progress =
+        await crossRunAuditCatalogChecklistItemProgress.clearCatalogChecklistItemProgress(
+          id,
+          operatorIdentity,
+        );
+
+      if (!progress) {
+        throw new OperatorNotFoundError("catalog checklist item progress", id);
+      }
+
+      return progress;
     },
 
     async clearCatalogReviewAssignment(id) {
@@ -664,6 +719,20 @@ export function createRunrootOperatorService(
       }
 
       return checklist;
+    },
+
+    async getCatalogChecklistItemProgress(id) {
+      const progress =
+        await crossRunAuditCatalogChecklistItemProgress.getCatalogChecklistItemProgress(
+          id,
+          operatorIdentity,
+        );
+
+      if (!progress) {
+        throw new OperatorNotFoundError("catalog checklist item progress", id);
+      }
+
+      return progress;
     },
 
     async getCatalogReviewAssignment(id) {
@@ -784,6 +853,12 @@ export function createRunrootOperatorService(
       };
     },
 
+    async listProgressedCatalogEntries() {
+      return crossRunAuditCatalogChecklistItemProgress.listProgressedCatalogEntries(
+        operatorIdentity,
+      );
+    },
+
     async listReviewedCatalogEntries() {
       return crossRunAuditCatalogReviewSignals.listReviewedCatalogEntries(
         operatorIdentity,
@@ -847,6 +922,19 @@ export function createRunrootOperatorService(
         }
 
         throw normalizeOperatorError(error);
+      }
+    },
+
+    async progressCatalogEntry(id, input) {
+      try {
+        return await crossRunAuditCatalogChecklistItemProgress.setCatalogChecklistItemProgress(
+          id,
+          operatorIdentity,
+          input,
+          now(),
+        );
+      } catch (error) {
+        throw normalizeCatalogChecklistItemProgressError(error, id);
       }
     },
 
@@ -1143,6 +1231,44 @@ function normalizeCatalogAssignmentChecklistError(
   ) {
     return new OperatorNotFoundError(
       "catalog assignment checklist",
+      catalogEntryId,
+    );
+  }
+
+  return normalizeOperatorError(error);
+}
+
+function normalizeCatalogChecklistItemProgressError(
+  error: unknown,
+  catalogEntryId: string,
+): Error {
+  if (
+    error instanceof OperatorConflictError ||
+    error instanceof OperatorInputError ||
+    error instanceof OperatorNotFoundError
+  ) {
+    return error;
+  }
+
+  if (
+    error instanceof Error &&
+    (error.message.startsWith("Catalog checklist item progress requires") ||
+      error.message.startsWith(`Catalog checklist item progress item "`) ||
+      error.message.startsWith(
+        `Catalog entry "${catalogEntryId}" does not define assignment checklist items`,
+      ))
+  ) {
+    return new OperatorInputError(error.message);
+  }
+
+  if (
+    error instanceof Error &&
+    error.message.startsWith(
+      `Catalog entry "${catalogEntryId}" is not checklisted and visible to operator`,
+    )
+  ) {
+    return new OperatorNotFoundError(
+      "catalog checklist item progress",
       catalogEntryId,
     );
   }

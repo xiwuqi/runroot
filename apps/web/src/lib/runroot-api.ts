@@ -416,6 +416,34 @@ export interface ApiAuditCatalogAssignmentChecklistCollection {
   readonly totalCount: number;
 }
 
+export type ApiAuditCatalogChecklistItemProgressState = "completed" | "pending";
+
+export interface ApiAuditCatalogChecklistItemProgressItem {
+  readonly item: string;
+  readonly state: ApiAuditCatalogChecklistItemProgressState;
+}
+
+export interface ApiAuditCatalogChecklistItemProgress {
+  readonly catalogEntryId: string;
+  readonly completionNote?: string;
+  readonly createdAt: string;
+  readonly items: readonly ApiAuditCatalogChecklistItemProgressItem[];
+  readonly kind: "catalog-checklist-item-progress";
+  readonly operatorId: string;
+  readonly scopeId: string;
+  readonly updatedAt: string;
+}
+
+export interface ApiAuditCatalogChecklistItemProgressView {
+  readonly checklist: ApiAuditCatalogAssignmentChecklistView;
+  readonly progress: ApiAuditCatalogChecklistItemProgress;
+}
+
+export interface ApiAuditCatalogChecklistItemProgressCollection {
+  readonly items: readonly ApiAuditCatalogChecklistItemProgressView[];
+  readonly totalCount: number;
+}
+
 export interface CreateApiAuditCatalogEntryInput {
   readonly description?: string;
   readonly name?: string;
@@ -425,6 +453,11 @@ export interface CreateApiAuditCatalogEntryInput {
 export interface UpdateApiAuditCatalogAssignmentChecklistInput {
   readonly items?: readonly string[];
   readonly state: ApiAuditCatalogAssignmentChecklistState;
+}
+
+export interface UpdateApiAuditCatalogChecklistItemProgressInput {
+  readonly completionNote?: string;
+  readonly items: readonly ApiAuditCatalogChecklistItemProgressItem[];
 }
 
 export interface UpdateApiAuditCatalogReviewAssignmentInput {
@@ -466,6 +499,9 @@ export interface RunrootApiClient {
   clearAuditCatalogAssignmentChecklist(
     catalogEntryId: string,
   ): Promise<ApiAuditCatalogAssignmentChecklistView>;
+  clearAuditCatalogChecklistItemProgress(
+    catalogEntryId: string,
+  ): Promise<ApiAuditCatalogChecklistItemProgressView>;
   archiveAuditCatalogEntry(
     catalogEntryId: string,
   ): Promise<ApiAuditCatalogEntryView>;
@@ -478,6 +514,9 @@ export interface RunrootApiClient {
   getAuditCatalogAssignmentChecklist(
     catalogEntryId: string,
   ): Promise<ApiAuditCatalogAssignmentChecklistView>;
+  getAuditCatalogChecklistItemProgress(
+    catalogEntryId: string,
+  ): Promise<ApiAuditCatalogChecklistItemProgressView>;
   getAuditCatalogReviewAssignment(
     catalogEntryId: string,
   ): Promise<ApiAuditCatalogReviewAssignmentView>;
@@ -505,6 +544,7 @@ export interface RunrootApiClient {
   listAssignedAuditCatalogEntries(): Promise<ApiAuditCatalogReviewAssignmentCollection>;
   listChecklistedAuditCatalogEntries(): Promise<ApiAuditCatalogAssignmentChecklistCollection>;
   listAuditCatalogEntries(): Promise<ApiAuditCatalogEntryCollection>;
+  listProgressedAuditCatalogEntries(): Promise<ApiAuditCatalogChecklistItemProgressCollection>;
   listReviewedAuditCatalogEntries(): Promise<ApiAuditCatalogReviewSignalCollection>;
   listVisibleAuditCatalogEntries(): Promise<ApiAuditCatalogVisibilityCollection>;
   listAuditDrilldowns(
@@ -517,6 +557,10 @@ export interface RunrootApiClient {
   publishAuditCatalogEntry(
     input: CreateApiAuditCatalogEntryInput,
   ): Promise<ApiAuditCatalogEntryView>;
+  setAuditCatalogChecklistItemProgress(
+    catalogEntryId: string,
+    input: UpdateApiAuditCatalogChecklistItemProgressInput,
+  ): Promise<ApiAuditCatalogChecklistItemProgressView>;
   setAuditCatalogAssignmentChecklist(
     catalogEntryId: string,
     input: UpdateApiAuditCatalogAssignmentChecklistInput,
@@ -701,6 +745,18 @@ export function createRunrootApiClient(
       return payload.checklist;
     },
 
+    async clearAuditCatalogChecklistItemProgress(catalogEntryId) {
+      const payload = await requestJson<{
+        progress: ApiAuditCatalogChecklistItemProgressView;
+      }>(
+        `/audit/catalog/${catalogEntryId}/progress/clear`,
+        { method: "POST" },
+        "web.api.clearAuditCatalogChecklistItemProgress",
+      );
+
+      return payload.progress;
+    },
+
     async archiveAuditCatalogEntry(catalogEntryId) {
       const payload = await requestJson<{
         catalogEntry: ApiAuditCatalogEntryView;
@@ -747,6 +803,18 @@ export function createRunrootApiClient(
       );
 
       return payload.checklist;
+    },
+
+    async getAuditCatalogChecklistItemProgress(catalogEntryId) {
+      const payload = await requestJson<{
+        progress: ApiAuditCatalogChecklistItemProgressView;
+      }>(
+        `/audit/catalog/${catalogEntryId}/progress`,
+        { method: "GET" },
+        "web.api.getAuditCatalogChecklistItemProgress",
+      );
+
+      return payload.progress;
     },
 
     async getAuditCatalogReviewAssignment(catalogEntryId) {
@@ -925,6 +993,18 @@ export function createRunrootApiClient(
       return payload.checklisted;
     },
 
+    async listProgressedAuditCatalogEntries() {
+      const payload = await requestJson<{
+        progressed: ApiAuditCatalogChecklistItemProgressCollection;
+      }>(
+        "/audit/catalog/progressed",
+        { method: "GET" },
+        "web.api.listProgressedAuditCatalogEntries",
+      );
+
+      return payload.progressed;
+    },
+
     async listReviewedAuditCatalogEntries() {
       const payload = await requestJson<{
         reviewed: ApiAuditCatalogReviewSignalCollection;
@@ -989,6 +1069,24 @@ export function createRunrootApiClient(
       );
 
       return payload.catalogEntry;
+    },
+
+    async setAuditCatalogChecklistItemProgress(catalogEntryId, input) {
+      const payload = await requestJson<{
+        progress: ApiAuditCatalogChecklistItemProgressView;
+      }>(
+        `/audit/catalog/${catalogEntryId}/progress`,
+        {
+          body: JSON.stringify(input),
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "POST",
+        },
+        "web.api.setAuditCatalogChecklistItemProgress",
+      );
+
+      return payload.progress;
     },
 
     async setAuditCatalogAssignmentChecklist(catalogEntryId, input) {
