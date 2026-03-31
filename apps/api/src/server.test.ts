@@ -25,7 +25,7 @@ describe("@runroot/api", () => {
     expect(response.json()).toEqual({
       status: "ok",
       project: "Runroot",
-      phase: 20,
+      phase: 21,
     });
   });
 
@@ -1090,6 +1090,262 @@ describe("@runroot/api", () => {
     expect(checklistedAfterClearPayload.checklisted.totalCount).toBe(0);
   });
 
+  it("progresses, lists-progressed, inspects, clears, and reapplies checklisted catalog entries through the operator API", async () => {
+    const workspaceRoot = await mkdtemp(
+      join(tmpdir(), "runroot-api-progress-"),
+    );
+    app = buildServer({
+      operator: createRunrootOperatorService({
+        catalogEntryIdGenerator: () => "catalog_entry_progress_api",
+        operatorId: "ops_oncall",
+        operatorScopeId: "ops",
+        savedViewIdGenerator: () => "saved_view_progress_api",
+        workspacePath: join(workspaceRoot, "workspace.json"),
+      }),
+    });
+
+    const createResponse = await app.inject({
+      method: "POST",
+      payload: {
+        input: {
+          approvalRequired: false,
+          commandAlias: "print-ready",
+          runbookId: "node-health-check",
+        },
+        templateId: "shell-runbook-flow",
+      },
+      url: "/runs",
+    });
+    const createdPayload = createResponse.json() as {
+      run: {
+        id: string;
+      };
+    };
+    const saveResponse = await app.inject({
+      method: "POST",
+      payload: {
+        name: "Saved progress detail",
+        navigation: {
+          drilldown: {
+            runId: createdPayload.run.id,
+          },
+          summary: {
+            definitionId: "shell-runbook-flow",
+          },
+        },
+        refs: {
+          auditViewRunId: createdPayload.run.id,
+        },
+      },
+      url: "/audit/saved-views",
+    });
+    const savedViewPayload = saveResponse.json() as {
+      savedView: {
+        id: string;
+      };
+    };
+    const publishResponse = await app.inject({
+      method: "POST",
+      payload: {
+        savedViewId: savedViewPayload.savedView.id,
+      },
+      url: "/audit/catalog",
+    });
+    const publishedPayload = publishResponse.json() as {
+      catalogEntry: {
+        entry: {
+          id: string;
+        };
+      };
+    };
+    const reviewResponse = await app.inject({
+      method: "POST",
+      payload: {
+        note: "Progress-ready inline follow-up",
+        state: "reviewed",
+      },
+      url: `/audit/catalog/${publishedPayload.catalogEntry.entry.id}/review`,
+    });
+    const assignmentResponse = await app.inject({
+      method: "POST",
+      payload: {
+        assigneeId: "ops_oncall",
+        handoffNote: "Inline progress remains with the owner",
+      },
+      url: `/audit/catalog/${publishedPayload.catalogEntry.entry.id}/assignment`,
+    });
+    const checklistResponse = await app.inject({
+      method: "POST",
+      payload: {
+        items: ["Confirm inline handoff", "Close follow-up"],
+        state: "pending",
+      },
+      url: `/audit/catalog/${publishedPayload.catalogEntry.entry.id}/checklist`,
+    });
+    const progressResponse = await app.inject({
+      method: "POST",
+      payload: {
+        completionNote: "Inline follow-up is nearly done",
+        items: [
+          {
+            item: "Confirm inline handoff",
+            state: "completed",
+          },
+          {
+            item: "Close follow-up",
+            state: "pending",
+          },
+        ],
+      },
+      url: `/audit/catalog/${publishedPayload.catalogEntry.entry.id}/progress`,
+    });
+    const progressedResponse = await app.inject({
+      method: "GET",
+      url: "/audit/catalog/progressed",
+    });
+    const inspectResponse = await app.inject({
+      method: "GET",
+      url: `/audit/catalog/${publishedPayload.catalogEntry.entry.id}/progress`,
+    });
+    const applyResponse = await app.inject({
+      method: "GET",
+      url: `/audit/catalog/${publishedPayload.catalogEntry.entry.id}/apply`,
+    });
+    const clearResponse = await app.inject({
+      method: "POST",
+      url: `/audit/catalog/${publishedPayload.catalogEntry.entry.id}/progress/clear`,
+    });
+    const progressedAfterClearResponse = await app.inject({
+      method: "GET",
+      url: "/audit/catalog/progressed",
+    });
+    const progressPayload = progressResponse.json() as {
+      progress: {
+        checklist: {
+          assignment: {
+            assignment: {
+              assigneeId: string;
+            };
+          };
+        };
+        progress: {
+          completionNote?: string;
+          items: Array<{
+            item: string;
+            state: "completed" | "pending";
+          }>;
+        };
+      };
+    };
+    const progressedPayload = progressedResponse.json() as {
+      progressed: {
+        items: Array<{
+          checklist: {
+            assignment: {
+              review: {
+                visibility: {
+                  catalogEntry: {
+                    entry: {
+                      id: string;
+                    };
+                  };
+                };
+              };
+            };
+          };
+          progress: {
+            completionNote?: string;
+          };
+        }>;
+        totalCount: number;
+      };
+    };
+    const inspectPayload = inspectResponse.json() as {
+      progress: {
+        progress: {
+          completionNote?: string;
+          items: Array<{
+            item: string;
+            state: "completed" | "pending";
+          }>;
+        };
+      };
+    };
+    const applyPayload = applyResponse.json() as {
+      application: {
+        application: {
+          savedView: {
+            id: string;
+          };
+        };
+      };
+    };
+    const clearPayload = clearResponse.json() as {
+      progress: {
+        progress: {
+          completionNote?: string;
+        };
+      };
+    };
+    const progressedAfterClearPayload = progressedAfterClearResponse.json() as {
+      progressed: {
+        totalCount: number;
+      };
+    };
+
+    expect(createResponse.statusCode).toBe(201);
+    expect(reviewResponse.statusCode).toBe(200);
+    expect(assignmentResponse.statusCode).toBe(200);
+    expect(checklistResponse.statusCode).toBe(200);
+    expect(progressResponse.statusCode).toBe(200);
+    expect(
+      progressPayload.progress.checklist.assignment.assignment.assigneeId,
+    ).toBe("ops_oncall");
+    expect(progressPayload.progress.progress.completionNote).toBe(
+      "Inline follow-up is nearly done",
+    );
+    expect(progressPayload.progress.progress.items).toEqual([
+      {
+        item: "Confirm inline handoff",
+        state: "completed",
+      },
+      {
+        item: "Close follow-up",
+        state: "pending",
+      },
+    ]);
+    expect(progressedResponse.statusCode).toBe(200);
+    expect(progressedPayload.progressed.totalCount).toBe(1);
+    expect(
+      progressedPayload.progressed.items[0]?.checklist.assignment.review
+        .visibility.catalogEntry.entry.id,
+    ).toBe("catalog_entry_progress_api");
+    expect(inspectResponse.statusCode).toBe(200);
+    expect(inspectPayload.progress.progress.completionNote).toBe(
+      "Inline follow-up is nearly done",
+    );
+    expect(inspectPayload.progress.progress.items).toEqual([
+      {
+        item: "Confirm inline handoff",
+        state: "completed",
+      },
+      {
+        item: "Close follow-up",
+        state: "pending",
+      },
+    ]);
+    expect(applyResponse.statusCode).toBe(200);
+    expect(applyPayload.application.application.savedView.id).toBe(
+      savedViewPayload.savedView.id,
+    );
+    expect(clearResponse.statusCode).toBe(200);
+    expect(clearPayload.progress.progress.completionNote).toBe(
+      "Inline follow-up is nearly done",
+    );
+    expect(progressedAfterClearResponse.statusCode).toBe(200);
+    expect(progressedAfterClearPayload.progressed.totalCount).toBe(0);
+  });
+
   it("rejects invalid catalog review state through the operator API", async () => {
     const workspaceRoot = await mkdtemp(
       join(tmpdir(), "runroot-api-review-invalid-"),
@@ -1135,6 +1391,35 @@ describe("@runroot/api", () => {
     expect(checklistResponse.statusCode).toBe(400);
     expect(checklistResponse.body).toContain(
       "state must be one of pending|completed.",
+    );
+  });
+
+  it("rejects invalid catalog checklist item progress through the operator API", async () => {
+    const workspaceRoot = await mkdtemp(
+      join(tmpdir(), "runroot-api-progress-invalid-"),
+    );
+    app = buildServer({
+      operator: createRunrootOperatorService({
+        workspacePath: join(workspaceRoot, "workspace.json"),
+      }),
+    });
+
+    const progressResponse = await app.inject({
+      method: "POST",
+      payload: {
+        items: [
+          {
+            item: "Validate queued follow-up",
+            state: "invalid",
+          },
+        ],
+      },
+      url: "/audit/catalog/catalog_entry_invalid/progress",
+    });
+
+    expect(progressResponse.statusCode).toBe(400);
+    expect(progressResponse.body).toContain(
+      "items must be an array of { item, state } objects with state pending|completed.",
     );
   });
 });

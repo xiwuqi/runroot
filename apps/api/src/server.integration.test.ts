@@ -1902,4 +1902,328 @@ describe("@runroot/api integration", () => {
       await peerApp.close();
     }
   });
+
+  it("serves progress, list-progressed, inspect-progress, clear-progress, and apply paths through the network API", async () => {
+    const workspaceRoot = await mkdtemp(
+      join(tmpdir(), "runroot-api-checklist-progress-"),
+    );
+    const sqlitePath = join(workspaceRoot, "runroot.sqlite");
+    const inlineOperator = createRunrootOperatorService({
+      executionMode: "inline",
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+    const queuedOperator = createRunrootOperatorService({
+      executionMode: "queued",
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+    const workerService = (
+      await import("@runroot/sdk")
+    ).createRunrootWorkerService({
+      persistenceDriver: "sqlite",
+      sqlitePath,
+      workerId: "worker_progress_api",
+    });
+    const ownerApp = buildServer({
+      operator: createRunrootOperatorService({
+        catalogEntryIdGenerator: () => "catalog_entry_progress_api",
+        operatorId: "ops_oncall",
+        operatorScopeId: "ops",
+        persistenceDriver: "sqlite",
+        savedViewIdGenerator: () => "saved_view_progress_api",
+        sqlitePath,
+      }),
+    });
+    const peerApp = buildServer({
+      operator: createRunrootOperatorService({
+        operatorId: "ops_backup",
+        operatorScopeId: "ops",
+        persistenceDriver: "sqlite",
+        sqlitePath,
+      }),
+    });
+
+    try {
+      const inlineRun = await inlineOperator.startRun({
+        input: {
+          approvalRequired: false,
+          commandAlias: "print-ready",
+          runbookId: "node-health-check",
+        },
+        templateId: "shell-runbook-flow",
+      });
+      const queuedRun = await queuedOperator.startRun({
+        input: {
+          approvalRequired: false,
+          commandAlias: "print-ready",
+          runbookId: "node-health-check",
+        },
+        templateId: "shell-runbook-flow",
+      });
+
+      await workerService.processNextJob();
+
+      const ownerAddress = await ownerApp.listen({
+        host: "127.0.0.1",
+        port: 0,
+      });
+      const peerAddress = await peerApp.listen({
+        host: "127.0.0.1",
+        port: 0,
+      });
+
+      const saveResponse = await fetch(`${ownerAddress}/audit/saved-views`, {
+        body: JSON.stringify({
+          description: "Queued worker progress preset",
+          name: "Queued worker progress preset",
+          navigation: {
+            drilldown: {
+              workerId: "worker_progress_api",
+            },
+            summary: {
+              executionMode: "queued",
+            },
+          },
+          refs: {
+            auditViewRunId: queuedRun.id,
+            drilldownRunId: queuedRun.id,
+          },
+        }),
+        headers: {
+          "content-type": "application/json",
+        },
+        method: "POST",
+      });
+      const savedViewPayload = (await saveResponse.json()) as {
+        savedView: {
+          id: string;
+        };
+      };
+      const publishResponse = await fetch(`${ownerAddress}/audit/catalog`, {
+        body: JSON.stringify({
+          savedViewId: savedViewPayload.savedView.id,
+        }),
+        headers: {
+          "content-type": "application/json",
+        },
+        method: "POST",
+      });
+      const publishedPayload = (await publishResponse.json()) as {
+        catalogEntry: {
+          entry: {
+            id: string;
+          };
+        };
+      };
+      const shareResponse = await fetch(
+        `${ownerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/share`,
+        {
+          method: "POST",
+        },
+      );
+      const reviewResponse = await fetch(
+        `${ownerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/review`,
+        {
+          body: JSON.stringify({
+            note: `Progress ready after inline ${inlineRun.id} and queued ${queuedRun.id}`,
+            state: "recommended",
+          }),
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "POST",
+        },
+      );
+      const assignmentResponse = await fetch(
+        `${ownerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/assignment`,
+        {
+          body: JSON.stringify({
+            assigneeId: "ops_backup",
+            handoffNote: `Queued worker ${queuedRun.id} handed to backup`,
+          }),
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "POST",
+        },
+      );
+      const checklistResponse = await fetch(
+        `${ownerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/checklist`,
+        {
+          body: JSON.stringify({
+            items: ["Validate queued follow-up", "Close backup handoff"],
+            state: "pending",
+          }),
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "POST",
+        },
+      );
+      const progressResponse = await fetch(
+        `${ownerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/progress`,
+        {
+          body: JSON.stringify({
+            completionNote: "Queued follow-up is almost complete",
+            items: [
+              {
+                item: "Validate queued follow-up",
+                state: "completed",
+              },
+              {
+                item: "Close backup handoff",
+                state: "pending",
+              },
+            ],
+          }),
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "POST",
+        },
+      );
+      const progressedResponse = await fetch(
+        `${peerAddress}/audit/catalog/progressed`,
+      );
+      const inspectResponse = await fetch(
+        `${peerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/progress`,
+      );
+      const applyResponse = await fetch(
+        `${peerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/apply`,
+      );
+      const clearResponse = await fetch(
+        `${ownerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/progress/clear`,
+        {
+          method: "POST",
+        },
+      );
+      const progressedAfterClearResponse = await fetch(
+        `${peerAddress}/audit/catalog/progressed`,
+      );
+      const progressPayload = (await progressResponse.json()) as {
+        progress: {
+          progress: {
+            completionNote?: string;
+            items: Array<{
+              item: string;
+              state: "completed" | "pending";
+            }>;
+          };
+        };
+      };
+      const progressedPayload = (await progressedResponse.json()) as {
+        progressed: {
+          items: Array<{
+            checklist: {
+              assignment: {
+                review: {
+                  visibility: {
+                    catalogEntry: {
+                      entry: {
+                        id: string;
+                      };
+                    };
+                  };
+                };
+              };
+            };
+            progress: {
+              completionNote?: string;
+            };
+          }>;
+          totalCount: number;
+        };
+      };
+      const inspectPayload = (await inspectResponse.json()) as {
+        progress: {
+          progress: {
+            completionNote?: string;
+            items: Array<{
+              item: string;
+              state: "completed" | "pending";
+            }>;
+          };
+        };
+      };
+      const applyPayload = (await applyResponse.json()) as {
+        application: {
+          application: {
+            navigation: {
+              drilldowns: Array<{
+                result: {
+                  runId: string;
+                };
+              }>;
+              totalSummaryCount: number;
+            };
+            savedView: {
+              id: string;
+            };
+          };
+        };
+      };
+      const clearPayload = (await clearResponse.json()) as {
+        progress: {
+          progress: {
+            completionNote?: string;
+          };
+        };
+      };
+      const progressedAfterClearPayload =
+        (await progressedAfterClearResponse.json()) as {
+          progressed: {
+            totalCount: number;
+          };
+        };
+
+      expect(saveResponse.status).toBe(201);
+      expect(publishResponse.status).toBe(201);
+      expect(shareResponse.status).toBe(200);
+      expect(reviewResponse.status).toBe(200);
+      expect(assignmentResponse.status).toBe(200);
+      expect(checklistResponse.status).toBe(200);
+      expect(progressResponse.status).toBe(200);
+      expect(progressPayload.progress.progress.completionNote).toBe(
+        "Queued follow-up is almost complete",
+      );
+      expect(progressPayload.progress.progress.items).toEqual([
+        {
+          item: "Validate queued follow-up",
+          state: "completed",
+        },
+        {
+          item: "Close backup handoff",
+          state: "pending",
+        },
+      ]);
+      expect(progressedResponse.status).toBe(200);
+      expect(progressedPayload.progressed.totalCount).toBe(1);
+      expect(
+        progressedPayload.progressed.items[0]?.checklist.assignment.review
+          .visibility.catalogEntry.entry.id,
+      ).toBe("catalog_entry_progress_api");
+      expect(inspectResponse.status).toBe(200);
+      expect(inspectPayload.progress.progress.completionNote).toContain(
+        "almost complete",
+      );
+      expect(applyResponse.status).toBe(200);
+      expect(applyPayload.application.application.savedView.id).toBe(
+        "saved_view_progress_api",
+      );
+      expect(
+        applyPayload.application.application.navigation.drilldowns[0]?.result
+          .runId,
+      ).toBe(queuedRun.id);
+      expect(clearResponse.status).toBe(200);
+      expect(clearPayload.progress.progress.completionNote).toBe(
+        "Queued follow-up is almost complete",
+      );
+      expect(progressedAfterClearResponse.status).toBe(200);
+      expect(progressedAfterClearPayload.progressed.totalCount).toBe(0);
+    } finally {
+      await ownerApp.close();
+      await peerApp.close();
+    }
+  });
 });

@@ -2371,4 +2371,444 @@ describe("@runroot/cli integration", () => {
     expect(clearChecklistPayload.checklist.checklist.state).toBe("pending");
     expect(checklistedAfterClearPayload.checklisted.totalCount).toBe(0);
   });
+
+  it("progresses, lists-progressed, inspects, clears, and reapplies checklisted catalog entries through the CLI", async () => {
+    const workspaceRoot = await mkdtemp(
+      join(tmpdir(), "runroot-cli-checklist-progress-"),
+    );
+    const sqlitePath = join(workspaceRoot, "runroot.sqlite");
+    const inputFile = join(workspaceRoot, "shell-runbook.json");
+    await writeFile(
+      inputFile,
+      JSON.stringify({
+        approvalRequired: false,
+        commandAlias: "print-ready",
+        runbookId: "node-health-check",
+      }),
+    );
+    const inlineStartIo = createIo();
+    const queuedStartIo = createIo();
+    const saveIo = createIo();
+    const publishIo = createIo();
+    const shareIo = createIo();
+    const reviewIo = createIo();
+    const assignIo = createIo();
+    const checklistIo = createIo();
+    const progressIo = createIo();
+    const progressedPeerIo = createIo();
+    const inspectProgressIo = createIo();
+    const applyIo = createIo();
+    const clearProgressIo = createIo();
+    const progressedAfterClearIo = createIo();
+
+    await runCli(
+      ["runs", "start", "shell-runbook-flow", "--input-file", inputFile],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_oncall",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: inlineStartIo.io,
+      },
+    );
+    const inlineRun = JSON.parse(inlineStartIo.stdout.join("")) as {
+      run: {
+        id: string;
+      };
+    };
+
+    await runCli(
+      ["runs", "start", "shell-runbook-flow", "--input-file", inputFile],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_EXECUTION_MODE: "queued",
+          RUNROOT_OPERATOR_ID: "ops_oncall",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: queuedStartIo.io,
+      },
+    );
+    const queuedRun = JSON.parse(queuedStartIo.stdout.join("")) as {
+      run: {
+        id: string;
+      };
+    };
+
+    const worker = createRunrootWorkerService({
+      persistenceDriver: "sqlite",
+      sqlitePath,
+      workerId: "worker_cli_progress",
+    });
+    await worker.processNextJob();
+
+    await runCli(
+      [
+        "audit",
+        "saved-views",
+        "save",
+        "--name",
+        "Queued progress preset",
+        "--description",
+        "Saved queued worker progress preset",
+        "--execution-mode",
+        "queued",
+        "--worker-id",
+        "worker_cli_progress",
+        "--audit-view-run-id",
+        queuedRun.run.id,
+        "--drilldown-run-id",
+        queuedRun.run.id,
+      ],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_oncall",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: saveIo.io,
+      },
+    );
+    const savedViewPayload = JSON.parse(saveIo.stdout.join("")) as {
+      savedView: {
+        id: string;
+      };
+    };
+
+    const publishExitCode = await runCli(
+      ["audit", "catalog", "publish", savedViewPayload.savedView.id],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_oncall",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: publishIo.io,
+      },
+    );
+    const publishedPayload = JSON.parse(publishIo.stdout.join("")) as {
+      catalogEntry: {
+        entry: {
+          id: string;
+        };
+      };
+    };
+    const shareExitCode = await runCli(
+      ["audit", "catalog", "share", publishedPayload.catalogEntry.entry.id],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_oncall",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: shareIo.io,
+      },
+    );
+    const reviewExitCode = await runCli(
+      [
+        "audit",
+        "catalog",
+        "review",
+        publishedPayload.catalogEntry.entry.id,
+        "--state",
+        "recommended",
+        "--note",
+        `Progress ready after inline ${inlineRun.run.id}`,
+      ],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_oncall",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: reviewIo.io,
+      },
+    );
+    const assignExitCode = await runCli(
+      [
+        "audit",
+        "catalog",
+        "assign",
+        publishedPayload.catalogEntry.entry.id,
+        "--assignee",
+        "ops_backup",
+        "--handoff-note",
+        `Queued worker ${queuedRun.run.id} handed to backup`,
+      ],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_oncall",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: assignIo.io,
+      },
+    );
+    const checklistExitCode = await runCli(
+      [
+        "audit",
+        "catalog",
+        "checklist",
+        publishedPayload.catalogEntry.entry.id,
+        "--status",
+        "pending",
+        "--items-json",
+        JSON.stringify(["Validate queued follow-up", "Close backup handoff"]),
+      ],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_oncall",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: checklistIo.io,
+      },
+    );
+    const progressExitCode = await runCli(
+      [
+        "audit",
+        "catalog",
+        "progress",
+        publishedPayload.catalogEntry.entry.id,
+        "--items-json",
+        JSON.stringify([
+          {
+            item: "Validate queued follow-up",
+            state: "completed",
+          },
+          {
+            item: "Close backup handoff",
+            state: "pending",
+          },
+        ]),
+        "--completion-note",
+        "Queued follow-up is almost complete",
+      ],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_oncall",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: progressIo.io,
+      },
+    );
+    const progressedPeerExitCode = await runCli(
+      ["audit", "catalog", "progressed"],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_backup",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: progressedPeerIo.io,
+      },
+    );
+    const inspectProgressExitCode = await runCli(
+      [
+        "audit",
+        "catalog",
+        "inspect-progress",
+        publishedPayload.catalogEntry.entry.id,
+      ],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_oncall",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: inspectProgressIo.io,
+      },
+    );
+    const applyExitCode = await runCli(
+      ["audit", "catalog", "apply", publishedPayload.catalogEntry.entry.id],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_backup",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: applyIo.io,
+      },
+    );
+    const clearProgressExitCode = await runCli(
+      [
+        "audit",
+        "catalog",
+        "clear-progress",
+        publishedPayload.catalogEntry.entry.id,
+      ],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_oncall",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: clearProgressIo.io,
+      },
+    );
+    const progressedAfterClearExitCode = await runCli(
+      ["audit", "catalog", "progressed"],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_backup",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: progressedAfterClearIo.io,
+      },
+    );
+    const progressPayload = JSON.parse(progressIo.stdout.join("")) as {
+      progress: {
+        progress: {
+          completionNote?: string;
+          items: Array<{
+            item: string;
+            state: "completed" | "pending";
+          }>;
+        };
+      };
+    };
+    const progressedPeerPayload = JSON.parse(
+      progressedPeerIo.stdout.join(""),
+    ) as {
+      progressed: {
+        items: Array<{
+          checklist: {
+            assignment: {
+              review: {
+                visibility: {
+                  catalogEntry: {
+                    entry: {
+                      id: string;
+                    };
+                  };
+                };
+              };
+            };
+          };
+        }>;
+        totalCount: number;
+      };
+    };
+    const inspectProgressPayload = JSON.parse(
+      inspectProgressIo.stdout.join(""),
+    ) as {
+      progress: {
+        progress: {
+          completionNote?: string;
+          items: Array<{
+            item: string;
+            state: "completed" | "pending";
+          }>;
+        };
+      };
+    };
+    const applyPayload = JSON.parse(applyIo.stdout.join("")) as {
+      application: {
+        application: {
+          navigation: {
+            drilldowns: Array<{
+              result: {
+                runId: string;
+              };
+            }>;
+            totalSummaryCount: number;
+          };
+          savedView: {
+            id: string;
+          };
+        };
+      };
+    };
+    const clearProgressPayload = JSON.parse(
+      clearProgressIo.stdout.join(""),
+    ) as {
+      progress: {
+        progress: {
+          completionNote?: string;
+        };
+      };
+    };
+    const progressedAfterClearPayload = JSON.parse(
+      progressedAfterClearIo.stdout.join(""),
+    ) as {
+      progressed: {
+        totalCount: number;
+      };
+    };
+
+    expect(publishExitCode).toBe(0);
+    expect(shareExitCode).toBe(0);
+    expect(reviewExitCode).toBe(0);
+    expect(assignExitCode).toBe(0);
+    expect(checklistExitCode).toBe(0);
+    expect(progressExitCode).toBe(0);
+    expect(progressedPeerExitCode).toBe(0);
+    expect(inspectProgressExitCode).toBe(0);
+    expect(applyExitCode).toBe(0);
+    expect(clearProgressExitCode).toBe(0);
+    expect(progressedAfterClearExitCode).toBe(0);
+    expect(progressPayload.progress.progress.completionNote).toBe(
+      "Queued follow-up is almost complete",
+    );
+    expect(progressPayload.progress.progress.items).toEqual([
+      {
+        item: "Validate queued follow-up",
+        state: "completed",
+      },
+      {
+        item: "Close backup handoff",
+        state: "pending",
+      },
+    ]);
+    expect(progressedPeerPayload.progressed.totalCount).toBe(1);
+    expect(
+      progressedPeerPayload.progressed.items[0]?.checklist.assignment.review
+        .visibility.catalogEntry.entry.id,
+    ).toBe(publishedPayload.catalogEntry.entry.id);
+    expect(inspectProgressPayload.progress.progress.completionNote).toBe(
+      "Queued follow-up is almost complete",
+    );
+    expect(applyPayload.application.application.savedView.id).toBe(
+      savedViewPayload.savedView.id,
+    );
+    expect(
+      applyPayload.application.application.navigation.drilldowns[0]?.result
+        .runId,
+    ).toBe(queuedRun.run.id);
+    expect(clearProgressPayload.progress.progress.completionNote).toBe(
+      "Queued follow-up is almost complete",
+    );
+    expect(progressedAfterClearPayload.progressed.totalCount).toBe(0);
+  });
 });

@@ -1136,4 +1136,269 @@ describe("@runroot/web integration", () => {
       await peerApp.close();
     }
   });
+
+  it("renders, progresses, clears, and reapplies checklist item progress through the existing API surface", async () => {
+    const workspaceRoot = await mkdtemp(
+      join(tmpdir(), "runroot-web-checklist-progress-"),
+    );
+    const sqlitePath = join(workspaceRoot, "runroot.sqlite");
+    const inlineOperator = createRunrootOperatorService({
+      executionMode: "inline",
+      operatorId: "ops_oncall",
+      operatorScopeId: "ops",
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+    const queuedOperator = createRunrootOperatorService({
+      executionMode: "queued",
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+    const workerService = (
+      await import("@runroot/sdk")
+    ).createRunrootWorkerService({
+      persistenceDriver: "sqlite",
+      sqlitePath,
+      workerId: "worker_web_progress",
+    });
+    const ownerApp = buildServer({
+      operator: createRunrootOperatorService({
+        catalogEntryIdGenerator: () => "catalog_entry_progress_web",
+        operatorId: "ops_oncall",
+        operatorScopeId: "ops",
+        persistenceDriver: "sqlite",
+        savedViewIdGenerator: () => "saved_view_progress_web",
+        sqlitePath,
+      }),
+    });
+    const peerApp = buildServer({
+      operator: createRunrootOperatorService({
+        operatorId: "ops_backup",
+        operatorScopeId: "ops",
+        persistenceDriver: "sqlite",
+        sqlitePath,
+      }),
+    });
+
+    try {
+      const inlineRun = await inlineOperator.startRun({
+        input: {
+          approvalRequired: false,
+          commandAlias: "print-ready",
+          runbookId: "node-health-check",
+        },
+        templateId: "shell-runbook-flow",
+      });
+      const queuedRun = await queuedOperator.startRun({
+        input: {
+          approvalRequired: false,
+          commandAlias: "print-ready",
+          runbookId: "node-health-check",
+        },
+        templateId: "shell-runbook-flow",
+      });
+
+      await workerService.processNextJob();
+
+      const ownerAddress = await ownerApp.listen({
+        host: "127.0.0.1",
+        port: 0,
+      });
+      const peerAddress = await peerApp.listen({
+        host: "127.0.0.1",
+        port: 0,
+      });
+
+      process.env.RUNROOT_API_BASE_URL = ownerAddress;
+
+      const saveForm = new FormData();
+      saveForm.set("name", "Queued progress preset");
+      saveForm.set("description", "Saved queued worker progress preset");
+      saveForm.set("summaryExecutionMode", "queued");
+      saveForm.set("drilldownWorkerId", "worker_web_progress");
+      saveForm.set("auditViewRunId", queuedRun.id);
+      saveForm.set("drilldownRunId", queuedRun.id);
+      saveForm.set("returnTo", "/runs");
+
+      const saveResponse = await saveSavedView(
+        new Request("http://localhost/runs/saved-views", {
+          body: saveForm,
+          method: "POST",
+        }),
+      );
+
+      expect(saveResponse.status).toBe(303);
+
+      const publishForm = new FormData();
+      publishForm.set("intent", "publish");
+      publishForm.set("savedViewId", "saved_view_progress_web");
+
+      const publishResponse = await mutateCatalog(
+        new Request("http://localhost/runs/catalog", {
+          body: publishForm,
+          method: "POST",
+        }),
+      );
+
+      expect(publishResponse.status).toBe(303);
+
+      const shareForm = new FormData();
+      shareForm.set("catalogEntryId", "catalog_entry_progress_web");
+      shareForm.set("intent", "share");
+
+      const shareResponse = await mutateCatalog(
+        new Request("http://localhost/runs/catalog", {
+          body: shareForm,
+          method: "POST",
+        }),
+      );
+
+      expect(shareResponse.status).toBe(303);
+
+      const reviewForm = new FormData();
+      reviewForm.set("catalogEntryId", "catalog_entry_progress_web");
+      reviewForm.set("intent", "review");
+      reviewForm.set("note", `Progress ready after inline ${inlineRun.id}`);
+      reviewForm.set("reviewState", "recommended");
+      reviewForm.set(
+        "returnTo",
+        "/runs?catalogEntryId=catalog_entry_progress_web",
+      );
+
+      const reviewResponse = await mutateCatalog(
+        new Request("http://localhost/runs/catalog", {
+          body: reviewForm,
+          method: "POST",
+        }),
+      );
+
+      expect(reviewResponse.status).toBe(303);
+
+      const assignForm = new FormData();
+      assignForm.set("catalogEntryId", "catalog_entry_progress_web");
+      assignForm.set("intent", "assign");
+      assignForm.set("assigneeId", "ops_backup");
+      assignForm.set(
+        "handoffNote",
+        `Queued worker ${queuedRun.id} handed to backup`,
+      );
+      assignForm.set(
+        "returnTo",
+        "/runs?catalogEntryId=catalog_entry_progress_web",
+      );
+
+      const assignResponse = await mutateCatalog(
+        new Request("http://localhost/runs/catalog", {
+          body: assignForm,
+          method: "POST",
+        }),
+      );
+
+      expect(assignResponse.status).toBe(303);
+
+      const checklistForm = new FormData();
+      checklistForm.set("catalogEntryId", "catalog_entry_progress_web");
+      checklistForm.set("intent", "checklist");
+      checklistForm.set("checklistState", "pending");
+      checklistForm.set(
+        "checklistItems",
+        "Validate queued follow-up\nClose backup handoff",
+      );
+      checklistForm.set(
+        "returnTo",
+        "/runs?catalogEntryId=catalog_entry_progress_web",
+      );
+
+      const checklistResponse = await mutateCatalog(
+        new Request("http://localhost/runs/catalog", {
+          body: checklistForm,
+          method: "POST",
+        }),
+      );
+
+      expect(checklistResponse.status).toBe(303);
+
+      const progressForm = new FormData();
+      progressForm.set("catalogEntryId", "catalog_entry_progress_web");
+      progressForm.set("intent", "progress");
+      progressForm.set(
+        "progressItems",
+        "completed: Validate queued follow-up\npending: Close backup handoff",
+      );
+      progressForm.set("completionNote", "Queued follow-up is almost complete");
+      progressForm.set(
+        "returnTo",
+        "/runs?catalogEntryId=catalog_entry_progress_web",
+      );
+
+      const progressResponse = await mutateCatalog(
+        new Request("http://localhost/runs/catalog", {
+          body: progressForm,
+          method: "POST",
+        }),
+      );
+
+      expect(progressResponse.status).toBe(303);
+
+      process.env.RUNROOT_API_BASE_URL = peerAddress;
+
+      const progressedMarkup = renderToStaticMarkup(
+        await RunsPage({
+          searchParams: Promise.resolve({
+            catalogEntryId: "catalog_entry_progress_web",
+          }),
+        }),
+      );
+
+      expect(progressedMarkup).toContain("Checklist item progress");
+      expect(progressedMarkup).toContain("Queued progress preset");
+      expect(progressedMarkup).toContain("1/2 completed");
+      expect(progressedMarkup).toContain("Validate queued follow-up");
+      expect(progressedMarkup).toContain("Close backup handoff");
+      expect(progressedMarkup).toContain("Queued follow-up is almost complete");
+      expect(progressedMarkup).toContain("Apply progressed preset");
+      expect(progressedMarkup).toContain(
+        `Queued worker ${queuedRun.id} handed to backup`,
+      );
+      expect(progressedMarkup).toContain("Currently applied");
+
+      process.env.RUNROOT_API_BASE_URL = ownerAddress;
+
+      const clearForm = new FormData();
+      clearForm.set("catalogEntryId", "catalog_entry_progress_web");
+      clearForm.set("intent", "clear-progress");
+      clearForm.set(
+        "returnTo",
+        "/runs?catalogEntryId=catalog_entry_progress_web",
+      );
+
+      const clearResponse = await mutateCatalog(
+        new Request("http://localhost/runs/catalog", {
+          body: clearForm,
+          method: "POST",
+        }),
+      );
+
+      expect(clearResponse.status).toBe(303);
+
+      process.env.RUNROOT_API_BASE_URL = peerAddress;
+
+      const clearedMarkup = renderToStaticMarkup(
+        await RunsPage({
+          searchParams: Promise.resolve({
+            catalogEntryId: "catalog_entry_progress_web",
+          }),
+        }),
+      );
+
+      expect(clearedMarkup).toContain("Checklist item progress");
+      expect(clearedMarkup).toContain("No checklist item progress yet");
+      expect(clearedMarkup).not.toContain(
+        "Queued follow-up is almost complete",
+      );
+    } finally {
+      await ownerApp.close();
+      await peerApp.close();
+    }
+  });
 });
