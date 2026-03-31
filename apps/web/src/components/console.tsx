@@ -2,6 +2,8 @@ import type { ReactNode } from "react";
 import type { FlashMessage } from "../lib/navigation";
 import type {
   ApiApproval,
+  ApiAuditCatalogAssignmentChecklistCollection,
+  ApiAuditCatalogAssignmentChecklistView,
   ApiAuditCatalogReviewAssignmentCollection,
   ApiAuditCatalogReviewAssignmentView,
   ApiAuditCatalogReviewSignalCollection,
@@ -136,6 +138,147 @@ export function RunsListView({
           </div>
         </article>
       ))}
+    </section>
+  );
+}
+
+export function AssignmentChecklistsView({
+  activeCatalogAssignmentChecklist,
+  checklistedEntries,
+}: Readonly<{
+  activeCatalogAssignmentChecklist?: ApiAuditCatalogAssignmentChecklistView;
+  checklistedEntries: ApiAuditCatalogAssignmentChecklistCollection;
+}>) {
+  return (
+    <section className="card">
+      <div className="row spread">
+        <div>
+          <div className="card-eyebrow">Phase 20 / Assignment Checklists</div>
+          <h2>Assignment checklists</h2>
+          <p className="empty-copy">
+            Track thin checklist items and handoff status on assigned reviewed
+            presets without turning the console into a workflow engine or
+            collaboration product.
+          </p>
+        </div>
+        <div className="timeline-count">
+          {checklistedEntries.totalCount} checklisted preset(s)
+        </div>
+      </div>
+
+      {activeCatalogAssignmentChecklist ? (
+        <div className="inline-note">
+          Active checklist:{" "}
+          <strong>
+            {
+              activeCatalogAssignmentChecklist.assignment.review.visibility
+                .catalogEntry.entry.name
+            }
+          </strong>
+          {" · "}status {activeCatalogAssignmentChecklist.checklist.state}
+          {activeCatalogAssignmentChecklist.checklist.items?.length
+            ? ` · ${activeCatalogAssignmentChecklist.checklist.items.length} item(s)`
+            : ""}
+        </div>
+      ) : null}
+
+      {checklistedEntries.items.length === 0 ? (
+        <p className="empty-copy">
+          No assignment checklists yet. Assign a reviewed visible preset first,
+          then save a thin checklist through the shared operator seam.
+        </p>
+      ) : (
+        <ol className="timeline-list">
+          {checklistedEntries.items.map((checklistView) => (
+            <li
+              className="timeline-entry"
+              key={
+                checklistView.assignment.review.visibility.catalogEntry.entry.id
+              }
+            >
+              <div className="row spread">
+                <div>
+                  <strong>
+                    {
+                      checklistView.assignment.review.visibility.catalogEntry
+                        .entry.name
+                    }
+                  </strong>
+                  <div className="timeline-meta">
+                    {checklistView.checklist.state} ·{" "}
+                    {checklistView.assignment.assignment.state}
+                    {" · "}
+                    {checklistView.assignment.review.review.state}
+                  </div>
+                </div>
+                <span>
+                  {formatTimestamp(checklistView.checklist.updatedAt)}
+                </span>
+              </div>
+              {checklistView.checklist.items?.length ? (
+                <ul className="approval-history">
+                  {checklistView.checklist.items.map((item) => (
+                    <li
+                      key={`${checklistView.checklist.catalogEntryId}:${item}`}
+                    >
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="empty-copy">
+                  No checklist items stored. Only the handoff status is present.
+                </p>
+              )}
+              <div className="timeline-meta">
+                operator {checklistView.checklist.operatorId} · scope{" "}
+                {checklistView.checklist.scopeId}
+              </div>
+              <div className="row spread">
+                <a
+                  className="link-button"
+                  href={buildCatalogEntryHref(
+                    checklistView.assignment.review.visibility.catalogEntry
+                      .entry.id,
+                  )}
+                >
+                  Apply checklisted preset
+                </a>
+                <form
+                  action="/runs/catalog"
+                  className="action-form"
+                  method="post"
+                >
+                  <input
+                    name="returnTo"
+                    type="hidden"
+                    value={buildCatalogEntryHref(
+                      checklistView.assignment.review.visibility.catalogEntry
+                        .entry.id,
+                    )}
+                  />
+                  <input name="intent" type="hidden" value="clear-checklist" />
+                  <input
+                    name="catalogEntryId"
+                    type="hidden"
+                    value={
+                      checklistView.assignment.review.visibility.catalogEntry
+                        .entry.id
+                    }
+                  />
+                  <button type="submit">Clear checklist</button>
+                </form>
+              </div>
+              {activeCatalogAssignmentChecklist?.assignment.review.visibility
+                .catalogEntry.entry.id ===
+              checklistView.assignment.review.visibility.catalogEntry.entry
+                .id ? (
+                <div className="timeline-meta">Currently applied</div>
+              ) : null}
+            </li>
+          ))}
+        </ol>
+      )}
     </section>
   );
 }
@@ -376,11 +519,13 @@ export function AuditViewCatalogsView({
   activeCatalogEntry,
   assignedEntries,
   catalogEntries,
+  checklistedEntries,
   reviewedEntries,
 }: Readonly<{
   activeCatalogEntry?: ApiAuditCatalogVisibilityView;
   assignedEntries: ApiAuditCatalogReviewAssignmentCollection;
   catalogEntries: ApiAuditCatalogVisibilityCollection;
+  checklistedEntries: ApiAuditCatalogAssignmentChecklistCollection;
   reviewedEntries: ApiAuditCatalogReviewSignalCollection;
 }>) {
   const assignmentsByCatalogEntryId = new Map(
@@ -391,6 +536,15 @@ export function AuditViewCatalogsView({
   const reviewSignalsByCatalogEntryId = new Map(
     reviewedEntries.items.map(
       (item) => [item.visibility.catalogEntry.entry.id, item] as const,
+    ),
+  );
+  const checklistsByCatalogEntryId = new Map(
+    checklistedEntries.items.map(
+      (item) =>
+        [
+          item.assignment.review.visibility.catalogEntry.entry.id,
+          item,
+        ] as const,
     ),
   );
 
@@ -437,6 +591,9 @@ export function AuditViewCatalogsView({
                 const assignment = assignmentsByCatalogEntryId.get(
                   catalogEntry.catalogEntry.entry.id,
                 );
+                const checklist = checklistsByCatalogEntryId.get(
+                  catalogEntry.catalogEntry.entry.id,
+                );
                 const reviewSignal = reviewSignalsByCatalogEntryId.get(
                   catalogEntry.catalogEntry.entry.id,
                 );
@@ -454,6 +611,9 @@ export function AuditViewCatalogsView({
                             : ""}
                           {assignment
                             ? ` · assigned to ${assignment.assignment.assigneeId}`
+                            : ""}
+                          {checklist
+                            ? ` · checklist ${checklist.checklist.state}`
                             : ""}
                         </div>
                       </div>
@@ -474,6 +634,11 @@ export function AuditViewCatalogsView({
                         {assignment.assignment.handoffNote}
                       </p>
                     ) : null}
+                    {checklist?.checklist.items?.length ? (
+                      <p className="empty-copy">
+                        checklist: {checklist.checklist.items.join(", ")}
+                      </p>
+                    ) : null}
                     <div className="timeline-meta">
                       saved view {catalogEntry.catalogEntry.savedView.id}
                       {catalogEntry.catalogEntry.savedView.refs.auditViewRunId
@@ -491,6 +656,9 @@ export function AuditViewCatalogsView({
                         : ""}
                       {assignment
                         ? ` · assigner ${assignment.assignment.assignerId}`
+                        : ""}
+                      {checklist
+                        ? ` · checklist owner ${checklist.checklist.operatorId}`
                         : ""}
                     </div>
                     <div className="timeline-meta">
@@ -603,6 +771,59 @@ export function AuditViewCatalogsView({
                         </div>
                       </form>
                     ) : null}
+                    {assignment ? (
+                      <form
+                        action="/runs/catalog"
+                        className="decision-form"
+                        method="post"
+                      >
+                        <input
+                          name="returnTo"
+                          type="hidden"
+                          value={buildCatalogEntryHref(
+                            catalogEntry.catalogEntry.entry.id,
+                          )}
+                        />
+                        <input name="intent" type="hidden" value="checklist" />
+                        <input
+                          name="catalogEntryId"
+                          type="hidden"
+                          value={catalogEntry.catalogEntry.entry.id}
+                        />
+                        <div className="data-grid">
+                          <label>
+                            <span>Handoff status</span>
+                            <select
+                              defaultValue={
+                                checklist?.checklist.state ?? "pending"
+                              }
+                              name="checklistState"
+                            >
+                              <option value="pending">pending</option>
+                              <option value="completed">completed</option>
+                            </select>
+                          </label>
+                          <label>
+                            <span>Checklist items</span>
+                            <textarea
+                              className="note-input"
+                              defaultValue={
+                                checklist?.checklist.items?.join("\n") ?? ""
+                              }
+                              name="checklistItems"
+                              placeholder="One checklist item per line"
+                              rows={4}
+                            />
+                          </label>
+                        </div>
+                        <div className="row spread">
+                          <div />
+                          <button type="submit">
+                            {checklist ? "Update checklist" : "Save checklist"}
+                          </button>
+                        </div>
+                      </form>
+                    ) : null}
                     <div className="row spread">
                       <a
                         className="link-button"
@@ -663,6 +884,32 @@ export function AuditViewCatalogsView({
                               value={catalogEntry.catalogEntry.entry.id}
                             />
                             <button type="submit">Clear assignment</button>
+                          </form>
+                        ) : null}
+                        {checklist ? (
+                          <form
+                            action="/runs/catalog"
+                            className="action-form"
+                            method="post"
+                          >
+                            <input
+                              name="returnTo"
+                              type="hidden"
+                              value={buildCatalogEntryHref(
+                                catalogEntry.catalogEntry.entry.id,
+                              )}
+                            />
+                            <input
+                              name="intent"
+                              type="hidden"
+                              value="clear-checklist"
+                            />
+                            <input
+                              name="catalogEntryId"
+                              type="hidden"
+                              value={catalogEntry.catalogEntry.entry.id}
+                            />
+                            <button type="submit">Clear checklist</button>
                           </form>
                         ) : null}
                         <form

@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 import type { PackageBoundary } from "@runroot/config";
 import type { JsonValue, RunStatus } from "@runroot/domain";
 import {
+  type ChecklistAuditCatalogEntryInput,
   createRunrootOperatorService,
   type DecideApprovalInput,
   OperatorError,
@@ -137,6 +138,23 @@ export async function runCli(
           return writeJson(io.stdout.write, {
             assigned: await service.listAssignedCatalogEntries(),
           });
+        case "checklist":
+          if (!detail) {
+            throw new Error(
+              "audit catalog checklist requires a catalog entry id.",
+            );
+          }
+
+          return writeJson(io.stdout.write, {
+            checklist: await service.checklistCatalogEntry(
+              detail,
+              resolveChecklistAuditCatalogEntryInput(flags),
+            ),
+          });
+        case "checklisted":
+          return writeJson(io.stdout.write, {
+            checklisted: await service.listChecklistedCatalogEntries(),
+          });
         case "clear-assignment":
           if (!detail) {
             throw new Error(
@@ -146,6 +164,16 @@ export async function runCli(
 
           return writeJson(io.stdout.write, {
             assignment: await service.clearCatalogReviewAssignment(detail),
+          });
+        case "clear-checklist":
+          if (!detail) {
+            throw new Error(
+              "audit catalog clear-checklist requires a catalog entry id.",
+            );
+          }
+
+          return writeJson(io.stdout.write, {
+            checklist: await service.clearCatalogAssignmentChecklist(detail),
           });
         case "clear-review":
           if (!detail) {
@@ -176,6 +204,16 @@ export async function runCli(
 
           return writeJson(io.stdout.write, {
             assignment: await service.getCatalogReviewAssignment(detail),
+          });
+        case "inspect-checklist":
+          if (!detail) {
+            throw new Error(
+              "audit catalog inspect-checklist requires a catalog entry id.",
+            );
+          }
+
+          return writeJson(io.stdout.write, {
+            checklist: await service.getCatalogAssignmentChecklist(detail),
           });
         case "inspect-review":
           if (!detail) {
@@ -558,6 +596,39 @@ function resolveAssignAuditCatalogEntryInput(
   };
 }
 
+function resolveChecklistAuditCatalogEntryInput(
+  flags: ReadonlyMap<string, string | boolean>,
+): ChecklistAuditCatalogEntryInput {
+  const state = getStringFlag(flags, "status");
+  const itemsJson = getStringFlag(flags, "items-json");
+
+  if (state !== "pending" && state !== "completed") {
+    throw new Error(
+      "audit catalog checklist requires --status pending|completed.",
+    );
+  }
+
+  return {
+    ...(itemsJson !== undefined
+      ? { items: resolveChecklistItems(itemsJson) }
+      : {}),
+    state,
+  };
+}
+
+function resolveChecklistItems(itemsJson: string): readonly string[] {
+  const parsedItems = JSON.parse(itemsJson) as unknown;
+
+  if (
+    !Array.isArray(parsedItems) ||
+    !parsedItems.every((item) => typeof item === "string")
+  ) {
+    throw new Error("--items-json must decode to an array of strings.");
+  }
+
+  return parsedItems;
+}
+
 function getStringFlag(
   flags: ReadonlyMap<string, string | boolean>,
   name: string,
@@ -664,13 +735,17 @@ Commands:
   audit catalog visible
   audit catalog reviewed
   audit catalog assigned
+  audit catalog checklisted
   audit catalog publish <saved-view-id> [--name <name>] [--description <text>]
   audit catalog show <catalog-entry-id>
   audit catalog inspect <catalog-entry-id>
   audit catalog inspect-assignment <catalog-entry-id>
+  audit catalog inspect-checklist <catalog-entry-id>
   audit catalog inspect-review <catalog-entry-id>
   audit catalog assign <catalog-entry-id> --assignee <operator-id> [--handoff-note <text>]
+  audit catalog checklist <catalog-entry-id> --status <pending|completed> [--items-json <json-array>]
   audit catalog clear-assignment <catalog-entry-id>
+  audit catalog clear-checklist <catalog-entry-id>
   audit catalog review <catalog-entry-id> --state <recommended|reviewed> [--note <text>]
   audit catalog clear-review <catalog-entry-id>
   audit catalog share <catalog-entry-id>

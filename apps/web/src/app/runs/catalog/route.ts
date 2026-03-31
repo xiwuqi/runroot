@@ -169,6 +169,59 @@ export async function POST(request: Request) {
       return Response.redirect(redirectUrl, 303);
     }
 
+    if (intent === "checklist") {
+      const catalogEntryId = readTrimmedFormValue(formData, "catalogEntryId");
+      const checklistState = readTrimmedFormValue(formData, "checklistState");
+      const checklistItems = readChecklistItems(formData.get("checklistItems"));
+
+      if (!catalogEntryId) {
+        appendFlashMessage(
+          redirectUrl,
+          "error",
+          "A catalog entry id is required to update checklist metadata.",
+        );
+
+        return Response.redirect(redirectUrl, 303);
+      }
+
+      if (!checklistState) {
+        appendFlashMessage(
+          redirectUrl,
+          "error",
+          "A checklist state is required to update checklist metadata.",
+        );
+
+        return Response.redirect(redirectUrl, 303);
+      }
+
+      if (checklistState !== "pending" && checklistState !== "completed") {
+        appendFlashMessage(
+          redirectUrl,
+          "error",
+          "Checklist state must be pending or completed.",
+        );
+
+        return Response.redirect(redirectUrl, 303);
+      }
+
+      const checklist =
+        await createRunrootApiClient().setAuditCatalogAssignmentChecklist(
+          catalogEntryId,
+          {
+            ...(checklistItems.length > 0 ? { items: checklistItems } : {}),
+            state: checklistState,
+          },
+        );
+
+      appendFlashMessage(
+        redirectUrl,
+        "notice",
+        `Checklist for ${checklist.assignment.review.visibility.catalogEntry.entry.name} updated to ${checklist.checklist.state}.`,
+      );
+
+      return Response.redirect(redirectUrl, 303);
+    }
+
     if (intent === "clear-review") {
       const catalogEntryId = readTrimmedFormValue(formData, "catalogEntryId");
 
@@ -191,6 +244,33 @@ export async function POST(request: Request) {
         redirectUrl,
         "notice",
         `Review signal for ${review.visibility.catalogEntry.entry.name} cleared.`,
+      );
+
+      return Response.redirect(redirectUrl, 303);
+    }
+
+    if (intent === "clear-checklist") {
+      const catalogEntryId = readTrimmedFormValue(formData, "catalogEntryId");
+
+      if (!catalogEntryId) {
+        appendFlashMessage(
+          redirectUrl,
+          "error",
+          "A catalog entry id is required to clear checklist metadata.",
+        );
+
+        return Response.redirect(redirectUrl, 303);
+      }
+
+      const checklist =
+        await createRunrootApiClient().clearAuditCatalogAssignmentChecklist(
+          catalogEntryId,
+        );
+
+      appendFlashMessage(
+        redirectUrl,
+        "notice",
+        `Checklist for ${checklist.assignment.review.visibility.catalogEntry.entry.name} cleared.`,
       );
 
       return Response.redirect(redirectUrl, 303);
@@ -279,4 +359,17 @@ function readTrimmedFormValue(
   const trimmedValue = value.trim();
 
   return trimmedValue.length > 0 ? trimmedValue : undefined;
+}
+
+function readChecklistItems(
+  value: FormDataEntryValue | null,
+): readonly string[] {
+  if (typeof value !== "string") {
+    return [];
+  }
+
+  return value
+    .split(/\r?\n/u)
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
 }

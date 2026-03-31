@@ -237,6 +237,12 @@ export function buildServer(options: BuildServerOptions = {}) {
     })),
   );
 
+  app.get("/audit/catalog/checklisted", async (_request, reply) =>
+    handleOperatorResponse(reply, async () => ({
+      checklisted: await operator.listChecklistedCatalogEntries(),
+    })),
+  );
+
   app.post("/audit/saved-views", async (request, reply) =>
     handleOperatorResponse(reply, async () => {
       const body = request.body as {
@@ -368,6 +374,20 @@ export function buildServer(options: BuildServerOptions = {}) {
     }),
   );
 
+  app.get("/audit/catalog/:catalogEntryId/checklist", async (request, reply) =>
+    handleOperatorResponse(reply, async () => {
+      const params = request.params as {
+        readonly catalogEntryId: string;
+      };
+
+      return {
+        checklist: await operator.getCatalogAssignmentChecklist(
+          params.catalogEntryId,
+        ),
+      };
+    }),
+  );
+
   app.get("/audit/catalog/:catalogEntryId", async (request, reply) =>
     handleOperatorResponse(reply, async () => {
       const params = request.params as {
@@ -454,6 +474,34 @@ export function buildServer(options: BuildServerOptions = {}) {
       }),
   );
 
+  app.post("/audit/catalog/:catalogEntryId/checklist", async (request, reply) =>
+    handleOperatorResponse(reply, async () => {
+      const params = request.params as {
+        readonly catalogEntryId: string;
+      };
+      const body = request.body as {
+        readonly items?: unknown;
+        readonly state?: string;
+      };
+
+      if (!body?.state) {
+        throw new OperatorInputError("state is required.");
+      }
+
+      const items =
+        body.items === undefined
+          ? undefined
+          : readChecklistItems(body.items, "items");
+
+      return {
+        checklist: await operator.checklistCatalogEntry(params.catalogEntryId, {
+          ...(items !== undefined ? { items } : {}),
+          state: readCatalogChecklistState(body.state),
+        }),
+      };
+    }),
+  );
+
   app.post(
     "/audit/catalog/:catalogEntryId/review/clear",
     async (request, reply) =>
@@ -480,6 +528,22 @@ export function buildServer(options: BuildServerOptions = {}) {
 
         return {
           assignment: await operator.clearCatalogReviewAssignment(
+            params.catalogEntryId,
+          ),
+        };
+      }),
+  );
+
+  app.post(
+    "/audit/catalog/:catalogEntryId/checklist/clear",
+    async (request, reply) =>
+      handleOperatorResponse(reply, async () => {
+        const params = request.params as {
+          readonly catalogEntryId: string;
+        };
+
+        return {
+          checklist: await operator.clearCatalogAssignmentChecklist(
             params.catalogEntryId,
           ),
         };
@@ -836,4 +900,28 @@ function readCatalogReviewState(value: string): "recommended" | "reviewed" {
         "state must be one of recommended|reviewed.",
       );
   }
+}
+
+function readCatalogChecklistState(value: string): "completed" | "pending" {
+  switch (value) {
+    case "completed":
+    case "pending":
+      return value;
+    default:
+      throw new OperatorInputError("state must be one of pending|completed.");
+  }
+}
+
+function readChecklistItems(
+  value: unknown,
+  fieldName: string,
+): readonly string[] {
+  if (
+    !Array.isArray(value) ||
+    !value.every((item) => typeof item === "string")
+  ) {
+    throw new OperatorInputError(`${fieldName} must be an array of strings.`);
+  }
+
+  return value;
 }
