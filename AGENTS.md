@@ -54,6 +54,7 @@ The project is executed in phases. Only work on the current phase.
 - Phase 17: Cross-Run Audit Catalog Visibility and Shared Presets
 - Phase 18: Cross-Run Audit Catalog Review Signals and Shared Notes
 - Phase 19: Cross-Run Audit Catalog Review Assignments and Operator Handoffs
+- Phase 20: Cross-Run Audit Catalog Assignment Checklists and Handoff Statuses
 
 Do not pull work from later phases into the current phase unless it is required to unblock the current phase and the reason is documented.
 

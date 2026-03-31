@@ -255,4 +255,24 @@ Status: completed
   than threaded comments, review workflows, broader multi-user curation, or
   broad observability and analytics platform work
 
-Status: completed on branch
+Status: completed
+
+## Phase 20: Cross-Run Audit Catalog Assignment Checklists and Handoff Statuses
+
+- add a shared audit-catalog assignment-checklist contract over the existing
+  review-assignment and review-signal paths rather than introducing a review
+  workflow engine or collaboration product
+- expose minimal checklist, list-checklisted, inspect-checklist,
+  clear-checklist, and apply paths through the existing seams in SDK, API,
+  CLI, and web
+- keep operator surfaces thin while allowing assigned reviewed presets to carry
+  stable handoff checklist items and checklist status without expanding into
+  threaded collaboration, fine-grained RBAC, multi-tenant access, dashboards,
+  search, or analytics products
+- execute against the formal handoff in
+  [docs/architecture/phase-20-handoff.md](./architecture/phase-20-handoff.md)
+- keep the phase focused on assignment checklists and handoff statuses rather
+  than threaded comments, broader review workflow engines, broader multi-user
+  curation, or broad observability and analytics platform work
+
+Status: suggested scope freeze on branch, pending merge
