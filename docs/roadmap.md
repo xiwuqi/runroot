@@ -315,4 +315,25 @@ Status: completed
   broader multi-user curation, or broad observability and analytics platform
   work
 
-Status: implemented on branch
+Status: completed
+
+## Phase 23: Cross-Run Audit Catalog Checklist Item Resolutions and Resolution Notes
+
+- add a shared audit-catalog checklist-item-resolution contract over the
+  existing checklist-item-blocker and checklist-item-progress paths rather than
+  introducing broader checklist orchestration or a workflow engine
+- expose minimal resolve, list-resolved, inspect-resolution,
+  clear-resolution, and apply paths through the existing seams in SDK, API,
+  CLI, and web
+- keep operator surfaces thin while allowing blocked progressed assigned
+  presets to carry stable per-item resolution state and a thin resolution note
+  without expanding into threaded collaboration, fine-grained RBAC,
+  multi-tenant access, dashboards, search, or analytics products
+- execute against the formal handoff in
+  [docs/architecture/phase-23-handoff.md](./architecture/phase-23-handoff.md)
+- keep the phase focused on checklist item resolutions and resolution notes
+  rather than broader checklist orchestration, broader review workflow
+  engines, broader multi-user curation, or broad observability and analytics
+  platform work
+
+Status: scope frozen
