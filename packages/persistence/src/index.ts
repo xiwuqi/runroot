@@ -14,6 +14,19 @@ export {
   type SqliteAuditCatalogAssignmentChecklistStoreOptions,
 } from "./catalog-assignment-checklist-store";
 export {
+  type ConfiguredAuditCatalogChecklistItemProgressStoreOptions,
+  createConfiguredAuditCatalogChecklistItemProgressStore,
+  createFileAuditCatalogChecklistItemProgressStore,
+  createInMemoryAuditCatalogChecklistItemProgressStore,
+  createPostgresAuditCatalogChecklistItemProgressStore,
+  createSqliteAuditCatalogChecklistItemProgressStore,
+  type FileAuditCatalogChecklistItemProgressStoreOptions,
+  type InMemoryAuditCatalogChecklistItemProgressStoreOptions,
+  type PostgresAuditCatalogChecklistItemProgressStoreOptions,
+  resolveAuditCatalogChecklistItemProgressFilePath,
+  type SqliteAuditCatalogChecklistItemProgressStoreOptions,
+} from "./catalog-checklist-item-progress-store";
+export {
   type ConfiguredAuditCatalogReviewAssignmentStoreOptions,
   createConfiguredAuditCatalogReviewAssignmentStore,
   createFileAuditCatalogReviewAssignmentStore,
@@ -134,7 +147,7 @@ export const persistencePackageBoundary = {
   kind: "package",
   phaseOwned: 2,
   responsibility:
-    "Repository contracts, checkpoint storage, database adapters, dispatch queue persistence seams, tool-history storage adapters, additive saved-audit-view adapters, additive audit-view-catalog adapters, additive catalog-visibility adapters, additive catalog-review-signal adapters, additive catalog-review-assignment adapters, and additive catalog-assignment-checklist adapters.",
+    "Repository contracts, checkpoint storage, database adapters, dispatch queue persistence seams, tool-history storage adapters, additive saved-audit-view adapters, additive audit-view-catalog adapters, additive catalog-visibility adapters, additive catalog-review-signal adapters, additive catalog-review-assignment adapters, additive catalog-assignment-checklist adapters, and additive checklist-item-progress adapters.",
   publicSurface: [
     "repository interfaces",
     "storage adapters",
@@ -147,5 +160,6 @@ export const persistencePackageBoundary = {
     "catalog review signal adapters",
     "catalog review assignment adapters",
     "catalog assignment checklist adapters",
+    "checklist item progress adapters",
   ],
 } as const satisfies PackageBoundary;

@@ -26,6 +26,17 @@ import {
   type PublishCrossRunAuditCatalogEntryInput,
 } from "./catalog";
 import {
+  type CrossRunAuditCatalogChecklistItemProgress,
+  type CrossRunAuditCatalogChecklistItemProgressApplication,
+  type CrossRunAuditCatalogChecklistItemProgressCollection,
+  type CrossRunAuditCatalogChecklistItemProgressStore,
+  type CrossRunAuditCatalogChecklistItemProgressView,
+  compareCrossRunAuditCatalogChecklistItemProgress,
+  createCrossRunAuditCatalogChecklistItemProgress,
+  normalizeChecklistItemProgressItems,
+  type UpdateCrossRunAuditCatalogChecklistItemProgressInput,
+} from "./checklist-item-progress";
+import {
   type CrossRunAuditQueryFilters,
   type CrossRunAuditResults,
   compareCrossRunAuditResults,
@@ -241,6 +252,30 @@ export interface CrossRunAuditCatalogAssignmentChecklistQuery {
     input: UpdateCrossRunAuditCatalogAssignmentChecklistInput,
     timestamp: string,
   ): Promise<CrossRunAuditCatalogAssignmentChecklistView>;
+}
+
+export interface CrossRunAuditCatalogChecklistItemProgressQuery {
+  applyCatalogEntry(
+    id: string,
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+  ): Promise<CrossRunAuditCatalogChecklistItemProgressApplication | undefined>;
+  clearCatalogChecklistItemProgress(
+    id: string,
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+  ): Promise<CrossRunAuditCatalogChecklistItemProgressView | undefined>;
+  getCatalogChecklistItemProgress(
+    id: string,
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+  ): Promise<CrossRunAuditCatalogChecklistItemProgressView | undefined>;
+  listProgressedCatalogEntries(
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+  ): Promise<CrossRunAuditCatalogChecklistItemProgressCollection>;
+  setCatalogChecklistItemProgress(
+    id: string,
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+    input: UpdateCrossRunAuditCatalogChecklistItemProgressInput,
+    timestamp: string,
+  ): Promise<CrossRunAuditCatalogChecklistItemProgressView>;
 }
 
 export function createRunTimelineQuery(
@@ -1004,6 +1039,157 @@ export function createCrossRunAuditCatalogAssignmentChecklistQuery(
   };
 }
 
+export function createCrossRunAuditCatalogChecklistItemProgressQuery(
+  store: CrossRunAuditCatalogChecklistItemProgressStore,
+  checklists: CrossRunAuditCatalogAssignmentChecklistQuery,
+): CrossRunAuditCatalogChecklistItemProgressQuery {
+  return {
+    async applyCatalogEntry(id, viewer) {
+      const progress = await resolveCatalogChecklistItemProgressView(
+        store,
+        checklists,
+        id,
+        viewer,
+      );
+
+      if (!progress) {
+        return undefined;
+      }
+
+      const application = await checklists.applyCatalogEntry(id, viewer);
+
+      if (!application) {
+        return undefined;
+      }
+
+      return {
+        application,
+        progress,
+      };
+    },
+
+    async clearCatalogChecklistItemProgress(id, viewer) {
+      const progress = await resolveCatalogChecklistItemProgressView(
+        store,
+        checklists,
+        id,
+        viewer,
+      );
+
+      if (!progress) {
+        return undefined;
+      }
+
+      await store.deleteCatalogChecklistItemProgress(id);
+
+      return progress;
+    },
+
+    async getCatalogChecklistItemProgress(id, viewer) {
+      return resolveCatalogChecklistItemProgressView(
+        store,
+        checklists,
+        id,
+        viewer,
+      );
+    },
+
+    async listProgressedCatalogEntries(viewer) {
+      const progressEntries = [
+        ...(await store.listCatalogChecklistItemProgress()),
+      ].sort(compareCrossRunAuditCatalogChecklistItemProgress);
+      const items = (
+        await Promise.all(
+          progressEntries.map(async (progress) =>
+            resolveCatalogChecklistItemProgressFromValue(
+              checklists,
+              progress,
+              viewer,
+            ),
+          ),
+        )
+      ).filter(
+        (progress): progress is CrossRunAuditCatalogChecklistItemProgressView =>
+          progress !== undefined,
+      );
+
+      return {
+        items,
+        totalCount: items.length,
+      };
+    },
+
+    async setCatalogChecklistItemProgress(id, viewer, input, timestamp) {
+      const checklist = await checklists.getCatalogAssignmentChecklist(
+        id,
+        viewer,
+      );
+
+      if (!checklist) {
+        throw new Error(
+          `Catalog entry "${id}" is not checklisted and visible to operator "${viewer.operatorId}".`,
+        );
+      }
+
+      const allowedItems = checklist.checklist.items ?? [];
+
+      if (allowedItems.length === 0) {
+        throw new Error(
+          `Catalog entry "${id}" does not define assignment checklist items for checklist item progress.`,
+        );
+      }
+
+      const normalizedItems = normalizeChecklistItemProgressItems(
+        input.items,
+        allowedItems,
+      );
+
+      if (normalizedItems.length === 0) {
+        throw new Error(
+          "Catalog checklist item progress requires at least one checklist item progress entry.",
+        );
+      }
+
+      const existingProgress = await store.getCatalogChecklistItemProgress(id);
+      const normalizedCompletionNote = input.completionNote?.trim();
+      const progress = existingProgress
+        ? {
+            catalogEntryId: id,
+            ...(input.completionNote === undefined
+              ? existingProgress.completionNote
+                ? { completionNote: existingProgress.completionNote }
+                : {}
+              : normalizedCompletionNote
+                ? { completionNote: normalizedCompletionNote }
+                : {}),
+            createdAt: existingProgress.createdAt,
+            items: normalizedItems,
+            kind: existingProgress.kind,
+            operatorId: viewer.operatorId,
+            scopeId: viewer.scopeId,
+            updatedAt: timestamp,
+          }
+        : createCrossRunAuditCatalogChecklistItemProgress({
+            catalogEntryId: id,
+            ...(normalizedCompletionNote
+              ? { completionNote: normalizedCompletionNote }
+              : {}),
+            items: normalizedItems,
+            operatorId: viewer.operatorId,
+            scopeId: viewer.scopeId,
+            timestamp,
+          });
+
+      await store.saveCatalogChecklistItemProgress(progress);
+
+      return {
+        checklist,
+        progress,
+      };
+    },
+  };
+}
+
 async function resolveCatalogEntryView(
   store: CrossRunAuditCatalogStore,
   savedViews: CrossRunAuditSavedViewQuery,
@@ -1166,5 +1352,54 @@ async function resolveCatalogAssignmentChecklistFromValue(
   return {
     assignment,
     checklist,
+  };
+}
+
+async function resolveCatalogChecklistItemProgressView(
+  store: CrossRunAuditCatalogChecklistItemProgressStore,
+  checklists: CrossRunAuditCatalogAssignmentChecklistQuery,
+  id: string,
+  viewer: CrossRunAuditCatalogVisibilityViewer,
+): Promise<CrossRunAuditCatalogChecklistItemProgressView | undefined> {
+  const progress = await store.getCatalogChecklistItemProgress(id);
+
+  return progress
+    ? resolveCatalogChecklistItemProgressFromValue(checklists, progress, viewer)
+    : undefined;
+}
+
+async function resolveCatalogChecklistItemProgressFromValue(
+  checklists: CrossRunAuditCatalogAssignmentChecklistQuery,
+  progress: CrossRunAuditCatalogChecklistItemProgress,
+  viewer: CrossRunAuditCatalogVisibilityViewer,
+): Promise<CrossRunAuditCatalogChecklistItemProgressView | undefined> {
+  if (progress.scopeId !== viewer.scopeId) {
+    return undefined;
+  }
+
+  const checklist = await checklists.getCatalogAssignmentChecklist(
+    progress.catalogEntryId,
+    viewer,
+  );
+
+  if (!checklist) {
+    return undefined;
+  }
+
+  const normalizedItems = normalizeChecklistItemProgressItems(
+    progress.items,
+    checklist.checklist.items ?? [],
+  );
+
+  if (normalizedItems.length === 0) {
+    return undefined;
+  }
+
+  return {
+    checklist,
+    progress: {
+      ...progress,
+      items: normalizedItems,
+    },
   };
 }

@@ -406,6 +406,43 @@ export const runtimePersistenceMigrations = [
         ON runroot_audit_catalog_assignment_checklists (operator_id, updated_at DESC, catalog_entry_id ASC)`,
     ],
   },
+  {
+    id: "0010_audit_catalog_checklist_item_progress",
+    postgres: [
+      `CREATE TABLE IF NOT EXISTS runroot_audit_catalog_checklist_item_progress (
+        catalog_entry_id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL,
+        operator_id TEXT NOT NULL,
+        scope_id TEXT NOT NULL,
+        completion_note TEXT,
+        progress_items TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        data TEXT NOT NULL
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_runroot_audit_catalog_checklist_item_progress_scope
+        ON runroot_audit_catalog_checklist_item_progress (scope_id, updated_at DESC, catalog_entry_id ASC)`,
+      `CREATE INDEX IF NOT EXISTS idx_runroot_audit_catalog_checklist_item_progress_operator
+        ON runroot_audit_catalog_checklist_item_progress (operator_id, updated_at DESC, catalog_entry_id ASC)`,
+    ],
+    sqlite: [
+      `CREATE TABLE IF NOT EXISTS runroot_audit_catalog_checklist_item_progress (
+        catalog_entry_id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL,
+        operator_id TEXT NOT NULL,
+        scope_id TEXT NOT NULL,
+        completion_note TEXT,
+        progress_items TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        data TEXT NOT NULL
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_runroot_audit_catalog_checklist_item_progress_scope
+        ON runroot_audit_catalog_checklist_item_progress (scope_id, updated_at DESC, catalog_entry_id ASC)`,
+      `CREATE INDEX IF NOT EXISTS idx_runroot_audit_catalog_checklist_item_progress_operator
+        ON runroot_audit_catalog_checklist_item_progress (operator_id, updated_at DESC, catalog_entry_id ASC)`,
+    ],
+  },
 ] as const satisfies readonly PersistenceMigration[];
 
 export function getRuntimePersistenceMigrationStatements(
