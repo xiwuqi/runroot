@@ -275,4 +275,24 @@ Status: completed
   than threaded comments, broader review workflow engines, broader multi-user
   curation, or broad observability and analytics platform work
 
-Status: completed on branch
+Status: completed
+
+## Phase 21: Cross-Run Audit Catalog Checklist Item Progress and Completion Notes
+
+- add a shared audit-catalog checklist-item-progress contract over the existing
+  assignment-checklist and review-assignment paths rather than introducing a
+  broader review workflow engine or threaded collaboration product
+- expose minimal progress, list-progressed, inspect-progress, clear-progress,
+  and apply paths through the existing seams in SDK, API, CLI, and web
+- keep operator surfaces thin while allowing assigned reviewed presets to
+  carry stable per-item checklist progress and a thin completion note without
+  expanding into threaded collaboration, fine-grained RBAC, multi-tenant
+  access, dashboards, search, or analytics products
+- execute against the formal handoff in
+  [docs/architecture/phase-21-handoff.md](./architecture/phase-21-handoff.md)
+- keep the phase focused on checklist item progress and completion notes
+  rather than broader checklist orchestration, broader review workflow
+  engines, broader multi-user curation, or broad observability and analytics
+  platform work
+
+Status: scope freeze on branch
