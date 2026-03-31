@@ -25,7 +25,7 @@ describe("@runroot/api", () => {
     expect(response.json()).toEqual({
       status: "ok",
       project: "Runroot",
-      phase: 22,
+      phase: 23,
     });
   });
 
@@ -1618,6 +1618,301 @@ describe("@runroot/api", () => {
     );
     expect(blockedAfterClearResponse.statusCode).toBe(200);
     expect(blockedAfterClearPayload.blocked.totalCount).toBe(0);
+  });
+
+  it("resolves, lists-resolved, inspects, clears, and reapplies blocked catalog entries through the operator API", async () => {
+    const workspaceRoot = await mkdtemp(
+      join(tmpdir(), "runroot-api-resolutions-"),
+    );
+    app = buildServer({
+      operator: createRunrootOperatorService({
+        catalogEntryIdGenerator: () => "catalog_entry_resolution_api",
+        operatorId: "ops_oncall",
+        operatorScopeId: "ops",
+        savedViewIdGenerator: () => "saved_view_resolution_api",
+        workspacePath: join(workspaceRoot, "workspace.json"),
+      }),
+    });
+
+    const createResponse = await app.inject({
+      method: "POST",
+      payload: {
+        input: {
+          approvalRequired: false,
+          commandAlias: "print-ready",
+          runbookId: "node-health-check",
+        },
+        templateId: "shell-runbook-flow",
+      },
+      url: "/runs",
+    });
+    const createdPayload = createResponse.json() as {
+      run: {
+        id: string;
+      };
+    };
+    const saveResponse = await app.inject({
+      method: "POST",
+      payload: {
+        name: "Saved resolution detail",
+        navigation: {
+          drilldown: {
+            runId: createdPayload.run.id,
+          },
+          summary: {
+            definitionId: "shell-runbook-flow",
+          },
+        },
+        refs: {
+          auditViewRunId: createdPayload.run.id,
+        },
+      },
+      url: "/audit/saved-views",
+    });
+    const savedViewPayload = saveResponse.json() as {
+      savedView: {
+        id: string;
+      };
+    };
+    const publishResponse = await app.inject({
+      method: "POST",
+      payload: {
+        savedViewId: savedViewPayload.savedView.id,
+      },
+      url: "/audit/catalog",
+    });
+    const publishedPayload = publishResponse.json() as {
+      catalogEntry: {
+        entry: {
+          id: string;
+        };
+      };
+    };
+    const reviewResponse = await app.inject({
+      method: "POST",
+      payload: {
+        note: "Resolution-ready inline follow-up",
+        state: "reviewed",
+      },
+      url: `/audit/catalog/${publishedPayload.catalogEntry.entry.id}/review`,
+    });
+    const assignmentResponse = await app.inject({
+      method: "POST",
+      payload: {
+        assigneeId: "ops_oncall",
+        handoffNote: "Inline resolutions remain with the owner",
+      },
+      url: `/audit/catalog/${publishedPayload.catalogEntry.entry.id}/assignment`,
+    });
+    const checklistResponse = await app.inject({
+      method: "POST",
+      payload: {
+        items: ["Confirm inline handoff", "Close follow-up"],
+        state: "pending",
+      },
+      url: `/audit/catalog/${publishedPayload.catalogEntry.entry.id}/checklist`,
+    });
+    const progressResponse = await app.inject({
+      method: "POST",
+      payload: {
+        completionNote: "Inline resolution follow-up is underway",
+        items: [
+          {
+            item: "Confirm inline handoff",
+            state: "completed",
+          },
+          {
+            item: "Close follow-up",
+            state: "pending",
+          },
+        ],
+      },
+      url: `/audit/catalog/${publishedPayload.catalogEntry.entry.id}/progress`,
+    });
+    const blockerResponse = await app.inject({
+      method: "POST",
+      payload: {
+        blockerNote: "Waiting for overnight confirmation",
+        items: [
+          {
+            item: "Confirm inline handoff",
+            state: "cleared",
+          },
+          {
+            item: "Close follow-up",
+            state: "blocked",
+          },
+        ],
+      },
+      url: `/audit/catalog/${publishedPayload.catalogEntry.entry.id}/blocker`,
+    });
+    const resolutionResponse = await app.inject({
+      method: "POST",
+      payload: {
+        resolutionNote:
+          "Inline follow-up is ready to close after backup sign-off",
+        items: [
+          {
+            item: "Confirm inline handoff",
+            state: "resolved",
+          },
+          {
+            item: "Close follow-up",
+            state: "unresolved",
+          },
+        ],
+      },
+      url: `/audit/catalog/${publishedPayload.catalogEntry.entry.id}/resolution`,
+    });
+    const resolvedResponse = await app.inject({
+      method: "GET",
+      url: "/audit/catalog/resolved",
+    });
+    const inspectResponse = await app.inject({
+      method: "GET",
+      url: `/audit/catalog/${publishedPayload.catalogEntry.entry.id}/resolution`,
+    });
+    const applyResponse = await app.inject({
+      method: "GET",
+      url: `/audit/catalog/${publishedPayload.catalogEntry.entry.id}/apply`,
+    });
+    const clearResponse = await app.inject({
+      method: "POST",
+      url: `/audit/catalog/${publishedPayload.catalogEntry.entry.id}/resolution/clear`,
+    });
+    const resolvedAfterClearResponse = await app.inject({
+      method: "GET",
+      url: "/audit/catalog/resolved",
+    });
+    const resolutionPayload = resolutionResponse.json() as {
+      resolution: {
+        blocker: {
+          blocker: {
+            blockerNote?: string;
+          };
+        };
+        resolution: {
+          items: Array<{
+            item: string;
+            state: "resolved" | "unresolved";
+          }>;
+          resolutionNote?: string;
+        };
+      };
+    };
+    const resolvedPayload = resolvedResponse.json() as {
+      resolved: {
+        items: Array<{
+          blocker: {
+            progress: {
+              checklist: {
+                assignment: {
+                  review: {
+                    visibility: {
+                      catalogEntry: {
+                        entry: {
+                          id: string;
+                        };
+                      };
+                    };
+                  };
+                };
+              };
+            };
+          };
+          resolution: {
+            resolutionNote?: string;
+          };
+        }>;
+        totalCount: number;
+      };
+    };
+    const inspectPayload = inspectResponse.json() as {
+      resolution: {
+        resolution: {
+          items: Array<{
+            item: string;
+            state: "resolved" | "unresolved";
+          }>;
+          resolutionNote?: string;
+        };
+      };
+    };
+    const applyPayload = applyResponse.json() as {
+      application: {
+        application: {
+          savedView: {
+            id: string;
+          };
+        };
+      };
+    };
+    const clearPayload = clearResponse.json() as {
+      resolution: {
+        resolution: {
+          resolutionNote?: string;
+        };
+      };
+    };
+    const resolvedAfterClearPayload = resolvedAfterClearResponse.json() as {
+      resolved: {
+        totalCount: number;
+      };
+    };
+
+    expect(createResponse.statusCode).toBe(201);
+    expect(reviewResponse.statusCode).toBe(200);
+    expect(assignmentResponse.statusCode).toBe(200);
+    expect(checklistResponse.statusCode).toBe(200);
+    expect(progressResponse.statusCode).toBe(200);
+    expect(blockerResponse.statusCode).toBe(200);
+    expect(resolutionResponse.statusCode).toBe(200);
+    expect(resolutionPayload.resolution.blocker.blocker.blockerNote).toBe(
+      "Waiting for overnight confirmation",
+    );
+    expect(resolutionPayload.resolution.resolution.resolutionNote).toBe(
+      "Inline follow-up is ready to close after backup sign-off",
+    );
+    expect(resolutionPayload.resolution.resolution.items).toEqual([
+      {
+        item: "Confirm inline handoff",
+        state: "resolved",
+      },
+      {
+        item: "Close follow-up",
+        state: "unresolved",
+      },
+    ]);
+    expect(resolvedResponse.statusCode).toBe(200);
+    expect(resolvedPayload.resolved.totalCount).toBe(1);
+    expect(
+      resolvedPayload.resolved.items[0]?.blocker.progress.checklist.assignment
+        .review.visibility.catalogEntry.entry.id,
+    ).toBe("catalog_entry_resolution_api");
+    expect(inspectResponse.statusCode).toBe(200);
+    expect(inspectPayload.resolution.resolution.resolutionNote).toContain(
+      "backup sign-off",
+    );
+    expect(inspectPayload.resolution.resolution.items).toEqual([
+      {
+        item: "Confirm inline handoff",
+        state: "resolved",
+      },
+      {
+        item: "Close follow-up",
+        state: "unresolved",
+      },
+    ]);
+    expect(applyResponse.statusCode).toBe(200);
+    expect(applyPayload.application.application.savedView.id).toBe(
+      savedViewPayload.savedView.id,
+    );
+    expect(clearResponse.statusCode).toBe(200);
+    expect(clearPayload.resolution.resolution.resolutionNote).toBe(
+      "Inline follow-up is ready to close after backup sign-off",
+    );
+    expect(resolvedAfterClearResponse.statusCode).toBe(200);
+    expect(resolvedAfterClearPayload.resolved.totalCount).toBe(0);
   });
 
   it("rejects invalid catalog review state through the operator API", async () => {
