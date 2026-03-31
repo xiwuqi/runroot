@@ -236,4 +236,23 @@ Status: completed
   threaded collaboration, SaaS catalogs, or broad observability and analytics
   platform work
 
-Status: implemented on branch, pending phase review
+Status: completed
+
+## Phase 19: Cross-Run Audit Catalog Review Assignments and Operator Handoffs
+
+- add a shared audit-catalog review-assignment contract over the existing
+  review-signal and visibility paths rather than introducing a collaborative
+  review product or permission framework
+- expose minimal assign, list-assigned, inspect-assignment, clear-assignment,
+  and apply paths through the existing seams in SDK, API, CLI, and web
+- keep operator surfaces thin while allowing reviewed shared presets to be
+  handed off to a specific operator through stable assignment metadata without
+  expanding into threaded collaboration, fine-grained RBAC, multi-tenant
+  access, dashboards, search, or analytics products
+- execute against the formal handoff in
+  [docs/architecture/phase-19-handoff.md](./architecture/phase-19-handoff.md)
+- keep the phase focused on review assignments and operator handoffs rather
+  than threaded comments, review workflows, broader multi-user curation, or
+  broad observability and analytics platform work
+
+Status: suggested scope freeze on branch, pending merge
