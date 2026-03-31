@@ -16,7 +16,7 @@ Runroot focuses on:
 
 ## Current Status
 
-Phase 18 (Cross-Run Audit Catalog Review Signals and Shared Notes) is complete
+Phase 19 (Cross-Run Audit Catalog Review Assignments and Operator Handoffs) is complete
 on this branch. The
 repository now includes:
 
@@ -55,6 +55,10 @@ repository now includes:
 - shared catalog review signals and shared notes that let operators mark
   visible presets as recommended or reviewed through the same SDK, API, CLI,
   and web seams without becoming a threaded collaboration or approval layer
+- shared catalog review assignments and operator handoffs that let operators
+  assign reviewed visible presets through the same SDK, API, CLI, and web
+  seams without becoming a workflow engine, RBAC layer, or collaboration
+  platform
 
 Persisted tool history is additive audit data. It does not become part of the
 shared replay or approval source of truth.
@@ -191,6 +195,12 @@ to visible presets, but they do not expand into threaded collaboration,
 assignments, RBAC, multi-tenant access models, dashboards, search products, or
 analytics platforms.
 
+Phase 19 adds a sixteenth rule: catalog review assignments stay thin and
+operator-facing. They can attach stable assignee and handoff metadata to
+reviewed visible presets, but they do not expand into threaded collaboration,
+workflow engines, RBAC, multi-tenant access models, dashboards, search
+products, or analytics platforms.
+
 ## Example Use Cases
 
 - GitHub issue triage with optional human approval
@@ -219,6 +229,7 @@ analytics platforms.
 - [Audit View Catalogs](./docs/guides/audit-view-catalogs.md)
 - [Audit Catalog Visibility](./docs/guides/audit-catalog-visibility.md)
 - [Audit Catalog Review Signals](./docs/guides/audit-catalog-review-signals.md)
+- [Audit Catalog Review Assignments](./docs/guides/audit-catalog-review-assignments.md)
 - [Release Readiness](./docs/guides/release-readiness.md)
 - [Examples](./examples/README.md)
 - [Web Console](./docs/architecture/web-console.md)

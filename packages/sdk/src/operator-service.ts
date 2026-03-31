@@ -18,6 +18,7 @@ import type { DispatchQueue } from "@runroot/dispatch";
 import type { JsonValue, WorkflowRun } from "@runroot/domain";
 import type { RunrootLogger, RunrootTracer } from "@runroot/observability";
 import {
+  createConfiguredAuditCatalogReviewAssignmentStore,
   createConfiguredAuditCatalogReviewSignalStore,
   createConfiguredAuditCatalogVisibilityStore,
   createConfiguredAuditViewCatalogStore,
@@ -31,6 +32,9 @@ import {
   type CrossRunAuditCatalogEntryApplication,
   type CrossRunAuditCatalogEntryCollection,
   type CrossRunAuditCatalogEntryView,
+  type CrossRunAuditCatalogReviewAssignmentCollection,
+  type CrossRunAuditCatalogReviewAssignmentStore,
+  type CrossRunAuditCatalogReviewAssignmentView,
   type CrossRunAuditCatalogReviewSignalCollection,
   type CrossRunAuditCatalogReviewSignalStore,
   type CrossRunAuditCatalogReviewSignalView,
@@ -52,6 +56,7 @@ import {
   type CrossRunAuditSavedViewNavigationRefs,
   type CrossRunAuditSavedViewStore,
   createCrossRunAuditCatalogQuery,
+  createCrossRunAuditCatalogReviewAssignmentQuery,
   createCrossRunAuditCatalogReviewSignalQuery,
   createCrossRunAuditCatalogVisibilityQuery,
   createCrossRunAuditDrilldownQuery,
@@ -119,6 +124,11 @@ export interface PublishAuditViewCatalogEntryInput {
   readonly savedViewId: string;
 }
 
+export interface AssignAuditCatalogEntryInput {
+  readonly assigneeId: string;
+  readonly handoffNote?: string;
+}
+
 export interface ReviewAuditCatalogEntryInput {
   readonly note?: string;
   readonly state: CrossRunAuditCatalogReviewState;
@@ -127,11 +137,21 @@ export interface ReviewAuditCatalogEntryInput {
 export interface RunrootOperatorService {
   applyCatalogEntry(id: string): Promise<CrossRunAuditCatalogEntryApplication>;
   applySavedView(id: string): Promise<CrossRunAuditSavedViewApplication>;
+  assignCatalogEntry(
+    id: string,
+    input: AssignAuditCatalogEntryInput,
+  ): Promise<CrossRunAuditCatalogReviewAssignmentView>;
   archiveCatalogEntry(id: string): Promise<CrossRunAuditCatalogEntryView>;
+  clearCatalogReviewAssignment(
+    id: string,
+  ): Promise<CrossRunAuditCatalogReviewAssignmentView>;
   clearCatalogReviewSignal(
     id: string,
   ): Promise<CrossRunAuditCatalogReviewSignalView>;
   getCatalogEntry(id: string): Promise<CrossRunAuditCatalogEntryView>;
+  getCatalogReviewAssignment(
+    id: string,
+  ): Promise<CrossRunAuditCatalogReviewAssignmentView>;
   getCatalogReviewSignal(
     id: string,
   ): Promise<CrossRunAuditCatalogReviewSignalView>;
@@ -155,6 +175,7 @@ export interface RunrootOperatorService {
   listAuditDrilldowns(
     filters?: CrossRunAuditDrilldownFilters,
   ): Promise<CrossRunAuditDrilldownResults>;
+  listAssignedCatalogEntries(): Promise<CrossRunAuditCatalogReviewAssignmentCollection>;
   listCatalogEntries(): Promise<CrossRunAuditCatalogEntryCollection>;
   listReviewedCatalogEntries(): Promise<CrossRunAuditCatalogReviewSignalCollection>;
   listVisibleCatalogEntries(): Promise<CrossRunAuditCatalogVisibilityCollection>;
@@ -183,6 +204,7 @@ export interface RunrootOperatorService {
 export interface RunrootOperatorServiceOptions {
   readonly approvalIdGenerator?: () => string;
   readonly catalogEntryIdGenerator?: () => string;
+  readonly catalogReviewAssignmentStore?: CrossRunAuditCatalogReviewAssignmentStore;
   readonly catalogReviewSignalStore?: CrossRunAuditCatalogReviewSignalStore;
   readonly catalogStore?: CrossRunAuditCatalogStore;
   readonly catalogVisibilityStore?: CrossRunAuditCatalogVisibilityStore;
@@ -304,6 +326,19 @@ export function createRunrootOperatorService(
         ? { workspacePath: options.workspacePath }
         : {}),
     });
+  const catalogReviewAssignmentStore =
+    options.catalogReviewAssignmentStore ??
+    createConfiguredAuditCatalogReviewAssignmentStore({
+      ...(options.databaseUrl ? { databaseUrl: options.databaseUrl } : {}),
+      ...(options.env ? { env: options.env } : {}),
+      ...(options.persistenceDriver
+        ? { driver: options.persistenceDriver }
+        : {}),
+      ...(options.sqlitePath ? { sqlitePath: options.sqlitePath } : {}),
+      ...(options.workspacePath
+        ? { workspacePath: options.workspacePath }
+        : {}),
+    });
   const templateRuntimeOptions: CreateTemplateRuntimeBundleOptions = {
     toolObserver: createToolTelemetryObserver({
       history: toolHistory,
@@ -403,6 +438,12 @@ export function createRunrootOperatorService(
       catalogReviewSignalStore,
       crossRunAuditCatalogVisibility,
     );
+  const crossRunAuditCatalogReviewAssignments =
+    createCrossRunAuditCatalogReviewAssignmentQuery(
+      catalogReviewAssignmentStore,
+      crossRunAuditCatalogReviewSignals,
+      crossRunAuditCatalogVisibility,
+    );
   const persistenceLocation = persistenceConfig.location;
 
   return {
@@ -430,6 +471,19 @@ export function createRunrootOperatorService(
       return application;
     },
 
+    async assignCatalogEntry(id, input) {
+      try {
+        return await crossRunAuditCatalogReviewAssignments.setCatalogReviewAssignment(
+          id,
+          operatorIdentity,
+          input,
+          now(),
+        );
+      } catch (error) {
+        throw normalizeCatalogReviewAssignmentError(error, id);
+      }
+    },
+
     async archiveCatalogEntry(id) {
       const visibility = await requireOwnedCatalogVisibility(
         id,
@@ -446,6 +500,20 @@ export function createRunrootOperatorService(
       }
 
       return catalogEntry;
+    },
+
+    async clearCatalogReviewAssignment(id) {
+      const assignment =
+        await crossRunAuditCatalogReviewAssignments.clearCatalogReviewAssignment(
+          id,
+          operatorIdentity,
+        );
+
+      if (!assignment) {
+        throw new OperatorNotFoundError("catalog review assignment", id);
+      }
+
+      return assignment;
     },
 
     async clearCatalogReviewSignal(id) {
@@ -514,6 +582,20 @@ export function createRunrootOperatorService(
       }
 
       return catalogVisibility.catalogEntry;
+    },
+
+    async getCatalogReviewAssignment(id) {
+      const assignment =
+        await crossRunAuditCatalogReviewAssignments.getCatalogReviewAssignment(
+          id,
+          operatorIdentity,
+        );
+
+      if (!assignment) {
+        throw new OperatorNotFoundError("catalog review assignment", id);
+      }
+
+      return assignment;
     },
 
     async getCatalogReviewSignal(id) {
@@ -594,6 +676,12 @@ export function createRunrootOperatorService(
 
     async listAuditDrilldowns(filters) {
       return crossRunAuditDrilldowns.listAuditDrilldowns(filters);
+    },
+
+    async listAssignedCatalogEntries() {
+      return crossRunAuditCatalogReviewAssignments.listAssignedCatalogEntries(
+        operatorIdentity,
+      );
     },
 
     async listCatalogEntries() {
@@ -901,6 +989,40 @@ function normalizeCatalogVisibilityError(
     error.message.includes("can only be updated by owner")
   ) {
     return new OperatorConflictError(error.message);
+  }
+
+  return normalizeOperatorError(error);
+}
+
+function normalizeCatalogReviewAssignmentError(
+  error: unknown,
+  catalogEntryId: string,
+): Error {
+  if (
+    error instanceof OperatorConflictError ||
+    error instanceof OperatorInputError ||
+    error instanceof OperatorNotFoundError
+  ) {
+    return error;
+  }
+
+  if (
+    error instanceof Error &&
+    error.message.startsWith("Catalog review assignments require")
+  ) {
+    return new OperatorInputError(error.message);
+  }
+
+  if (
+    error instanceof Error &&
+    error.message.startsWith(
+      `Catalog entry "${catalogEntryId}" is not reviewed and visible to operator`,
+    )
+  ) {
+    return new OperatorNotFoundError(
+      "catalog review assignment",
+      catalogEntryId,
+    );
   }
 
   return normalizeOperatorError(error);

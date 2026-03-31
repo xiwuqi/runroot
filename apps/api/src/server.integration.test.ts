@@ -1271,4 +1271,303 @@ describe("@runroot/api integration", () => {
     expect(reviewedAfterClearResponse.status).toBe(200);
     expect(reviewedAfterClearPayload.reviewed.totalCount).toBe(0);
   });
+
+  it("serves assign, list-assigned, inspect-assignment, clear-assignment, and apply paths through the network API", async () => {
+    const workspaceRoot = await mkdtemp(
+      join(tmpdir(), "runroot-api-review-assignments-"),
+    );
+    const sqlitePath = join(workspaceRoot, "runroot.sqlite");
+    const inlineOperator = createRunrootOperatorService({
+      executionMode: "inline",
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+    const queuedOperator = createRunrootOperatorService({
+      executionMode: "queued",
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+    const workerService = (
+      await import("@runroot/sdk")
+    ).createRunrootWorkerService({
+      persistenceDriver: "sqlite",
+      sqlitePath,
+      workerId: "worker_assignment_api",
+    });
+    const ownerApp = buildServer({
+      operator: createRunrootOperatorService({
+        catalogEntryIdGenerator: () => "catalog_entry_assignment_api",
+        operatorId: "ops_oncall",
+        operatorScopeId: "ops",
+        persistenceDriver: "sqlite",
+        savedViewIdGenerator: () => "saved_view_assignment_api",
+        sqlitePath,
+      }),
+    });
+    const peerApp = buildServer({
+      operator: createRunrootOperatorService({
+        operatorId: "ops_backup",
+        operatorScopeId: "ops",
+        persistenceDriver: "sqlite",
+        sqlitePath,
+      }),
+    });
+
+    try {
+      const inlineRun = await inlineOperator.startRun({
+        input: {
+          approvalRequired: false,
+          commandAlias: "print-ready",
+          runbookId: "node-health-check",
+        },
+        templateId: "shell-runbook-flow",
+      });
+      const queuedRun = await queuedOperator.startRun({
+        input: {
+          approvalRequired: false,
+          commandAlias: "print-ready",
+          runbookId: "node-health-check",
+        },
+        templateId: "shell-runbook-flow",
+      });
+
+      await workerService.processNextJob();
+
+      const ownerAddress = await ownerApp.listen({
+        host: "127.0.0.1",
+        port: 0,
+      });
+      const peerAddress = await peerApp.listen({
+        host: "127.0.0.1",
+        port: 0,
+      });
+
+      const saveResponse = await fetch(`${ownerAddress}/audit/saved-views`, {
+        body: JSON.stringify({
+          description: "Queued worker assignment preset",
+          name: "Queued worker assignment preset",
+          navigation: {
+            drilldown: {
+              workerId: "worker_assignment_api",
+            },
+            summary: {
+              executionMode: "queued",
+            },
+          },
+          refs: {
+            auditViewRunId: queuedRun.id,
+            drilldownRunId: queuedRun.id,
+          },
+        }),
+        headers: {
+          "content-type": "application/json",
+        },
+        method: "POST",
+      });
+      const savedViewPayload = (await saveResponse.json()) as {
+        savedView: {
+          id: string;
+        };
+      };
+      const publishResponse = await fetch(`${ownerAddress}/audit/catalog`, {
+        body: JSON.stringify({
+          savedViewId: savedViewPayload.savedView.id,
+        }),
+        headers: {
+          "content-type": "application/json",
+        },
+        method: "POST",
+      });
+      const publishedPayload = (await publishResponse.json()) as {
+        catalogEntry: {
+          entry: {
+            id: string;
+          };
+        };
+      };
+      const shareResponse = await fetch(
+        `${ownerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/share`,
+        {
+          method: "POST",
+        },
+      );
+      const reviewResponse = await fetch(
+        `${ownerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/review`,
+        {
+          body: JSON.stringify({
+            note: `Handoff after inline ${inlineRun.id} and queued ${queuedRun.id}`,
+            state: "recommended",
+          }),
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "POST",
+        },
+      );
+      const assignmentResponse = await fetch(
+        `${ownerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/assignment`,
+        {
+          body: JSON.stringify({
+            assigneeId: "ops_backup",
+            handoffNote: `Queued worker ${queuedRun.id} handed to backup`,
+          }),
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "POST",
+        },
+      );
+      const assignedResponse = await fetch(
+        `${peerAddress}/audit/catalog/assigned`,
+      );
+      const inspectResponse = await fetch(
+        `${peerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/assignment`,
+      );
+      const applyResponse = await fetch(
+        `${peerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/apply`,
+      );
+      const clearResponse = await fetch(
+        `${ownerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/assignment/clear`,
+        {
+          method: "POST",
+        },
+      );
+      const assignedAfterClearResponse = await fetch(
+        `${peerAddress}/audit/catalog/assigned`,
+      );
+      const sharePayload = (await shareResponse.json()) as {
+        visibility: {
+          visibility: {
+            state: "shared";
+          };
+        };
+      };
+      const reviewPayload = (await reviewResponse.json()) as {
+        review: {
+          review: {
+            note?: string;
+            state: "recommended" | "reviewed";
+          };
+        };
+      };
+      const assignmentPayload = (await assignmentResponse.json()) as {
+        assignment: {
+          assignment: {
+            assigneeId: string;
+            assignerId: string;
+            handoffNote?: string;
+            state: "assigned";
+          };
+        };
+      };
+      const assignedPayload = (await assignedResponse.json()) as {
+        assigned: {
+          items: Array<{
+            assignment: {
+              assigneeId: string;
+            };
+            review: {
+              visibility: {
+                catalogEntry: {
+                  entry: {
+                    id: string;
+                  };
+                };
+              };
+            };
+          }>;
+          totalCount: number;
+        };
+      };
+      const inspectPayload = (await inspectResponse.json()) as {
+        assignment: {
+          assignment: {
+            assigneeId: string;
+            handoffNote?: string;
+          };
+        };
+      };
+      const applyPayload = (await applyResponse.json()) as {
+        application: {
+          application: {
+            navigation: {
+              drilldowns: Array<{
+                result: {
+                  runId: string;
+                };
+              }>;
+              totalSummaryCount: number;
+            };
+            savedView: {
+              id: string;
+            };
+          };
+        };
+      };
+      const clearPayload = (await clearResponse.json()) as {
+        assignment: {
+          assignment: {
+            assigneeId: string;
+            state: "assigned";
+          };
+        };
+      };
+      const assignedAfterClearPayload =
+        (await assignedAfterClearResponse.json()) as {
+          assigned: {
+            totalCount: number;
+          };
+        };
+
+      expect(saveResponse.status).toBe(201);
+      expect(publishResponse.status).toBe(201);
+      expect(shareResponse.status).toBe(200);
+      expect(sharePayload.visibility.visibility.state).toBe("shared");
+      expect(reviewResponse.status).toBe(200);
+      expect(reviewPayload.review.review.state).toBe("recommended");
+      expect(reviewPayload.review.review.note).toContain(inlineRun.id);
+      expect(assignmentResponse.status).toBe(200);
+      expect(assignmentPayload.assignment.assignment).toMatchObject({
+        assigneeId: "ops_backup",
+        assignerId: "ops_oncall",
+        handoffNote: `Queued worker ${queuedRun.id} handed to backup`,
+        state: "assigned",
+      });
+      expect(assignedResponse.status).toBe(200);
+      expect(assignedPayload.assigned.totalCount).toBe(1);
+      expect(
+        assignedPayload.assigned.items[0]?.review.visibility.catalogEntry.entry
+          .id,
+      ).toBe("catalog_entry_assignment_api");
+      expect(assignedPayload.assigned.items[0]?.assignment.assigneeId).toBe(
+        "ops_backup",
+      );
+      expect(inspectResponse.status).toBe(200);
+      expect(inspectPayload.assignment.assignment.assigneeId).toBe(
+        "ops_backup",
+      );
+      expect(inspectPayload.assignment.assignment.handoffNote).toContain(
+        queuedRun.id,
+      );
+      expect(applyResponse.status).toBe(200);
+      expect(applyPayload.application.application.savedView.id).toBe(
+        "saved_view_assignment_api",
+      );
+      expect(
+        applyPayload.application.application.navigation.totalSummaryCount,
+      ).toBe(1);
+      expect(
+        applyPayload.application.application.navigation.drilldowns[0]?.result
+          .runId,
+      ).toBe(queuedRun.id);
+      expect(clearResponse.status).toBe(200);
+      expect(clearPayload.assignment.assignment.assigneeId).toBe("ops_backup");
+      expect(clearPayload.assignment.assignment.state).toBe("assigned");
+      expect(assignedAfterClearResponse.status).toBe(200);
+      expect(assignedAfterClearPayload.assigned.totalCount).toBe(0);
+    } finally {
+      await ownerApp.close();
+      await peerApp.close();
+    }
+  });
 });

@@ -25,6 +25,9 @@ Phase 6 introduces minimal observability seams without changing replay semantics
 - catalog review signals and shared notes that annotate visible presets without
   becoming replay, approval, threaded collaboration, or a review workflow
   product
+- catalog review assignments and operator handoffs that annotate reviewed
+  visible presets without becoming replay, approval, workflow orchestration,
+  or a collaboration platform
 - correlation attributes for run, step, dispatch job, worker, and tool
   identifiers across inline and queued execution
 
@@ -65,6 +68,9 @@ Phase 6 introduces minimal observability seams without changing replay semantics
 - catalog review signals stay thin and operator-facing instead of turning into
   threaded collaboration, assignments, review workflows, dashboards, search,
   or analytics platforms
+- catalog review assignments stay thin and operator-facing instead of turning
+  into threaded collaboration, workflow engines, RBAC, dashboards, search, or
+  analytics platforms
 
 ## Minimal Local Path
 

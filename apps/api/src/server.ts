@@ -231,6 +231,12 @@ export function buildServer(options: BuildServerOptions = {}) {
     })),
   );
 
+  app.get("/audit/catalog/assigned", async (_request, reply) =>
+    handleOperatorResponse(reply, async () => ({
+      assigned: await operator.listAssignedCatalogEntries(),
+    })),
+  );
+
   app.post("/audit/saved-views", async (request, reply) =>
     handleOperatorResponse(reply, async () => {
       const body = request.body as {
@@ -348,6 +354,20 @@ export function buildServer(options: BuildServerOptions = {}) {
     }),
   );
 
+  app.get("/audit/catalog/:catalogEntryId/assignment", async (request, reply) =>
+    handleOperatorResponse(reply, async () => {
+      const params = request.params as {
+        readonly catalogEntryId: string;
+      };
+
+      return {
+        assignment: await operator.getCatalogReviewAssignment(
+          params.catalogEntryId,
+        ),
+      };
+    }),
+  );
+
   app.get("/audit/catalog/:catalogEntryId", async (request, reply) =>
     handleOperatorResponse(reply, async () => {
       const params = request.params as {
@@ -408,6 +428,33 @@ export function buildServer(options: BuildServerOptions = {}) {
   );
 
   app.post(
+    "/audit/catalog/:catalogEntryId/assignment",
+    async (request, reply) =>
+      handleOperatorResponse(reply, async () => {
+        const params = request.params as {
+          readonly catalogEntryId: string;
+        };
+        const body = request.body as {
+          readonly assigneeId?: string;
+          readonly handoffNote?: string;
+        };
+
+        if (!body?.assigneeId) {
+          throw new OperatorInputError("assigneeId is required.");
+        }
+
+        return {
+          assignment: await operator.assignCatalogEntry(params.catalogEntryId, {
+            ...(body.handoffNote !== undefined
+              ? { handoffNote: body.handoffNote }
+              : {}),
+            assigneeId: body.assigneeId,
+          }),
+        };
+      }),
+  );
+
+  app.post(
     "/audit/catalog/:catalogEntryId/review/clear",
     async (request, reply) =>
       handleOperatorResponse(reply, async () => {
@@ -417,6 +464,22 @@ export function buildServer(options: BuildServerOptions = {}) {
 
         return {
           review: await operator.clearCatalogReviewSignal(
+            params.catalogEntryId,
+          ),
+        };
+      }),
+  );
+
+  app.post(
+    "/audit/catalog/:catalogEntryId/assignment/clear",
+    async (request, reply) =>
+      handleOperatorResponse(reply, async () => {
+        const params = request.params as {
+          readonly catalogEntryId: string;
+        };
+
+        return {
+          assignment: await operator.clearCatalogReviewAssignment(
             params.catalogEntryId,
           ),
         };

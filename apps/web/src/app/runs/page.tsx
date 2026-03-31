@@ -1,5 +1,6 @@
 import {
   AuditViewCatalogsView,
+  CatalogReviewAssignmentsView,
   CatalogReviewSignalsView,
   ConsoleShell,
   CrossRunAuditNavigationView,
@@ -15,6 +16,7 @@ import {
 } from "../../lib/navigation";
 import {
   type ApiAuditCatalogEntryApplication,
+  type ApiAuditCatalogReviewAssignmentView,
   type ApiAuditCatalogReviewSignalView,
   type ApiAuditCatalogVisibilityView,
   type ApiAuditNavigationFilters,
@@ -46,14 +48,17 @@ export default async function RunsPage({
     const drilldownFilters = readAuditDrilldownFilters(resolvedSearchParams);
     const [
       runs,
+      assignedEntries,
       reviewedEntries,
       catalogEntries,
       savedViews,
       navigationResult,
       catalogVisibility,
       catalogReviewSignal,
+      catalogReviewAssignment,
     ] = await Promise.all([
       api.listRuns(),
+      api.listAssignedAuditCatalogEntries(),
       api.listReviewedAuditCatalogEntries(),
       api.listVisibleAuditCatalogEntries(),
       api.listSavedAuditViews(),
@@ -71,15 +76,24 @@ export default async function RunsPage({
       catalogEntryId
         ? api.getAuditCatalogReviewSignal(catalogEntryId).catch(() => undefined)
         : Promise.resolve(undefined),
+      catalogEntryId
+        ? api
+            .getAuditCatalogReviewAssignment(catalogEntryId)
+            .catch(() => undefined)
+        : Promise.resolve(undefined),
     ]);
     const sortedRuns = [...runs].sort(compareRunsByUpdatedAt);
     let navigation: ApiAuditNavigationView;
+    let activeCatalogReviewAssignment:
+      | ApiAuditCatalogReviewAssignmentView
+      | undefined;
     let activeCatalogEntry: ApiAuditCatalogVisibilityView | undefined;
     let activeCatalogReviewSignal: ApiAuditCatalogReviewSignalView | undefined;
     let activeSavedView: ApiAuditSavedView | undefined;
 
     if (hasCatalogEntryApplication(navigationResult)) {
       activeCatalogEntry = catalogVisibility;
+      activeCatalogReviewAssignment = catalogReviewAssignment;
       activeCatalogReviewSignal = catalogReviewSignal;
       activeSavedView = navigationResult.application.savedView;
       navigation = navigationResult.application.navigation;
@@ -96,11 +110,18 @@ export default async function RunsPage({
         title="Runs"
       >
         <FlashBanner message={flash} />
+        <CatalogReviewAssignmentsView
+          assignedEntries={assignedEntries}
+          {...(activeCatalogReviewAssignment
+            ? { activeCatalogReviewAssignment }
+            : {})}
+        />
         <CatalogReviewSignalsView
           reviewedEntries={reviewedEntries}
           {...(activeCatalogReviewSignal ? { activeCatalogReviewSignal } : {})}
         />
         <AuditViewCatalogsView
+          assignedEntries={assignedEntries}
           catalogEntries={catalogEntries}
           reviewedEntries={reviewedEntries}
           {...(activeCatalogEntry ? { activeCatalogEntry } : {})}

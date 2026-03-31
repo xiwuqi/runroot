@@ -1494,4 +1494,440 @@ describe("@runroot/cli integration", () => {
     expect(clearReviewPayload.review.review.state).toBe("recommended");
     expect(reviewedAfterClearPayload.reviewed.totalCount).toBe(0);
   });
+
+  it("assigns, lists-assigned, inspects, clears, and reapplies reviewed catalog entries through the CLI", async () => {
+    const workspaceRoot = await mkdtemp(
+      join(tmpdir(), "runroot-cli-review-assignments-"),
+    );
+    const sqlitePath = join(workspaceRoot, "runroot.sqlite");
+    const inputFile = join(workspaceRoot, "shell-runbook.json");
+    await writeFile(
+      inputFile,
+      JSON.stringify({
+        approvalRequired: false,
+        commandAlias: "print-ready",
+        runbookId: "node-health-check",
+      }),
+    );
+    const inlineStartIo = createIo();
+    const queuedStartIo = createIo();
+    const saveIo = createIo();
+    const publishIo = createIo();
+    const shareIo = createIo();
+    const reviewIo = createIo();
+    const assignIo = createIo();
+    const assignedOwnerIo = createIo();
+    const inspectAssignmentIo = createIo();
+    const assignedPeerIo = createIo();
+    const applyIo = createIo();
+    const clearAssignmentIo = createIo();
+    const assignedAfterClearIo = createIo();
+
+    await runCli(
+      ["runs", "start", "shell-runbook-flow", "--input-file", inputFile],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_oncall",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: inlineStartIo.io,
+      },
+    );
+    const inlineRun = JSON.parse(inlineStartIo.stdout.join("")) as {
+      run: {
+        id: string;
+      };
+    };
+
+    await runCli(
+      ["runs", "start", "shell-runbook-flow", "--input-file", inputFile],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_EXECUTION_MODE: "queued",
+          RUNROOT_OPERATOR_ID: "ops_oncall",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: queuedStartIo.io,
+      },
+    );
+    const queuedRun = JSON.parse(queuedStartIo.stdout.join("")) as {
+      run: {
+        id: string;
+      };
+    };
+
+    const worker = createRunrootWorkerService({
+      persistenceDriver: "sqlite",
+      sqlitePath,
+      workerId: "worker_cli_assignment",
+    });
+    await worker.processNextJob();
+
+    await runCli(
+      [
+        "audit",
+        "saved-views",
+        "save",
+        "--name",
+        "Queued assignment preset",
+        "--description",
+        "Saved queued worker assignment preset",
+        "--execution-mode",
+        "queued",
+        "--worker-id",
+        "worker_cli_assignment",
+        "--audit-view-run-id",
+        queuedRun.run.id,
+        "--drilldown-run-id",
+        queuedRun.run.id,
+      ],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_oncall",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: saveIo.io,
+      },
+    );
+    const savedViewPayload = JSON.parse(saveIo.stdout.join("")) as {
+      savedView: {
+        id: string;
+      };
+    };
+
+    const publishExitCode = await runCli(
+      ["audit", "catalog", "publish", savedViewPayload.savedView.id],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_oncall",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: publishIo.io,
+      },
+    );
+    const publishedPayload = JSON.parse(publishIo.stdout.join("")) as {
+      catalogEntry: {
+        entry: {
+          id: string;
+        };
+      };
+    };
+    const shareExitCode = await runCli(
+      ["audit", "catalog", "share", publishedPayload.catalogEntry.entry.id],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_oncall",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: shareIo.io,
+      },
+    );
+    const reviewExitCode = await runCli(
+      [
+        "audit",
+        "catalog",
+        "review",
+        publishedPayload.catalogEntry.entry.id,
+        "--state",
+        "recommended",
+        "--note",
+        `Queued preset reviewed after inline ${inlineRun.run.id}`,
+      ],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_oncall",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: reviewIo.io,
+      },
+    );
+    const assignExitCode = await runCli(
+      [
+        "audit",
+        "catalog",
+        "assign",
+        publishedPayload.catalogEntry.entry.id,
+        "--assignee",
+        "ops_backup",
+        "--handoff-note",
+        `Queued worker ${queuedRun.run.id} handed to backup`,
+      ],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_oncall",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: assignIo.io,
+      },
+    );
+    const assignedOwnerExitCode = await runCli(
+      ["audit", "catalog", "assigned"],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_oncall",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: assignedOwnerIo.io,
+      },
+    );
+    const inspectAssignmentExitCode = await runCli(
+      [
+        "audit",
+        "catalog",
+        "inspect-assignment",
+        publishedPayload.catalogEntry.entry.id,
+      ],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_oncall",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: inspectAssignmentIo.io,
+      },
+    );
+    const assignedPeerExitCode = await runCli(
+      ["audit", "catalog", "assigned"],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_backup",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: assignedPeerIo.io,
+      },
+    );
+    const applyExitCode = await runCli(
+      ["audit", "catalog", "apply", publishedPayload.catalogEntry.entry.id],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_backup",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: applyIo.io,
+      },
+    );
+    const clearAssignmentExitCode = await runCli(
+      [
+        "audit",
+        "catalog",
+        "clear-assignment",
+        publishedPayload.catalogEntry.entry.id,
+      ],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_oncall",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: clearAssignmentIo.io,
+      },
+    );
+    const assignedAfterClearExitCode = await runCli(
+      ["audit", "catalog", "assigned"],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_backup",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: assignedAfterClearIo.io,
+      },
+    );
+    const sharePayload = JSON.parse(shareIo.stdout.join("")) as {
+      visibility: {
+        visibility: {
+          state: "shared";
+        };
+      };
+    };
+    const reviewPayload = JSON.parse(reviewIo.stdout.join("")) as {
+      review: {
+        review: {
+          note?: string;
+          state: "recommended" | "reviewed";
+        };
+      };
+    };
+    const assignPayload = JSON.parse(assignIo.stdout.join("")) as {
+      assignment: {
+        assignment: {
+          assigneeId: string;
+          assignerId: string;
+          handoffNote?: string;
+          state: "assigned";
+        };
+      };
+    };
+    const assignedOwnerPayload = JSON.parse(
+      assignedOwnerIo.stdout.join(""),
+    ) as {
+      assigned: {
+        items: Array<{
+          assignment: {
+            assigneeId: string;
+          };
+          review: {
+            visibility: {
+              catalogEntry: {
+                entry: {
+                  id: string;
+                };
+              };
+            };
+          };
+        }>;
+        totalCount: number;
+      };
+    };
+    const inspectAssignmentPayload = JSON.parse(
+      inspectAssignmentIo.stdout.join(""),
+    ) as {
+      assignment: {
+        assignment: {
+          assigneeId: string;
+          handoffNote?: string;
+        };
+      };
+    };
+    const assignedPeerPayload = JSON.parse(assignedPeerIo.stdout.join("")) as {
+      assigned: {
+        items: Array<{
+          review: {
+            visibility: {
+              catalogEntry: {
+                entry: {
+                  id: string;
+                };
+              };
+            };
+          };
+        }>;
+        totalCount: number;
+      };
+    };
+    const applyPayload = JSON.parse(applyIo.stdout.join("")) as {
+      application: {
+        application: {
+          navigation: {
+            drilldowns: Array<{
+              result: {
+                runId: string;
+              };
+            }>;
+            totalSummaryCount: number;
+          };
+          savedView: {
+            id: string;
+          };
+        };
+      };
+    };
+    const clearAssignmentPayload = JSON.parse(
+      clearAssignmentIo.stdout.join(""),
+    ) as {
+      assignment: {
+        assignment: {
+          assigneeId: string;
+          state: "assigned";
+        };
+      };
+    };
+    const assignedAfterClearPayload = JSON.parse(
+      assignedAfterClearIo.stdout.join(""),
+    ) as {
+      assigned: {
+        totalCount: number;
+      };
+    };
+
+    expect(publishExitCode).toBe(0);
+    expect(shareExitCode).toBe(0);
+    expect(reviewExitCode).toBe(0);
+    expect(assignExitCode).toBe(0);
+    expect(assignedOwnerExitCode).toBe(0);
+    expect(inspectAssignmentExitCode).toBe(0);
+    expect(assignedPeerExitCode).toBe(0);
+    expect(applyExitCode).toBe(0);
+    expect(clearAssignmentExitCode).toBe(0);
+    expect(assignedAfterClearExitCode).toBe(0);
+    expect(sharePayload.visibility.visibility.state).toBe("shared");
+    expect(reviewPayload.review.review.state).toBe("recommended");
+    expect(reviewPayload.review.review.note).toContain(inlineRun.run.id);
+    expect(assignPayload.assignment.assignment).toMatchObject({
+      assigneeId: "ops_backup",
+      assignerId: "ops_oncall",
+      handoffNote: `Queued worker ${queuedRun.run.id} handed to backup`,
+      state: "assigned",
+    });
+    expect(assignedOwnerPayload.assigned.totalCount).toBe(1);
+    expect(
+      assignedOwnerPayload.assigned.items[0]?.review.visibility.catalogEntry
+        .entry.id,
+    ).toBe(publishedPayload.catalogEntry.entry.id);
+    expect(assignedOwnerPayload.assigned.items[0]?.assignment.assigneeId).toBe(
+      "ops_backup",
+    );
+    expect(inspectAssignmentPayload.assignment.assignment.assigneeId).toBe(
+      "ops_backup",
+    );
+    expect(
+      inspectAssignmentPayload.assignment.assignment.handoffNote,
+    ).toContain(queuedRun.run.id);
+    expect(assignedPeerPayload.assigned.totalCount).toBe(1);
+    expect(
+      assignedPeerPayload.assigned.items[0]?.review.visibility.catalogEntry
+        .entry.id,
+    ).toBe(publishedPayload.catalogEntry.entry.id);
+    expect(applyPayload.application.application.savedView.id).toBe(
+      savedViewPayload.savedView.id,
+    );
+    expect(
+      applyPayload.application.application.navigation.totalSummaryCount,
+    ).toBe(1);
+    expect(
+      applyPayload.application.application.navigation.drilldowns[0]?.result
+        .runId,
+    ).toBe(queuedRun.run.id);
+    expect(clearAssignmentPayload.assignment.assignment.assigneeId).toBe(
+      "ops_backup",
+    );
+    expect(clearAssignmentPayload.assignment.assignment.state).toBe("assigned");
+    expect(assignedAfterClearPayload.assigned.totalCount).toBe(0);
+  });
 });

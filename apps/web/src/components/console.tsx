@@ -2,6 +2,8 @@ import type { ReactNode } from "react";
 import type { FlashMessage } from "../lib/navigation";
 import type {
   ApiApproval,
+  ApiAuditCatalogReviewAssignmentCollection,
+  ApiAuditCatalogReviewAssignmentView,
   ApiAuditCatalogReviewSignalCollection,
   ApiAuditCatalogReviewSignalView,
   ApiAuditCatalogVisibilityCollection,
@@ -138,6 +140,131 @@ export function RunsListView({
   );
 }
 
+export function CatalogReviewAssignmentsView({
+  activeCatalogReviewAssignment,
+  assignedEntries,
+}: Readonly<{
+  activeCatalogReviewAssignment?: ApiAuditCatalogReviewAssignmentView;
+  assignedEntries: ApiAuditCatalogReviewAssignmentCollection;
+}>) {
+  return (
+    <section className="card">
+      <div className="row spread">
+        <div>
+          <div className="card-eyebrow">
+            Phase 19 / Catalog Review Assignments
+          </div>
+          <h2>Catalog review assignments</h2>
+          <p className="empty-copy">
+            Assign reviewed presets to another operator with a thin handoff note
+            without turning the console into a threaded collaboration or
+            permission product.
+          </p>
+        </div>
+        <div className="timeline-count">
+          {assignedEntries.totalCount} assigned preset(s)
+        </div>
+      </div>
+
+      {activeCatalogReviewAssignment ? (
+        <div className="inline-note">
+          Active assignment:{" "}
+          <strong>
+            {
+              activeCatalogReviewAssignment.review.visibility.catalogEntry.entry
+                .name
+            }
+          </strong>
+          {" · "}assignee {activeCatalogReviewAssignment.assignment.assigneeId}
+          {activeCatalogReviewAssignment.assignment.handoffNote
+            ? ` · ${activeCatalogReviewAssignment.assignment.handoffNote}`
+            : ""}
+        </div>
+      ) : null}
+
+      {assignedEntries.items.length === 0 ? (
+        <p className="empty-copy">
+          No review assignments yet. Review a visible preset first, then assign
+          it through the shared operator seam.
+        </p>
+      ) : (
+        <ol className="timeline-list">
+          {assignedEntries.items.map((assignmentView) => (
+            <li
+              className="timeline-entry"
+              key={assignmentView.review.visibility.catalogEntry.entry.id}
+            >
+              <div className="row spread">
+                <div>
+                  <strong>
+                    {assignmentView.review.visibility.catalogEntry.entry.name}
+                  </strong>
+                  <div className="timeline-meta">
+                    {assignmentView.assignment.state} ·{" "}
+                    {assignmentView.review.review.state}
+                    {" · "}
+                    {assignmentView.review.visibility.visibility.state}
+                  </div>
+                </div>
+                <span>
+                  {formatTimestamp(assignmentView.assignment.updatedAt)}
+                </span>
+              </div>
+              {assignmentView.assignment.handoffNote ? (
+                <p className="empty-copy">
+                  {assignmentView.assignment.handoffNote}
+                </p>
+              ) : null}
+              <div className="timeline-meta">
+                assigner {assignmentView.assignment.assignerId} · assignee{" "}
+                {assignmentView.assignment.assigneeId}
+                {" · "}scope {assignmentView.assignment.scopeId}
+              </div>
+              <div className="row spread">
+                <a
+                  className="link-button"
+                  href={buildCatalogEntryHref(
+                    assignmentView.review.visibility.catalogEntry.entry.id,
+                  )}
+                >
+                  Apply assigned preset
+                </a>
+                <form
+                  action="/runs/catalog"
+                  className="action-form"
+                  method="post"
+                >
+                  <input
+                    name="returnTo"
+                    type="hidden"
+                    value={buildCatalogEntryHref(
+                      assignmentView.review.visibility.catalogEntry.entry.id,
+                    )}
+                  />
+                  <input name="intent" type="hidden" value="clear-assignment" />
+                  <input
+                    name="catalogEntryId"
+                    type="hidden"
+                    value={
+                      assignmentView.review.visibility.catalogEntry.entry.id
+                    }
+                  />
+                  <button type="submit">Clear assignment</button>
+                </form>
+              </div>
+              {activeCatalogReviewAssignment?.review.visibility.catalogEntry
+                .entry.id ===
+              assignmentView.review.visibility.catalogEntry.entry.id ? (
+                <div className="timeline-meta">Currently applied</div>
+              ) : null}
+            </li>
+          ))}
+        </ol>
+      )}
+    </section>
+  );
+}
+
 export function CatalogReviewSignalsView({
   activeCatalogReviewSignal,
   reviewedEntries,
@@ -247,13 +374,20 @@ export function CatalogReviewSignalsView({
 
 export function AuditViewCatalogsView({
   activeCatalogEntry,
+  assignedEntries,
   catalogEntries,
   reviewedEntries,
 }: Readonly<{
   activeCatalogEntry?: ApiAuditCatalogVisibilityView;
+  assignedEntries: ApiAuditCatalogReviewAssignmentCollection;
   catalogEntries: ApiAuditCatalogVisibilityCollection;
   reviewedEntries: ApiAuditCatalogReviewSignalCollection;
 }>) {
+  const assignmentsByCatalogEntryId = new Map(
+    assignedEntries.items.map(
+      (item) => [item.review.visibility.catalogEntry.entry.id, item] as const,
+    ),
+  );
   const reviewSignalsByCatalogEntryId = new Map(
     reviewedEntries.items.map(
       (item) => [item.visibility.catalogEntry.entry.id, item] as const,
@@ -300,6 +434,9 @@ export function AuditViewCatalogsView({
               key={catalogEntry.catalogEntry.entry.id}
             >
               {(() => {
+                const assignment = assignmentsByCatalogEntryId.get(
+                  catalogEntry.catalogEntry.entry.id,
+                );
                 const reviewSignal = reviewSignalsByCatalogEntryId.get(
                   catalogEntry.catalogEntry.entry.id,
                 );
@@ -315,6 +452,9 @@ export function AuditViewCatalogsView({
                           {reviewSignal
                             ? ` · ${reviewSignal.review.state}`
                             : ""}
+                          {assignment
+                            ? ` · assigned to ${assignment.assignment.assigneeId}`
+                            : ""}
                         </div>
                       </div>
                       <span>
@@ -328,6 +468,11 @@ export function AuditViewCatalogsView({
                     ) : null}
                     {reviewSignal?.review.note ? (
                       <p className="empty-copy">{reviewSignal.review.note}</p>
+                    ) : null}
+                    {assignment?.assignment.handoffNote ? (
+                      <p className="empty-copy">
+                        {assignment.assignment.handoffNote}
+                      </p>
                     ) : null}
                     <div className="timeline-meta">
                       saved view {catalogEntry.catalogEntry.savedView.id}
@@ -343,6 +488,9 @@ export function AuditViewCatalogsView({
                       {catalogEntry.visibility.scopeId}
                       {reviewSignal
                         ? ` · reviewer ${reviewSignal.review.operatorId}`
+                        : ""}
+                      {assignment
+                        ? ` · assigner ${assignment.assignment.assignerId}`
                         : ""}
                     </div>
                     <div className="timeline-meta">
@@ -404,6 +552,57 @@ export function AuditViewCatalogsView({
                         </button>
                       </div>
                     </form>
+                    {reviewSignal ? (
+                      <form
+                        action="/runs/catalog"
+                        className="decision-form"
+                        method="post"
+                      >
+                        <input
+                          name="returnTo"
+                          type="hidden"
+                          value={buildCatalogEntryHref(
+                            catalogEntry.catalogEntry.entry.id,
+                          )}
+                        />
+                        <input name="intent" type="hidden" value="assign" />
+                        <input
+                          name="catalogEntryId"
+                          type="hidden"
+                          value={catalogEntry.catalogEntry.entry.id}
+                        />
+                        <div className="data-grid">
+                          <label>
+                            <span>Assignee</span>
+                            <input
+                              defaultValue={
+                                assignment?.assignment.assigneeId ?? ""
+                              }
+                              name="assigneeId"
+                              placeholder="operator id"
+                              type="text"
+                            />
+                          </label>
+                          <label>
+                            <span>Handoff note</span>
+                            <input
+                              defaultValue={
+                                assignment?.assignment.handoffNote ?? ""
+                              }
+                              name="handoffNote"
+                              placeholder="Optional thin handoff note"
+                              type="text"
+                            />
+                          </label>
+                        </div>
+                        <div className="row spread">
+                          <div />
+                          <button type="submit">
+                            {assignment ? "Update assignment" : "Assign preset"}
+                          </button>
+                        </div>
+                      </form>
+                    ) : null}
                     <div className="row spread">
                       <a
                         className="link-button"
@@ -438,6 +637,32 @@ export function AuditViewCatalogsView({
                               value={catalogEntry.catalogEntry.entry.id}
                             />
                             <button type="submit">Clear review</button>
+                          </form>
+                        ) : null}
+                        {assignment ? (
+                          <form
+                            action="/runs/catalog"
+                            className="action-form"
+                            method="post"
+                          >
+                            <input
+                              name="returnTo"
+                              type="hidden"
+                              value={buildCatalogEntryHref(
+                                catalogEntry.catalogEntry.entry.id,
+                              )}
+                            />
+                            <input
+                              name="intent"
+                              type="hidden"
+                              value="clear-assignment"
+                            />
+                            <input
+                              name="catalogEntryId"
+                              type="hidden"
+                              value={catalogEntry.catalogEntry.entry.id}
+                            />
+                            <button type="submit">Clear assignment</button>
                           </form>
                         ) : null}
                         <form
