@@ -1,6 +1,19 @@
 import type { PackageBoundary } from "@runroot/config";
 
 export {
+  type ConfiguredAuditCatalogAssignmentChecklistStoreOptions,
+  createConfiguredAuditCatalogAssignmentChecklistStore,
+  createFileAuditCatalogAssignmentChecklistStore,
+  createInMemoryAuditCatalogAssignmentChecklistStore,
+  createPostgresAuditCatalogAssignmentChecklistStore,
+  createSqliteAuditCatalogAssignmentChecklistStore,
+  type FileAuditCatalogAssignmentChecklistStoreOptions,
+  type InMemoryAuditCatalogAssignmentChecklistStoreOptions,
+  type PostgresAuditCatalogAssignmentChecklistStoreOptions,
+  resolveAuditCatalogAssignmentChecklistsFilePath,
+  type SqliteAuditCatalogAssignmentChecklistStoreOptions,
+} from "./catalog-assignment-checklist-store";
+export {
   type ConfiguredAuditCatalogReviewAssignmentStoreOptions,
   createConfiguredAuditCatalogReviewAssignmentStore,
   createFileAuditCatalogReviewAssignmentStore,
@@ -121,7 +134,7 @@ export const persistencePackageBoundary = {
   kind: "package",
   phaseOwned: 2,
   responsibility:
-    "Repository contracts, checkpoint storage, database adapters, dispatch queue persistence seams, tool-history storage adapters, additive saved-audit-view adapters, additive audit-view-catalog adapters, additive catalog-visibility adapters, additive catalog-review-signal adapters, and additive catalog-review-assignment adapters.",
+    "Repository contracts, checkpoint storage, database adapters, dispatch queue persistence seams, tool-history storage adapters, additive saved-audit-view adapters, additive audit-view-catalog adapters, additive catalog-visibility adapters, additive catalog-review-signal adapters, additive catalog-review-assignment adapters, and additive catalog-assignment-checklist adapters.",
   publicSurface: [
     "repository interfaces",
     "storage adapters",
@@ -133,5 +146,6 @@ export const persistencePackageBoundary = {
     "catalog visibility adapters",
     "catalog review signal adapters",
     "catalog review assignment adapters",
+    "catalog assignment checklist adapters",
   ],
 } as const satisfies PackageBoundary;

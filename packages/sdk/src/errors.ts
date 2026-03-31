@@ -28,6 +28,7 @@ export class OperatorNotFoundError extends OperatorError {
   constructor(
     resource:
       | "approval"
+      | "catalog assignment checklist"
       | "catalog entry"
       | "catalog review assignment"
       | "catalog review signal"

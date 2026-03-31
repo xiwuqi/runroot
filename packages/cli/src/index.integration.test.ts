@@ -1930,4 +1930,445 @@ describe("@runroot/cli integration", () => {
     expect(clearAssignmentPayload.assignment.assignment.state).toBe("assigned");
     expect(assignedAfterClearPayload.assigned.totalCount).toBe(0);
   });
+
+  it("checklists, lists-checklisted, inspects, clears, and reapplies assigned catalog entries through the CLI", async () => {
+    const workspaceRoot = await mkdtemp(
+      join(tmpdir(), "runroot-cli-assignment-checklists-"),
+    );
+    const sqlitePath = join(workspaceRoot, "runroot.sqlite");
+    const inputFile = join(workspaceRoot, "shell-runbook.json");
+    await writeFile(
+      inputFile,
+      JSON.stringify({
+        approvalRequired: false,
+        commandAlias: "print-ready",
+        runbookId: "node-health-check",
+      }),
+    );
+    const inlineStartIo = createIo();
+    const queuedStartIo = createIo();
+    const saveIo = createIo();
+    const publishIo = createIo();
+    const shareIo = createIo();
+    const reviewIo = createIo();
+    const assignIo = createIo();
+    const checklistIo = createIo();
+    const checklistedPeerIo = createIo();
+    const inspectChecklistIo = createIo();
+    const applyIo = createIo();
+    const clearChecklistIo = createIo();
+    const checklistedAfterClearIo = createIo();
+
+    await runCli(
+      ["runs", "start", "shell-runbook-flow", "--input-file", inputFile],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_oncall",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: inlineStartIo.io,
+      },
+    );
+    const inlineRun = JSON.parse(inlineStartIo.stdout.join("")) as {
+      run: {
+        id: string;
+      };
+    };
+
+    await runCli(
+      ["runs", "start", "shell-runbook-flow", "--input-file", inputFile],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_EXECUTION_MODE: "queued",
+          RUNROOT_OPERATOR_ID: "ops_oncall",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: queuedStartIo.io,
+      },
+    );
+    const queuedRun = JSON.parse(queuedStartIo.stdout.join("")) as {
+      run: {
+        id: string;
+      };
+    };
+
+    const worker = createRunrootWorkerService({
+      persistenceDriver: "sqlite",
+      sqlitePath,
+      workerId: "worker_cli_checklist",
+    });
+    await worker.processNextJob();
+
+    await runCli(
+      [
+        "audit",
+        "saved-views",
+        "save",
+        "--name",
+        "Queued checklist preset",
+        "--description",
+        "Saved queued worker checklist preset",
+        "--execution-mode",
+        "queued",
+        "--worker-id",
+        "worker_cli_checklist",
+        "--audit-view-run-id",
+        queuedRun.run.id,
+        "--drilldown-run-id",
+        queuedRun.run.id,
+      ],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_oncall",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: saveIo.io,
+      },
+    );
+    const savedViewPayload = JSON.parse(saveIo.stdout.join("")) as {
+      savedView: {
+        id: string;
+      };
+    };
+
+    const publishExitCode = await runCli(
+      ["audit", "catalog", "publish", savedViewPayload.savedView.id],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_oncall",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: publishIo.io,
+      },
+    );
+    const publishedPayload = JSON.parse(publishIo.stdout.join("")) as {
+      catalogEntry: {
+        entry: {
+          id: string;
+        };
+      };
+    };
+    const shareExitCode = await runCli(
+      ["audit", "catalog", "share", publishedPayload.catalogEntry.entry.id],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_oncall",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: shareIo.io,
+      },
+    );
+    const reviewExitCode = await runCli(
+      [
+        "audit",
+        "catalog",
+        "review",
+        publishedPayload.catalogEntry.entry.id,
+        "--state",
+        "recommended",
+        "--note",
+        `Checklist ready after inline ${inlineRun.run.id}`,
+      ],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_oncall",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: reviewIo.io,
+      },
+    );
+    const assignExitCode = await runCli(
+      [
+        "audit",
+        "catalog",
+        "assign",
+        publishedPayload.catalogEntry.entry.id,
+        "--assignee",
+        "ops_backup",
+        "--handoff-note",
+        `Queued worker ${queuedRun.run.id} handed to backup`,
+      ],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_oncall",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: assignIo.io,
+      },
+    );
+    const checklistExitCode = await runCli(
+      [
+        "audit",
+        "catalog",
+        "checklist",
+        publishedPayload.catalogEntry.entry.id,
+        "--status",
+        "pending",
+        "--items-json",
+        JSON.stringify(["Validate queued follow-up", "Close backup handoff"]),
+      ],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_oncall",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: checklistIo.io,
+      },
+    );
+    const checklistedPeerExitCode = await runCli(
+      ["audit", "catalog", "checklisted"],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_backup",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: checklistedPeerIo.io,
+      },
+    );
+    const inspectChecklistExitCode = await runCli(
+      [
+        "audit",
+        "catalog",
+        "inspect-checklist",
+        publishedPayload.catalogEntry.entry.id,
+      ],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_oncall",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: inspectChecklistIo.io,
+      },
+    );
+    const applyExitCode = await runCli(
+      ["audit", "catalog", "apply", publishedPayload.catalogEntry.entry.id],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_backup",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: applyIo.io,
+      },
+    );
+    const clearChecklistExitCode = await runCli(
+      [
+        "audit",
+        "catalog",
+        "clear-checklist",
+        publishedPayload.catalogEntry.entry.id,
+      ],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_oncall",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: clearChecklistIo.io,
+      },
+    );
+    const checklistedAfterClearExitCode = await runCli(
+      ["audit", "catalog", "checklisted"],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_backup",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: checklistedAfterClearIo.io,
+      },
+    );
+    const sharePayload = JSON.parse(shareIo.stdout.join("")) as {
+      visibility: {
+        visibility: {
+          state: "shared";
+        };
+      };
+    };
+    const reviewPayload = JSON.parse(reviewIo.stdout.join("")) as {
+      review: {
+        review: {
+          note?: string;
+          state: "recommended" | "reviewed";
+        };
+      };
+    };
+    const assignPayload = JSON.parse(assignIo.stdout.join("")) as {
+      assignment: {
+        assignment: {
+          assigneeId: string;
+          assignerId: string;
+          handoffNote?: string;
+          state: "assigned";
+        };
+      };
+    };
+    const checklistPayload = JSON.parse(checklistIo.stdout.join("")) as {
+      checklist: {
+        assignment: {
+          assignment: {
+            assigneeId: string;
+          };
+        };
+        checklist: {
+          items?: readonly string[];
+          state: "completed" | "pending";
+        };
+      };
+    };
+    const checklistedPeerPayload = JSON.parse(
+      checklistedPeerIo.stdout.join(""),
+    ) as {
+      checklisted: {
+        items: Array<{
+          assignment: {
+            review: {
+              visibility: {
+                catalogEntry: {
+                  entry: {
+                    id: string;
+                  };
+                };
+              };
+            };
+          };
+          checklist: {
+            state: "completed" | "pending";
+          };
+        }>;
+        totalCount: number;
+      };
+    };
+    const inspectChecklistPayload = JSON.parse(
+      inspectChecklistIo.stdout.join(""),
+    ) as {
+      checklist: {
+        checklist: {
+          items?: readonly string[];
+          state: "completed" | "pending";
+        };
+      };
+    };
+    const applyPayload = JSON.parse(applyIo.stdout.join("")) as {
+      application: {
+        application: {
+          navigation: {
+            drilldowns: Array<{
+              result: {
+                runId: string;
+              };
+            }>;
+            totalSummaryCount: number;
+          };
+          savedView: {
+            id: string;
+          };
+        };
+      };
+    };
+    const clearChecklistPayload = JSON.parse(
+      clearChecklistIo.stdout.join(""),
+    ) as {
+      checklist: {
+        checklist: {
+          state: "completed" | "pending";
+        };
+      };
+    };
+    const checklistedAfterClearPayload = JSON.parse(
+      checklistedAfterClearIo.stdout.join(""),
+    ) as {
+      checklisted: {
+        totalCount: number;
+      };
+    };
+
+    expect(publishExitCode).toBe(0);
+    expect(shareExitCode).toBe(0);
+    expect(reviewExitCode).toBe(0);
+    expect(assignExitCode).toBe(0);
+    expect(checklistExitCode).toBe(0);
+    expect(checklistedPeerExitCode).toBe(0);
+    expect(inspectChecklistExitCode).toBe(0);
+    expect(applyExitCode).toBe(0);
+    expect(clearChecklistExitCode).toBe(0);
+    expect(checklistedAfterClearExitCode).toBe(0);
+    expect(sharePayload.visibility.visibility.state).toBe("shared");
+    expect(reviewPayload.review.review.state).toBe("recommended");
+    expect(reviewPayload.review.review.note).toContain(inlineRun.run.id);
+    expect(assignPayload.assignment.assignment).toMatchObject({
+      assigneeId: "ops_backup",
+      assignerId: "ops_oncall",
+      handoffNote: `Queued worker ${queuedRun.run.id} handed to backup`,
+      state: "assigned",
+    });
+    expect(checklistPayload.checklist.assignment.assignment.assigneeId).toBe(
+      "ops_backup",
+    );
+    expect(checklistPayload.checklist.checklist.state).toBe("pending");
+    expect(checklistPayload.checklist.checklist.items).toEqual([
+      "Validate queued follow-up",
+      "Close backup handoff",
+    ]);
+    expect(checklistedPeerPayload.checklisted.totalCount).toBe(1);
+    expect(
+      checklistedPeerPayload.checklisted.items[0]?.assignment.review.visibility
+        .catalogEntry.entry.id,
+    ).toBe(publishedPayload.catalogEntry.entry.id);
+    expect(checklistedPeerPayload.checklisted.items[0]?.checklist.state).toBe(
+      "pending",
+    );
+    expect(inspectChecklistPayload.checklist.checklist.items).toEqual([
+      "Validate queued follow-up",
+      "Close backup handoff",
+    ]);
+    expect(applyPayload.application.application.savedView.id).toBe(
+      savedViewPayload.savedView.id,
+    );
+    expect(
+      applyPayload.application.application.navigation.totalSummaryCount,
+    ).toBe(1);
+    expect(
+      applyPayload.application.application.navigation.drilldowns[0]?.result
+        .runId,
+    ).toBe(queuedRun.run.id);
+    expect(clearChecklistPayload.checklist.checklist.state).toBe("pending");
+    expect(checklistedAfterClearPayload.checklisted.totalCount).toBe(0);
+  });
 });

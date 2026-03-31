@@ -18,6 +18,7 @@ import type { DispatchQueue } from "@runroot/dispatch";
 import type { JsonValue, WorkflowRun } from "@runroot/domain";
 import type { RunrootLogger, RunrootTracer } from "@runroot/observability";
 import {
+  createConfiguredAuditCatalogAssignmentChecklistStore,
   createConfiguredAuditCatalogReviewAssignmentStore,
   createConfiguredAuditCatalogReviewSignalStore,
   createConfiguredAuditCatalogVisibilityStore,
@@ -29,6 +30,10 @@ import {
   type RuntimePersistence,
 } from "@runroot/persistence";
 import {
+  type CrossRunAuditCatalogAssignmentChecklistCollection,
+  type CrossRunAuditCatalogAssignmentChecklistState,
+  type CrossRunAuditCatalogAssignmentChecklistStore,
+  type CrossRunAuditCatalogAssignmentChecklistView,
   type CrossRunAuditCatalogEntryApplication,
   type CrossRunAuditCatalogEntryCollection,
   type CrossRunAuditCatalogEntryView,
@@ -55,6 +60,7 @@ import {
   type CrossRunAuditSavedViewKind,
   type CrossRunAuditSavedViewNavigationRefs,
   type CrossRunAuditSavedViewStore,
+  createCrossRunAuditCatalogAssignmentChecklistQuery,
   createCrossRunAuditCatalogQuery,
   createCrossRunAuditCatalogReviewAssignmentQuery,
   createCrossRunAuditCatalogReviewSignalQuery,
@@ -129,6 +135,11 @@ export interface AssignAuditCatalogEntryInput {
   readonly handoffNote?: string;
 }
 
+export interface ChecklistAuditCatalogEntryInput {
+  readonly items?: readonly string[];
+  readonly state: CrossRunAuditCatalogAssignmentChecklistState;
+}
+
 export interface ReviewAuditCatalogEntryInput {
   readonly note?: string;
   readonly state: CrossRunAuditCatalogReviewState;
@@ -142,12 +153,22 @@ export interface RunrootOperatorService {
     input: AssignAuditCatalogEntryInput,
   ): Promise<CrossRunAuditCatalogReviewAssignmentView>;
   archiveCatalogEntry(id: string): Promise<CrossRunAuditCatalogEntryView>;
+  checklistCatalogEntry(
+    id: string,
+    input: ChecklistAuditCatalogEntryInput,
+  ): Promise<CrossRunAuditCatalogAssignmentChecklistView>;
+  clearCatalogAssignmentChecklist(
+    id: string,
+  ): Promise<CrossRunAuditCatalogAssignmentChecklistView>;
   clearCatalogReviewAssignment(
     id: string,
   ): Promise<CrossRunAuditCatalogReviewAssignmentView>;
   clearCatalogReviewSignal(
     id: string,
   ): Promise<CrossRunAuditCatalogReviewSignalView>;
+  getCatalogAssignmentChecklist(
+    id: string,
+  ): Promise<CrossRunAuditCatalogAssignmentChecklistView>;
   getCatalogEntry(id: string): Promise<CrossRunAuditCatalogEntryView>;
   getCatalogReviewAssignment(
     id: string,
@@ -176,6 +197,7 @@ export interface RunrootOperatorService {
     filters?: CrossRunAuditDrilldownFilters,
   ): Promise<CrossRunAuditDrilldownResults>;
   listAssignedCatalogEntries(): Promise<CrossRunAuditCatalogReviewAssignmentCollection>;
+  listChecklistedCatalogEntries(): Promise<CrossRunAuditCatalogAssignmentChecklistCollection>;
   listCatalogEntries(): Promise<CrossRunAuditCatalogEntryCollection>;
   listReviewedCatalogEntries(): Promise<CrossRunAuditCatalogReviewSignalCollection>;
   listVisibleCatalogEntries(): Promise<CrossRunAuditCatalogVisibilityCollection>;
@@ -203,6 +225,7 @@ export interface RunrootOperatorService {
 
 export interface RunrootOperatorServiceOptions {
   readonly approvalIdGenerator?: () => string;
+  readonly catalogAssignmentChecklistStore?: CrossRunAuditCatalogAssignmentChecklistStore;
   readonly catalogEntryIdGenerator?: () => string;
   readonly catalogReviewAssignmentStore?: CrossRunAuditCatalogReviewAssignmentStore;
   readonly catalogReviewSignalStore?: CrossRunAuditCatalogReviewSignalStore;
@@ -339,6 +362,19 @@ export function createRunrootOperatorService(
         ? { workspacePath: options.workspacePath }
         : {}),
     });
+  const catalogAssignmentChecklistStore =
+    options.catalogAssignmentChecklistStore ??
+    createConfiguredAuditCatalogAssignmentChecklistStore({
+      ...(options.databaseUrl ? { databaseUrl: options.databaseUrl } : {}),
+      ...(options.env ? { env: options.env } : {}),
+      ...(options.persistenceDriver
+        ? { driver: options.persistenceDriver }
+        : {}),
+      ...(options.sqlitePath ? { sqlitePath: options.sqlitePath } : {}),
+      ...(options.workspacePath
+        ? { workspacePath: options.workspacePath }
+        : {}),
+    });
   const templateRuntimeOptions: CreateTemplateRuntimeBundleOptions = {
     toolObserver: createToolTelemetryObserver({
       history: toolHistory,
@@ -444,6 +480,11 @@ export function createRunrootOperatorService(
       crossRunAuditCatalogReviewSignals,
       crossRunAuditCatalogVisibility,
     );
+  const crossRunAuditCatalogAssignmentChecklists =
+    createCrossRunAuditCatalogAssignmentChecklistQuery(
+      catalogAssignmentChecklistStore,
+      crossRunAuditCatalogReviewAssignments,
+    );
   const persistenceLocation = persistenceConfig.location;
 
   return {
@@ -500,6 +541,33 @@ export function createRunrootOperatorService(
       }
 
       return catalogEntry;
+    },
+
+    async checklistCatalogEntry(id, input) {
+      try {
+        return await crossRunAuditCatalogAssignmentChecklists.setCatalogAssignmentChecklist(
+          id,
+          operatorIdentity,
+          input,
+          now(),
+        );
+      } catch (error) {
+        throw normalizeCatalogAssignmentChecklistError(error, id);
+      }
+    },
+
+    async clearCatalogAssignmentChecklist(id) {
+      const checklist =
+        await crossRunAuditCatalogAssignmentChecklists.clearCatalogAssignmentChecklist(
+          id,
+          operatorIdentity,
+        );
+
+      if (!checklist) {
+        throw new OperatorNotFoundError("catalog assignment checklist", id);
+      }
+
+      return checklist;
     },
 
     async clearCatalogReviewAssignment(id) {
@@ -582,6 +650,20 @@ export function createRunrootOperatorService(
       }
 
       return catalogVisibility.catalogEntry;
+    },
+
+    async getCatalogAssignmentChecklist(id) {
+      const checklist =
+        await crossRunAuditCatalogAssignmentChecklists.getCatalogAssignmentChecklist(
+          id,
+          operatorIdentity,
+        );
+
+      if (!checklist) {
+        throw new OperatorNotFoundError("catalog assignment checklist", id);
+      }
+
+      return checklist;
     },
 
     async getCatalogReviewAssignment(id) {
@@ -680,6 +762,12 @@ export function createRunrootOperatorService(
 
     async listAssignedCatalogEntries() {
       return crossRunAuditCatalogReviewAssignments.listAssignedCatalogEntries(
+        operatorIdentity,
+      );
+    },
+
+    async listChecklistedCatalogEntries() {
+      return crossRunAuditCatalogAssignmentChecklists.listChecklistedCatalogEntries(
         operatorIdentity,
       );
     },
@@ -1021,6 +1109,40 @@ function normalizeCatalogReviewAssignmentError(
   ) {
     return new OperatorNotFoundError(
       "catalog review assignment",
+      catalogEntryId,
+    );
+  }
+
+  return normalizeOperatorError(error);
+}
+
+function normalizeCatalogAssignmentChecklistError(
+  error: unknown,
+  catalogEntryId: string,
+): Error {
+  if (
+    error instanceof OperatorConflictError ||
+    error instanceof OperatorInputError ||
+    error instanceof OperatorNotFoundError
+  ) {
+    return error;
+  }
+
+  if (
+    error instanceof Error &&
+    error.message.startsWith("Catalog assignment checklists require")
+  ) {
+    return new OperatorInputError(error.message);
+  }
+
+  if (
+    error instanceof Error &&
+    error.message.startsWith(
+      `Catalog entry "${catalogEntryId}" is not assigned and visible to operator`,
+    )
+  ) {
+    return new OperatorNotFoundError(
+      "catalog assignment checklist",
       catalogEntryId,
     );
   }

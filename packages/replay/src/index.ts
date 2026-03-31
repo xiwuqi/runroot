@@ -1,6 +1,19 @@
 import type { PackageBoundary } from "@runroot/config";
 
 export {
+  type CreateCrossRunAuditCatalogAssignmentChecklistInput,
+  type CrossRunAuditCatalogAssignmentChecklist,
+  type CrossRunAuditCatalogAssignmentChecklistApplication,
+  type CrossRunAuditCatalogAssignmentChecklistCollection,
+  type CrossRunAuditCatalogAssignmentChecklistState,
+  type CrossRunAuditCatalogAssignmentChecklistStore,
+  type CrossRunAuditCatalogAssignmentChecklistView,
+  compareCrossRunAuditCatalogAssignmentChecklists,
+  createCrossRunAuditCatalogAssignmentChecklist,
+  normalizeChecklistItems,
+  type UpdateCrossRunAuditCatalogAssignmentChecklistInput,
+} from "./assignment-checklist";
+export {
   projectRunAuditView,
   type RunAuditDispatchFact,
   type RunAuditEntry,
@@ -53,6 +66,7 @@ export {
   type RunAuditViewLink,
 } from "./navigation";
 export {
+  type CrossRunAuditCatalogAssignmentChecklistQuery,
   type CrossRunAuditCatalogQuery,
   type CrossRunAuditCatalogReviewAssignmentQuery,
   type CrossRunAuditCatalogReviewSignalQuery,
@@ -62,6 +76,7 @@ export {
   type CrossRunAuditQuery,
   type CrossRunAuditReader,
   type CrossRunAuditSavedViewQuery,
+  createCrossRunAuditCatalogAssignmentChecklistQuery,
   createCrossRunAuditCatalogQuery,
   createCrossRunAuditCatalogReviewAssignmentQuery,
   createCrossRunAuditCatalogReviewSignalQuery,

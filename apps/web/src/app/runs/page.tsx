@@ -1,4 +1,5 @@
 import {
+  AssignmentChecklistsView,
   AuditViewCatalogsView,
   CatalogReviewAssignmentsView,
   CatalogReviewSignalsView,
@@ -15,6 +16,7 @@ import {
   resolvePageSearchParams,
 } from "../../lib/navigation";
 import {
+  type ApiAuditCatalogAssignmentChecklistView,
   type ApiAuditCatalogEntryApplication,
   type ApiAuditCatalogReviewAssignmentView,
   type ApiAuditCatalogReviewSignalView,
@@ -48,16 +50,19 @@ export default async function RunsPage({
     const drilldownFilters = readAuditDrilldownFilters(resolvedSearchParams);
     const [
       runs,
+      checklistedEntries,
       assignedEntries,
       reviewedEntries,
       catalogEntries,
       savedViews,
       navigationResult,
       catalogVisibility,
+      catalogAssignmentChecklist,
       catalogReviewSignal,
       catalogReviewAssignment,
     ] = await Promise.all([
       api.listRuns(),
+      api.listChecklistedAuditCatalogEntries(),
       api.listAssignedAuditCatalogEntries(),
       api.listReviewedAuditCatalogEntries(),
       api.listVisibleAuditCatalogEntries(),
@@ -74,6 +79,11 @@ export default async function RunsPage({
         ? api.getAuditCatalogVisibility(catalogEntryId)
         : Promise.resolve(undefined),
       catalogEntryId
+        ? api
+            .getAuditCatalogAssignmentChecklist(catalogEntryId)
+            .catch(() => undefined)
+        : Promise.resolve(undefined),
+      catalogEntryId
         ? api.getAuditCatalogReviewSignal(catalogEntryId).catch(() => undefined)
         : Promise.resolve(undefined),
       catalogEntryId
@@ -84,6 +94,9 @@ export default async function RunsPage({
     ]);
     const sortedRuns = [...runs].sort(compareRunsByUpdatedAt);
     let navigation: ApiAuditNavigationView;
+    let activeCatalogAssignmentChecklist:
+      | ApiAuditCatalogAssignmentChecklistView
+      | undefined;
     let activeCatalogReviewAssignment:
       | ApiAuditCatalogReviewAssignmentView
       | undefined;
@@ -93,6 +106,7 @@ export default async function RunsPage({
 
     if (hasCatalogEntryApplication(navigationResult)) {
       activeCatalogEntry = catalogVisibility;
+      activeCatalogAssignmentChecklist = catalogAssignmentChecklist;
       activeCatalogReviewAssignment = catalogReviewAssignment;
       activeCatalogReviewSignal = catalogReviewSignal;
       activeSavedView = navigationResult.application.savedView;
@@ -110,6 +124,12 @@ export default async function RunsPage({
         title="Runs"
       >
         <FlashBanner message={flash} />
+        <AssignmentChecklistsView
+          checklistedEntries={checklistedEntries}
+          {...(activeCatalogAssignmentChecklist
+            ? { activeCatalogAssignmentChecklist }
+            : {})}
+        />
         <CatalogReviewAssignmentsView
           assignedEntries={assignedEntries}
           {...(activeCatalogReviewAssignment
@@ -123,6 +143,7 @@ export default async function RunsPage({
         <AuditViewCatalogsView
           assignedEntries={assignedEntries}
           catalogEntries={catalogEntries}
+          checklistedEntries={checklistedEntries}
           reviewedEntries={reviewedEntries}
           {...(activeCatalogEntry ? { activeCatalogEntry } : {})}
         />
