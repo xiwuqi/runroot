@@ -1,6 +1,19 @@
 import type { PackageBoundary } from "@runroot/config";
 
 export {
+  type ConfiguredAuditCatalogReviewAssignmentStoreOptions,
+  createConfiguredAuditCatalogReviewAssignmentStore,
+  createFileAuditCatalogReviewAssignmentStore,
+  createInMemoryAuditCatalogReviewAssignmentStore,
+  createPostgresAuditCatalogReviewAssignmentStore,
+  createSqliteAuditCatalogReviewAssignmentStore,
+  type FileAuditCatalogReviewAssignmentStoreOptions,
+  type InMemoryAuditCatalogReviewAssignmentStoreOptions,
+  type PostgresAuditCatalogReviewAssignmentStoreOptions,
+  resolveAuditCatalogReviewAssignmentsFilePath,
+  type SqliteAuditCatalogReviewAssignmentStoreOptions,
+} from "./catalog-review-assignment-store";
+export {
   type ConfiguredAuditCatalogReviewSignalStoreOptions,
   createConfiguredAuditCatalogReviewSignalStore,
   createFileAuditCatalogReviewSignalStore,
@@ -108,7 +121,7 @@ export const persistencePackageBoundary = {
   kind: "package",
   phaseOwned: 2,
   responsibility:
-    "Repository contracts, checkpoint storage, database adapters, dispatch queue persistence seams, tool-history storage adapters, additive saved-audit-view adapters, additive audit-view-catalog adapters, additive catalog-visibility adapters, and additive catalog-review-signal adapters.",
+    "Repository contracts, checkpoint storage, database adapters, dispatch queue persistence seams, tool-history storage adapters, additive saved-audit-view adapters, additive audit-view-catalog adapters, additive catalog-visibility adapters, additive catalog-review-signal adapters, and additive catalog-review-assignment adapters.",
   publicSurface: [
     "repository interfaces",
     "storage adapters",
@@ -119,5 +132,6 @@ export const persistencePackageBoundary = {
     "audit view catalog adapters",
     "catalog visibility adapters",
     "catalog review signal adapters",
+    "catalog review assignment adapters",
   ],
 } as const satisfies PackageBoundary;

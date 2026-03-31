@@ -35,6 +35,16 @@ import {
   projectCrossRunAuditNavigationView,
 } from "./navigation";
 import {
+  type CrossRunAuditCatalogReviewAssignment,
+  type CrossRunAuditCatalogReviewAssignmentApplication,
+  type CrossRunAuditCatalogReviewAssignmentCollection,
+  type CrossRunAuditCatalogReviewAssignmentStore,
+  type CrossRunAuditCatalogReviewAssignmentView,
+  compareCrossRunAuditCatalogReviewAssignments,
+  createCrossRunAuditCatalogReviewAssignment,
+  type UpdateCrossRunAuditCatalogReviewAssignmentInput,
+} from "./review-assignment";
+import {
   type CrossRunAuditCatalogReviewSignal,
   type CrossRunAuditCatalogReviewSignalCollection,
   type CrossRunAuditCatalogReviewSignalStore,
@@ -152,6 +162,10 @@ export interface CrossRunAuditCatalogVisibilityQuery {
 }
 
 export interface CrossRunAuditCatalogReviewSignalQuery {
+  applyCatalogEntry(
+    id: string,
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+  ): Promise<CrossRunAuditCatalogVisibilityApplication | undefined>;
   clearCatalogReviewSignal(
     id: string,
     viewer: CrossRunAuditCatalogVisibilityViewer,
@@ -169,6 +183,30 @@ export interface CrossRunAuditCatalogReviewSignalQuery {
     input: UpdateCrossRunAuditCatalogReviewSignalInput,
     timestamp: string,
   ): Promise<CrossRunAuditCatalogReviewSignalView>;
+}
+
+export interface CrossRunAuditCatalogReviewAssignmentQuery {
+  applyCatalogEntry(
+    id: string,
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+  ): Promise<CrossRunAuditCatalogReviewAssignmentApplication | undefined>;
+  clearCatalogReviewAssignment(
+    id: string,
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+  ): Promise<CrossRunAuditCatalogReviewAssignmentView | undefined>;
+  getCatalogReviewAssignment(
+    id: string,
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+  ): Promise<CrossRunAuditCatalogReviewAssignmentView | undefined>;
+  listAssignedCatalogEntries(
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+  ): Promise<CrossRunAuditCatalogReviewAssignmentCollection>;
+  setCatalogReviewAssignment(
+    id: string,
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+    input: UpdateCrossRunAuditCatalogReviewAssignmentInput,
+    timestamp: string,
+  ): Promise<CrossRunAuditCatalogReviewAssignmentView>;
 }
 
 export function createRunTimelineQuery(
@@ -554,6 +592,27 @@ export function createCrossRunAuditCatalogReviewSignalQuery(
   visibility: CrossRunAuditCatalogVisibilityQuery,
 ): CrossRunAuditCatalogReviewSignalQuery {
   return {
+    async applyCatalogEntry(id, viewer) {
+      const review = await resolveCatalogReviewSignalView(
+        store,
+        visibility,
+        id,
+        viewer,
+      );
+
+      if (!review) {
+        return undefined;
+      }
+
+      const application = await visibility.applyCatalogEntry(id, viewer);
+
+      if (!application) {
+        return undefined;
+      }
+
+      return application;
+    },
+
     async clearCatalogReviewSignal(id, viewer) {
       const review = await resolveCatalogReviewSignalView(
         store,
@@ -650,6 +709,143 @@ export function createCrossRunAuditCatalogReviewSignalQuery(
   };
 }
 
+export function createCrossRunAuditCatalogReviewAssignmentQuery(
+  store: CrossRunAuditCatalogReviewAssignmentStore,
+  reviewSignals: CrossRunAuditCatalogReviewSignalQuery,
+  visibility: CrossRunAuditCatalogVisibilityQuery,
+): CrossRunAuditCatalogReviewAssignmentQuery {
+  return {
+    async applyCatalogEntry(id, viewer) {
+      const assignment = await resolveCatalogReviewAssignmentView(
+        store,
+        reviewSignals,
+        id,
+        viewer,
+      );
+
+      if (!assignment) {
+        return undefined;
+      }
+
+      const application = await visibility.applyCatalogEntry(id, viewer);
+
+      if (!application) {
+        return undefined;
+      }
+
+      return {
+        application,
+        assignment,
+      };
+    },
+
+    async clearCatalogReviewAssignment(id, viewer) {
+      const assignment = await resolveCatalogReviewAssignmentView(
+        store,
+        reviewSignals,
+        id,
+        viewer,
+      );
+
+      if (!assignment) {
+        return undefined;
+      }
+
+      await store.deleteCatalogReviewAssignment(id);
+
+      return assignment;
+    },
+
+    async getCatalogReviewAssignment(id, viewer) {
+      return resolveCatalogReviewAssignmentView(
+        store,
+        reviewSignals,
+        id,
+        viewer,
+      );
+    },
+
+    async listAssignedCatalogEntries(viewer) {
+      const assignments = [
+        ...(await store.listCatalogReviewAssignments()),
+      ].sort(compareCrossRunAuditCatalogReviewAssignments);
+      const items = (
+        await Promise.all(
+          assignments.map(async (assignment) =>
+            resolveCatalogReviewAssignmentFromValue(
+              reviewSignals,
+              assignment,
+              viewer,
+            ),
+          ),
+        )
+      ).filter(
+        (assignment): assignment is CrossRunAuditCatalogReviewAssignmentView =>
+          assignment !== undefined,
+      );
+
+      return {
+        items,
+        totalCount: items.length,
+      };
+    },
+
+    async setCatalogReviewAssignment(id, viewer, input, timestamp) {
+      const review = await reviewSignals.getCatalogReviewSignal(id, viewer);
+
+      if (!review) {
+        throw new Error(
+          `Catalog entry "${id}" is not reviewed and visible to operator "${viewer.operatorId}".`,
+        );
+      }
+
+      const existingAssignment = await store.getCatalogReviewAssignment(id);
+      const normalizedAssigneeId = input.assigneeId.trim();
+      const normalizedHandoffNote = input.handoffNote?.trim();
+
+      if (normalizedAssigneeId.length === 0) {
+        throw new Error("Catalog review assignments require an assignee id.");
+      }
+
+      const assignment = existingAssignment
+        ? {
+            assigneeId: normalizedAssigneeId,
+            assignerId: viewer.operatorId,
+            catalogEntryId: id,
+            createdAt: existingAssignment.createdAt,
+            ...(input.handoffNote === undefined
+              ? existingAssignment.handoffNote
+                ? { handoffNote: existingAssignment.handoffNote }
+                : {}
+              : normalizedHandoffNote
+                ? { handoffNote: normalizedHandoffNote }
+                : {}),
+            kind: existingAssignment.kind,
+            scopeId: viewer.scopeId,
+            state: existingAssignment.state,
+            updatedAt: timestamp,
+          }
+        : createCrossRunAuditCatalogReviewAssignment({
+            assigneeId: normalizedAssigneeId,
+            assignerId: viewer.operatorId,
+            catalogEntryId: id,
+            ...(normalizedHandoffNote
+              ? { handoffNote: normalizedHandoffNote }
+              : {}),
+            scopeId: viewer.scopeId,
+            timestamp,
+          });
+
+      await store.saveCatalogReviewAssignment(assignment);
+
+      return {
+        assignment,
+        review,
+      };
+    },
+  };
+}
+
 async function resolveCatalogEntryView(
   store: CrossRunAuditCatalogStore,
   savedViews: CrossRunAuditSavedViewQuery,
@@ -734,5 +930,46 @@ async function resolveCatalogReviewSignalFromValue(
   return {
     review: reviewSignal,
     visibility,
+  };
+}
+
+async function resolveCatalogReviewAssignmentView(
+  store: CrossRunAuditCatalogReviewAssignmentStore,
+  reviewSignals: CrossRunAuditCatalogReviewSignalQuery,
+  id: string,
+  viewer: CrossRunAuditCatalogVisibilityViewer,
+): Promise<CrossRunAuditCatalogReviewAssignmentView | undefined> {
+  const assignment = await store.getCatalogReviewAssignment(id);
+
+  return assignment
+    ? resolveCatalogReviewAssignmentFromValue(reviewSignals, assignment, viewer)
+    : undefined;
+}
+
+async function resolveCatalogReviewAssignmentFromValue(
+  reviewSignals: CrossRunAuditCatalogReviewSignalQuery,
+  assignment: CrossRunAuditCatalogReviewAssignment,
+  viewer: CrossRunAuditCatalogVisibilityViewer,
+): Promise<CrossRunAuditCatalogReviewAssignmentView | undefined> {
+  if (
+    assignment.scopeId !== viewer.scopeId ||
+    (assignment.assignerId !== viewer.operatorId &&
+      assignment.assigneeId !== viewer.operatorId)
+  ) {
+    return undefined;
+  }
+
+  const review = await reviewSignals.getCatalogReviewSignal(
+    assignment.catalogEntryId,
+    viewer,
+  );
+
+  if (!review) {
+    return undefined;
+  }
+
+  return {
+    assignment,
+    review,
   };
 }
