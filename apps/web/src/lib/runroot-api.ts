@@ -472,6 +472,36 @@ export interface ApiAuditCatalogChecklistItemBlockerCollection {
   readonly totalCount: number;
 }
 
+export type ApiAuditCatalogChecklistItemResolutionState =
+  | "resolved"
+  | "unresolved";
+
+export interface ApiAuditCatalogChecklistItemResolutionItem {
+  readonly item: string;
+  readonly state: ApiAuditCatalogChecklistItemResolutionState;
+}
+
+export interface ApiAuditCatalogChecklistItemResolution {
+  readonly resolutionNote?: string;
+  readonly catalogEntryId: string;
+  readonly createdAt: string;
+  readonly items: readonly ApiAuditCatalogChecklistItemResolutionItem[];
+  readonly kind: "catalog-checklist-item-resolution";
+  readonly operatorId: string;
+  readonly scopeId: string;
+  readonly updatedAt: string;
+}
+
+export interface ApiAuditCatalogChecklistItemResolutionView {
+  readonly blocker: ApiAuditCatalogChecklistItemBlockerView;
+  readonly resolution: ApiAuditCatalogChecklistItemResolution;
+}
+
+export interface ApiAuditCatalogChecklistItemResolutionCollection {
+  readonly items: readonly ApiAuditCatalogChecklistItemResolutionView[];
+  readonly totalCount: number;
+}
+
 export interface CreateApiAuditCatalogEntryInput {
   readonly description?: string;
   readonly name?: string;
@@ -491,6 +521,11 @@ export interface UpdateApiAuditCatalogChecklistItemProgressInput {
 export interface UpdateApiAuditCatalogChecklistItemBlockerInput {
   readonly blockerNote?: string;
   readonly items: readonly ApiAuditCatalogChecklistItemBlockerItem[];
+}
+
+export interface UpdateApiAuditCatalogChecklistItemResolutionInput {
+  readonly resolutionNote?: string;
+  readonly items: readonly ApiAuditCatalogChecklistItemResolutionItem[];
 }
 
 export interface UpdateApiAuditCatalogReviewAssignmentInput {
@@ -535,6 +570,9 @@ export interface RunrootApiClient {
   clearAuditCatalogChecklistItemBlocker(
     catalogEntryId: string,
   ): Promise<ApiAuditCatalogChecklistItemBlockerView>;
+  clearAuditCatalogChecklistItemResolution(
+    catalogEntryId: string,
+  ): Promise<ApiAuditCatalogChecklistItemResolutionView>;
   clearAuditCatalogChecklistItemProgress(
     catalogEntryId: string,
   ): Promise<ApiAuditCatalogChecklistItemProgressView>;
@@ -553,6 +591,9 @@ export interface RunrootApiClient {
   getAuditCatalogChecklistItemBlocker(
     catalogEntryId: string,
   ): Promise<ApiAuditCatalogChecklistItemBlockerView>;
+  getAuditCatalogChecklistItemResolution(
+    catalogEntryId: string,
+  ): Promise<ApiAuditCatalogChecklistItemResolutionView>;
   getAuditCatalogChecklistItemProgress(
     catalogEntryId: string,
   ): Promise<ApiAuditCatalogChecklistItemProgressView>;
@@ -582,6 +623,7 @@ export interface RunrootApiClient {
   getSavedAuditView(savedViewId: string): Promise<ApiAuditSavedView>;
   listAssignedAuditCatalogEntries(): Promise<ApiAuditCatalogReviewAssignmentCollection>;
   listBlockedAuditCatalogEntries(): Promise<ApiAuditCatalogChecklistItemBlockerCollection>;
+  listResolvedAuditCatalogEntries(): Promise<ApiAuditCatalogChecklistItemResolutionCollection>;
   listChecklistedAuditCatalogEntries(): Promise<ApiAuditCatalogAssignmentChecklistCollection>;
   listAuditCatalogEntries(): Promise<ApiAuditCatalogEntryCollection>;
   listProgressedAuditCatalogEntries(): Promise<ApiAuditCatalogChecklistItemProgressCollection>;
@@ -605,6 +647,10 @@ export interface RunrootApiClient {
     catalogEntryId: string,
     input: UpdateApiAuditCatalogChecklistItemBlockerInput,
   ): Promise<ApiAuditCatalogChecklistItemBlockerView>;
+  setAuditCatalogChecklistItemResolution(
+    catalogEntryId: string,
+    input: UpdateApiAuditCatalogChecklistItemResolutionInput,
+  ): Promise<ApiAuditCatalogChecklistItemResolutionView>;
   setAuditCatalogAssignmentChecklist(
     catalogEntryId: string,
     input: UpdateApiAuditCatalogAssignmentChecklistInput,
@@ -801,6 +847,18 @@ export function createRunrootApiClient(
       return payload.blocker;
     },
 
+    async clearAuditCatalogChecklistItemResolution(catalogEntryId) {
+      const payload = await requestJson<{
+        resolution: ApiAuditCatalogChecklistItemResolutionView;
+      }>(
+        `/audit/catalog/${catalogEntryId}/resolution/clear`,
+        { method: "POST" },
+        "web.api.clearAuditCatalogChecklistItemResolution",
+      );
+
+      return payload.resolution;
+    },
+
     async clearAuditCatalogChecklistItemProgress(catalogEntryId) {
       const payload = await requestJson<{
         progress: ApiAuditCatalogChecklistItemProgressView;
@@ -871,6 +929,18 @@ export function createRunrootApiClient(
       );
 
       return payload.blocker;
+    },
+
+    async getAuditCatalogChecklistItemResolution(catalogEntryId) {
+      const payload = await requestJson<{
+        resolution: ApiAuditCatalogChecklistItemResolutionView;
+      }>(
+        `/audit/catalog/${catalogEntryId}/resolution`,
+        { method: "GET" },
+        "web.api.getAuditCatalogChecklistItemResolution",
+      );
+
+      return payload.resolution;
     },
 
     async getAuditCatalogChecklistItemProgress(catalogEntryId) {
@@ -1061,6 +1131,18 @@ export function createRunrootApiClient(
       return payload.blocked;
     },
 
+    async listResolvedAuditCatalogEntries() {
+      const payload = await requestJson<{
+        resolved: ApiAuditCatalogChecklistItemResolutionCollection;
+      }>(
+        "/audit/catalog/resolved",
+        { method: "GET" },
+        "web.api.listResolvedAuditCatalogEntries",
+      );
+
+      return payload.resolved;
+    },
+
     async listChecklistedAuditCatalogEntries() {
       const payload = await requestJson<{
         checklisted: ApiAuditCatalogAssignmentChecklistCollection;
@@ -1185,6 +1267,24 @@ export function createRunrootApiClient(
       );
 
       return payload.blocker;
+    },
+
+    async setAuditCatalogChecklistItemResolution(catalogEntryId, input) {
+      const payload = await requestJson<{
+        resolution: ApiAuditCatalogChecklistItemResolutionView;
+      }>(
+        `/audit/catalog/${catalogEntryId}/resolution`,
+        {
+          body: JSON.stringify(input),
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "POST",
+        },
+        "web.api.setAuditCatalogChecklistItemResolution",
+      );
+
+      return payload.resolution;
     },
 
     async setAuditCatalogAssignmentChecklist(catalogEntryId, input) {

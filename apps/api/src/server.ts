@@ -255,6 +255,12 @@ export function buildServer(options: BuildServerOptions = {}) {
     })),
   );
 
+  app.get("/audit/catalog/resolved", async (_request, reply) =>
+    handleOperatorResponse(reply, async () => ({
+      resolved: await operator.listResolvedCatalogEntries(),
+    })),
+  );
+
   app.post("/audit/saved-views", async (request, reply) =>
     handleOperatorResponse(reply, async () => {
       const body = request.body as {
@@ -422,6 +428,20 @@ export function buildServer(options: BuildServerOptions = {}) {
 
       return {
         blocker: await operator.getCatalogChecklistItemBlocker(
+          params.catalogEntryId,
+        ),
+      };
+    }),
+  );
+
+  app.get("/audit/catalog/:catalogEntryId/resolution", async (request, reply) =>
+    handleOperatorResponse(reply, async () => {
+      const params = request.params as {
+        readonly catalogEntryId: string;
+      };
+
+      return {
+        resolution: await operator.getCatalogChecklistItemResolution(
           params.catalogEntryId,
         ),
       };
@@ -599,6 +619,39 @@ export function buildServer(options: BuildServerOptions = {}) {
   );
 
   app.post(
+    "/audit/catalog/:catalogEntryId/resolution",
+    async (request, reply) =>
+      handleOperatorResponse(reply, async () => {
+        const params = request.params as {
+          readonly catalogEntryId: string;
+        };
+        const body = request.body as {
+          readonly resolutionNote?: string;
+          readonly items?: unknown;
+        };
+        const items = readChecklistItemResolutionItems(body?.items, "items");
+
+        if (items.length === 0) {
+          throw new OperatorInputError(
+            "items must include at least one checklist item resolution entry.",
+          );
+        }
+
+        return {
+          resolution: await operator.resolveCatalogEntry(
+            params.catalogEntryId,
+            {
+              ...(body?.resolutionNote !== undefined
+                ? { resolutionNote: body.resolutionNote }
+                : {}),
+              items,
+            },
+          ),
+        };
+      }),
+  );
+
+  app.post(
     "/audit/catalog/:catalogEntryId/review/clear",
     async (request, reply) =>
       handleOperatorResponse(reply, async () => {
@@ -672,6 +725,22 @@ export function buildServer(options: BuildServerOptions = {}) {
 
         return {
           blocker: await operator.clearCatalogChecklistItemBlocker(
+            params.catalogEntryId,
+          ),
+        };
+      }),
+  );
+
+  app.post(
+    "/audit/catalog/:catalogEntryId/resolution/clear",
+    async (request, reply) =>
+      handleOperatorResponse(reply, async () => {
+        const params = request.params as {
+          readonly catalogEntryId: string;
+        };
+
+        return {
+          resolution: await operator.clearCatalogChecklistItemResolution(
             params.catalogEntryId,
           ),
         };
@@ -1102,6 +1171,33 @@ function readChecklistItemBlockerItems(
   ) {
     throw new OperatorInputError(
       `${fieldName} must be an array of { item, state } objects with state blocked|cleared.`,
+    );
+  }
+
+  return value;
+}
+
+function readChecklistItemResolutionItems(
+  value: unknown,
+  fieldName: string,
+): readonly {
+  readonly item: string;
+  readonly state: "resolved" | "unresolved";
+}[] {
+  if (
+    !Array.isArray(value) ||
+    !value.every(
+      (entry) =>
+        typeof entry === "object" &&
+        entry !== null &&
+        "item" in entry &&
+        typeof entry.item === "string" &&
+        "state" in entry &&
+        (entry.state === "resolved" || entry.state === "unresolved"),
+    )
+  ) {
+    throw new OperatorInputError(
+      `${fieldName} must be an array of { item, state } objects with state resolved|unresolved.`,
     );
   }
 
