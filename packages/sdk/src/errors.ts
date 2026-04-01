@@ -31,6 +31,7 @@ export class OperatorNotFoundError extends OperatorError {
       | "catalog assignment checklist"
       | "catalog checklist item blocker"
       | "catalog checklist item resolution"
+      | "catalog checklist item verification"
       | "catalog checklist item progress"
       | "catalog entry"
       | "catalog review assignment"

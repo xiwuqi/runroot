@@ -502,6 +502,36 @@ export interface ApiAuditCatalogChecklistItemResolutionCollection {
   readonly totalCount: number;
 }
 
+export type ApiAuditCatalogChecklistItemVerificationState =
+  | "verified"
+  | "unverified";
+
+export interface ApiAuditCatalogChecklistItemVerificationItem {
+  readonly item: string;
+  readonly state: ApiAuditCatalogChecklistItemVerificationState;
+}
+
+export interface ApiAuditCatalogChecklistItemVerification {
+  readonly verificationNote?: string;
+  readonly catalogEntryId: string;
+  readonly createdAt: string;
+  readonly items: readonly ApiAuditCatalogChecklistItemVerificationItem[];
+  readonly kind: "catalog-checklist-item-verification";
+  readonly operatorId: string;
+  readonly scopeId: string;
+  readonly updatedAt: string;
+}
+
+export interface ApiAuditCatalogChecklistItemVerificationView {
+  readonly resolution: ApiAuditCatalogChecklistItemResolutionView;
+  readonly verification: ApiAuditCatalogChecklistItemVerification;
+}
+
+export interface ApiAuditCatalogChecklistItemVerificationCollection {
+  readonly items: readonly ApiAuditCatalogChecklistItemVerificationView[];
+  readonly totalCount: number;
+}
+
 export interface CreateApiAuditCatalogEntryInput {
   readonly description?: string;
   readonly name?: string;
@@ -526,6 +556,11 @@ export interface UpdateApiAuditCatalogChecklistItemBlockerInput {
 export interface UpdateApiAuditCatalogChecklistItemResolutionInput {
   readonly resolutionNote?: string;
   readonly items: readonly ApiAuditCatalogChecklistItemResolutionItem[];
+}
+
+export interface UpdateApiAuditCatalogChecklistItemVerificationInput {
+  readonly verificationNote?: string;
+  readonly items: readonly ApiAuditCatalogChecklistItemVerificationItem[];
 }
 
 export interface UpdateApiAuditCatalogReviewAssignmentInput {
@@ -573,6 +608,9 @@ export interface RunrootApiClient {
   clearAuditCatalogChecklistItemResolution(
     catalogEntryId: string,
   ): Promise<ApiAuditCatalogChecklistItemResolutionView>;
+  clearAuditCatalogChecklistItemVerification(
+    catalogEntryId: string,
+  ): Promise<ApiAuditCatalogChecklistItemVerificationView>;
   clearAuditCatalogChecklistItemProgress(
     catalogEntryId: string,
   ): Promise<ApiAuditCatalogChecklistItemProgressView>;
@@ -594,6 +632,9 @@ export interface RunrootApiClient {
   getAuditCatalogChecklistItemResolution(
     catalogEntryId: string,
   ): Promise<ApiAuditCatalogChecklistItemResolutionView>;
+  getAuditCatalogChecklistItemVerification(
+    catalogEntryId: string,
+  ): Promise<ApiAuditCatalogChecklistItemVerificationView>;
   getAuditCatalogChecklistItemProgress(
     catalogEntryId: string,
   ): Promise<ApiAuditCatalogChecklistItemProgressView>;
@@ -624,6 +665,7 @@ export interface RunrootApiClient {
   listAssignedAuditCatalogEntries(): Promise<ApiAuditCatalogReviewAssignmentCollection>;
   listBlockedAuditCatalogEntries(): Promise<ApiAuditCatalogChecklistItemBlockerCollection>;
   listResolvedAuditCatalogEntries(): Promise<ApiAuditCatalogChecklistItemResolutionCollection>;
+  listVerifiedAuditCatalogEntries(): Promise<ApiAuditCatalogChecklistItemVerificationCollection>;
   listChecklistedAuditCatalogEntries(): Promise<ApiAuditCatalogAssignmentChecklistCollection>;
   listAuditCatalogEntries(): Promise<ApiAuditCatalogEntryCollection>;
   listProgressedAuditCatalogEntries(): Promise<ApiAuditCatalogChecklistItemProgressCollection>;
@@ -651,6 +693,10 @@ export interface RunrootApiClient {
     catalogEntryId: string,
     input: UpdateApiAuditCatalogChecklistItemResolutionInput,
   ): Promise<ApiAuditCatalogChecklistItemResolutionView>;
+  setAuditCatalogChecklistItemVerification(
+    catalogEntryId: string,
+    input: UpdateApiAuditCatalogChecklistItemVerificationInput,
+  ): Promise<ApiAuditCatalogChecklistItemVerificationView>;
   setAuditCatalogAssignmentChecklist(
     catalogEntryId: string,
     input: UpdateApiAuditCatalogAssignmentChecklistInput,
@@ -859,6 +905,18 @@ export function createRunrootApiClient(
       return payload.resolution;
     },
 
+    async clearAuditCatalogChecklistItemVerification(catalogEntryId) {
+      const payload = await requestJson<{
+        verification: ApiAuditCatalogChecklistItemVerificationView;
+      }>(
+        `/audit/catalog/${catalogEntryId}/verification/clear`,
+        { method: "POST" },
+        "web.api.clearAuditCatalogChecklistItemVerification",
+      );
+
+      return payload.verification;
+    },
+
     async clearAuditCatalogChecklistItemProgress(catalogEntryId) {
       const payload = await requestJson<{
         progress: ApiAuditCatalogChecklistItemProgressView;
@@ -941,6 +999,18 @@ export function createRunrootApiClient(
       );
 
       return payload.resolution;
+    },
+
+    async getAuditCatalogChecklistItemVerification(catalogEntryId) {
+      const payload = await requestJson<{
+        verification: ApiAuditCatalogChecklistItemVerificationView;
+      }>(
+        `/audit/catalog/${catalogEntryId}/verification`,
+        { method: "GET" },
+        "web.api.getAuditCatalogChecklistItemVerification",
+      );
+
+      return payload.verification;
     },
 
     async getAuditCatalogChecklistItemProgress(catalogEntryId) {
@@ -1143,6 +1213,18 @@ export function createRunrootApiClient(
       return payload.resolved;
     },
 
+    async listVerifiedAuditCatalogEntries() {
+      const payload = await requestJson<{
+        verified: ApiAuditCatalogChecklistItemVerificationCollection;
+      }>(
+        "/audit/catalog/verified",
+        { method: "GET" },
+        "web.api.listVerifiedAuditCatalogEntries",
+      );
+
+      return payload.verified;
+    },
+
     async listChecklistedAuditCatalogEntries() {
       const payload = await requestJson<{
         checklisted: ApiAuditCatalogAssignmentChecklistCollection;
@@ -1285,6 +1367,24 @@ export function createRunrootApiClient(
       );
 
       return payload.resolution;
+    },
+
+    async setAuditCatalogChecklistItemVerification(catalogEntryId, input) {
+      const payload = await requestJson<{
+        verification: ApiAuditCatalogChecklistItemVerificationView;
+      }>(
+        `/audit/catalog/${catalogEntryId}/verification`,
+        {
+          body: JSON.stringify(input),
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "POST",
+        },
+        "web.api.setAuditCatalogChecklistItemVerification",
+      );
+
+      return payload.verification;
     },
 
     async setAuditCatalogAssignmentChecklist(catalogEntryId, input) {

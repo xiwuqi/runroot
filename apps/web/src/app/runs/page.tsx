@@ -6,6 +6,7 @@ import {
   ChecklistItemBlockersView,
   ChecklistItemProgressView,
   ChecklistItemResolutionsView,
+  ChecklistItemVerificationsView,
   ConsoleShell,
   CrossRunAuditNavigationView,
   ErrorState,
@@ -23,6 +24,7 @@ import {
   type ApiAuditCatalogChecklistItemBlockerView,
   type ApiAuditCatalogChecklistItemProgressView,
   type ApiAuditCatalogChecklistItemResolutionView,
+  type ApiAuditCatalogChecklistItemVerificationView,
   type ApiAuditCatalogEntryApplication,
   type ApiAuditCatalogReviewAssignmentView,
   type ApiAuditCatalogReviewSignalView,
@@ -58,6 +60,7 @@ export default async function RunsPage({
       runs,
       blockedEntries,
       resolvedEntries,
+      verifiedEntries,
       progressedEntries,
       checklistedEntries,
       assignedEntries,
@@ -68,6 +71,7 @@ export default async function RunsPage({
       catalogVisibility,
       catalogChecklistItemBlocker,
       catalogChecklistItemResolution,
+      catalogChecklistItemVerification,
       catalogChecklistItemProgress,
       catalogAssignmentChecklist,
       catalogReviewSignal,
@@ -76,6 +80,7 @@ export default async function RunsPage({
       api.listRuns(),
       api.listBlockedAuditCatalogEntries(),
       api.listResolvedAuditCatalogEntries(),
+      api.listVerifiedAuditCatalogEntries(),
       api.listProgressedAuditCatalogEntries(),
       api.listChecklistedAuditCatalogEntries(),
       api.listAssignedAuditCatalogEntries(),
@@ -101,6 +106,11 @@ export default async function RunsPage({
       catalogEntryId
         ? api
             .getAuditCatalogChecklistItemResolution(catalogEntryId)
+            .catch(() => undefined)
+        : Promise.resolve(undefined),
+      catalogEntryId
+        ? api
+            .getAuditCatalogChecklistItemVerification(catalogEntryId)
             .catch(() => undefined)
         : Promise.resolve(undefined),
       catalogEntryId
@@ -133,6 +143,9 @@ export default async function RunsPage({
     let activeCatalogChecklistItemResolution:
       | ApiAuditCatalogChecklistItemResolutionView
       | undefined;
+    let activeCatalogChecklistItemVerification:
+      | ApiAuditCatalogChecklistItemVerificationView
+      | undefined;
     let activeCatalogChecklistItemProgress:
       | ApiAuditCatalogChecklistItemProgressView
       | undefined;
@@ -147,6 +160,7 @@ export default async function RunsPage({
       activeCatalogEntry = catalogVisibility;
       activeCatalogChecklistItemBlocker = catalogChecklistItemBlocker;
       activeCatalogChecklistItemResolution = catalogChecklistItemResolution;
+      activeCatalogChecklistItemVerification = catalogChecklistItemVerification;
       activeCatalogChecklistItemProgress = catalogChecklistItemProgress;
       activeCatalogAssignmentChecklist = catalogAssignmentChecklist;
       activeCatalogReviewAssignment = catalogReviewAssignment;
@@ -178,6 +192,12 @@ export default async function RunsPage({
             ? { activeCatalogChecklistItemResolution }
             : {})}
         />
+        <ChecklistItemVerificationsView
+          verifiedEntries={verifiedEntries}
+          {...(activeCatalogChecklistItemVerification
+            ? { activeCatalogChecklistItemVerification }
+            : {})}
+        />
         <ChecklistItemProgressView
           progressedEntries={progressedEntries}
           {...(activeCatalogChecklistItemProgress
@@ -207,6 +227,7 @@ export default async function RunsPage({
           checklistedEntries={checklistedEntries}
           progressedEntries={progressedEntries}
           resolvedEntries={resolvedEntries}
+          verifiedEntries={verifiedEntries}
           reviewedEntries={reviewedEntries}
           {...(activeCatalogEntry ? { activeCatalogEntry } : {})}
           {...(activeCatalogChecklistItemBlocker
@@ -214,6 +235,9 @@ export default async function RunsPage({
             : {})}
           {...(activeCatalogChecklistItemResolution
             ? { activeCatalogChecklistItemResolution }
+            : {})}
+          {...(activeCatalogChecklistItemVerification
+            ? { activeCatalogChecklistItemVerification }
             : {})}
           {...(activeCatalogChecklistItemProgress
             ? { activeCatalogChecklistItemProgress }

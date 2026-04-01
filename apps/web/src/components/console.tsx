@@ -13,6 +13,9 @@ import type {
   ApiAuditCatalogChecklistItemResolutionCollection,
   ApiAuditCatalogChecklistItemResolutionItem,
   ApiAuditCatalogChecklistItemResolutionView,
+  ApiAuditCatalogChecklistItemVerificationCollection,
+  ApiAuditCatalogChecklistItemVerificationItem,
+  ApiAuditCatalogChecklistItemVerificationView,
   ApiAuditCatalogReviewAssignmentCollection,
   ApiAuditCatalogReviewAssignmentView,
   ApiAuditCatalogReviewSignalCollection,
@@ -725,6 +728,164 @@ export function ChecklistItemResolutionsView({
   );
 }
 
+export function ChecklistItemVerificationsView({
+  activeCatalogChecklistItemVerification,
+  verifiedEntries,
+}: Readonly<{
+  activeCatalogChecklistItemVerification?: ApiAuditCatalogChecklistItemVerificationView;
+  verifiedEntries: ApiAuditCatalogChecklistItemVerificationCollection;
+}>) {
+  return (
+    <section className="card">
+      <div className="row spread">
+        <div>
+          <div className="card-eyebrow">
+            Phase 24 / Checklist Item Verifications
+          </div>
+          <h2>Checklist item verifications</h2>
+          <p className="empty-copy">
+            Track thin per-item verifications and a single verification note on
+            resolved blocked presets without turning the console into a workflow
+            engine or collaboration product.
+          </p>
+        </div>
+        <div className="timeline-count">
+          {verifiedEntries.totalCount} verified preset(s)
+        </div>
+      </div>
+
+      {activeCatalogChecklistItemVerification ? (
+        <div className="inline-note">
+          Active verifications:{" "}
+          <strong>
+            {
+              activeCatalogChecklistItemVerification.resolution.blocker.progress
+                .checklist.assignment.review.visibility.catalogEntry.entry.name
+            }
+          </strong>
+          {" · "}
+          {formatVerificationSummary(
+            activeCatalogChecklistItemVerification.verification.items,
+          )}
+          {activeCatalogChecklistItemVerification.verification.verificationNote
+            ? ` · ${activeCatalogChecklistItemVerification.verification.verificationNote}`
+            : ""}
+        </div>
+      ) : null}
+
+      {verifiedEntries.items.length === 0 ? (
+        <p className="empty-copy">
+          No checklist item verifications yet. Record resolutions first, then
+          save thin verification metadata through the shared operator seam.
+        </p>
+      ) : (
+        <ol className="timeline-list">
+          {verifiedEntries.items.map((verificationView) => (
+            <li
+              className="timeline-entry"
+              key={
+                verificationView.resolution.blocker.progress.checklist
+                  .assignment.review.visibility.catalogEntry.entry.id
+              }
+            >
+              <div className="row spread">
+                <div>
+                  <strong>
+                    {
+                      verificationView.resolution.blocker.progress.checklist
+                        .assignment.review.visibility.catalogEntry.entry.name
+                    }
+                  </strong>
+                  <div className="timeline-meta">
+                    {formatVerificationSummary(
+                      verificationView.verification.items,
+                    )}
+                    {" · "}
+                    {formatResolutionSummary(
+                      verificationView.resolution.resolution.items,
+                    )}
+                    {" · "}
+                    {formatBlockerSummary(
+                      verificationView.resolution.blocker.blocker.items,
+                    )}
+                  </div>
+                </div>
+                <span>
+                  {formatTimestamp(verificationView.verification.updatedAt)}
+                </span>
+              </div>
+              <ul className="approval-history">
+                {verificationView.verification.items.map((item) => (
+                  <li
+                    key={`${verificationView.verification.catalogEntryId}:${item.item}`}
+                  >
+                    <strong>{item.state}</strong>: {item.item}
+                  </li>
+                ))}
+              </ul>
+              {verificationView.verification.verificationNote ? (
+                <p className="empty-copy">
+                  {verificationView.verification.verificationNote}
+                </p>
+              ) : null}
+              <div className="timeline-meta">
+                operator {verificationView.verification.operatorId} · scope{" "}
+                {verificationView.verification.scopeId}
+              </div>
+              <div className="row spread">
+                <a
+                  className="link-button"
+                  href={buildCatalogEntryHref(
+                    verificationView.resolution.blocker.progress.checklist
+                      .assignment.review.visibility.catalogEntry.entry.id,
+                  )}
+                >
+                  Apply verified preset
+                </a>
+                <form
+                  action="/runs/catalog"
+                  className="action-form"
+                  method="post"
+                >
+                  <input
+                    name="returnTo"
+                    type="hidden"
+                    value={buildCatalogEntryHref(
+                      verificationView.resolution.blocker.progress.checklist
+                        .assignment.review.visibility.catalogEntry.entry.id,
+                    )}
+                  />
+                  <input
+                    name="intent"
+                    type="hidden"
+                    value="clear-verification"
+                  />
+                  <input
+                    name="catalogEntryId"
+                    type="hidden"
+                    value={
+                      verificationView.resolution.blocker.progress.checklist
+                        .assignment.review.visibility.catalogEntry.entry.id
+                    }
+                  />
+                  <button type="submit">Clear verifications</button>
+                </form>
+              </div>
+              {activeCatalogChecklistItemVerification?.resolution.blocker
+                .progress.checklist.assignment.review.visibility.catalogEntry
+                .entry.id ===
+              verificationView.resolution.blocker.progress.checklist.assignment
+                .review.visibility.catalogEntry.entry.id ? (
+                <div className="timeline-meta">Currently applied</div>
+              ) : null}
+            </li>
+          ))}
+        </ol>
+      )}
+    </section>
+  );
+}
+
 export function CatalogReviewAssignmentsView({
   activeCatalogReviewAssignment,
   assignedEntries,
@@ -961,6 +1122,7 @@ export function AuditViewCatalogsView({
   activeCatalogEntry,
   activeCatalogChecklistItemBlocker,
   activeCatalogChecklistItemResolution,
+  activeCatalogChecklistItemVerification,
   activeCatalogChecklistItemProgress,
   assignedEntries,
   blockedEntries,
@@ -968,11 +1130,13 @@ export function AuditViewCatalogsView({
   checklistedEntries,
   progressedEntries,
   resolvedEntries,
+  verifiedEntries,
   reviewedEntries,
 }: Readonly<{
   activeCatalogEntry?: ApiAuditCatalogVisibilityView;
   activeCatalogChecklistItemBlocker?: ApiAuditCatalogChecklistItemBlockerView;
   activeCatalogChecklistItemResolution?: ApiAuditCatalogChecklistItemResolutionView;
+  activeCatalogChecklistItemVerification?: ApiAuditCatalogChecklistItemVerificationView;
   activeCatalogChecklistItemProgress?: ApiAuditCatalogChecklistItemProgressView;
   assignedEntries: ApiAuditCatalogReviewAssignmentCollection;
   blockedEntries: ApiAuditCatalogChecklistItemBlockerCollection;
@@ -980,6 +1144,7 @@ export function AuditViewCatalogsView({
   checklistedEntries: ApiAuditCatalogAssignmentChecklistCollection;
   progressedEntries: ApiAuditCatalogChecklistItemProgressCollection;
   resolvedEntries: ApiAuditCatalogChecklistItemResolutionCollection;
+  verifiedEntries: ApiAuditCatalogChecklistItemVerificationCollection;
   reviewedEntries: ApiAuditCatalogReviewSignalCollection;
 }>) {
   const assignmentsByCatalogEntryId = new Map(
@@ -1026,6 +1191,16 @@ export function AuditViewCatalogsView({
         [
           item.blocker.progress.checklist.assignment.review.visibility
             .catalogEntry.entry.id,
+          item,
+        ] as const,
+    ),
+  );
+  const verificationsByCatalogEntryId = new Map(
+    verifiedEntries.items.map(
+      (item) =>
+        [
+          item.resolution.blocker.progress.checklist.assignment.review
+            .visibility.catalogEntry.entry.id,
           item,
         ] as const,
     ),
@@ -1086,6 +1261,9 @@ export function AuditViewCatalogsView({
                 const resolution = resolutionsByCatalogEntryId.get(
                   catalogEntry.catalogEntry.entry.id,
                 );
+                const verification = verificationsByCatalogEntryId.get(
+                  catalogEntry.catalogEntry.entry.id,
+                );
                 const reviewSignal = reviewSignalsByCatalogEntryId.get(
                   catalogEntry.catalogEntry.entry.id,
                 );
@@ -1116,6 +1294,11 @@ export function AuditViewCatalogsView({
                           {resolution
                             ? ` · ${formatResolutionSummary(
                                 resolution.resolution.items,
+                              )}`
+                            : ""}
+                          {verification
+                            ? ` · ${formatVerificationSummary(
+                                verification.verification.items,
                               )}`
                             : ""}
                         </div>
@@ -1181,6 +1364,20 @@ export function AuditViewCatalogsView({
                         resolution note: {resolution.resolution.resolutionNote}
                       </p>
                     ) : null}
+                    {verification?.verification.items.length ? (
+                      <p className="empty-copy">
+                        verifications:{" "}
+                        {verification.verification.items
+                          .map((item) => `${item.state}: ${item.item}`)
+                          .join(", ")}
+                      </p>
+                    ) : null}
+                    {verification?.verification.verificationNote ? (
+                      <p className="empty-copy">
+                        verification note:{" "}
+                        {verification.verification.verificationNote}
+                      </p>
+                    ) : null}
                     <div className="timeline-meta">
                       saved view {catalogEntry.catalogEntry.savedView.id}
                       {catalogEntry.catalogEntry.savedView.refs.auditViewRunId
@@ -1210,6 +1407,9 @@ export function AuditViewCatalogsView({
                         : ""}
                       {resolution
                         ? ` · resolution owner ${resolution.resolution.operatorId}`
+                        : ""}
+                      {verification
+                        ? ` · verification owner ${verification.verification.operatorId}`
                         : ""}
                     </div>
                     <div className="timeline-meta">
@@ -1534,6 +1734,62 @@ export function AuditViewCatalogsView({
                         </div>
                       </form>
                     ) : null}
+                    {resolution ? (
+                      <form
+                        action="/runs/catalog"
+                        className="decision-form"
+                        method="post"
+                      >
+                        <input
+                          name="returnTo"
+                          type="hidden"
+                          value={buildCatalogEntryHref(
+                            catalogEntry.catalogEntry.entry.id,
+                          )}
+                        />
+                        <input name="intent" type="hidden" value="verify" />
+                        <input
+                          name="catalogEntryId"
+                          type="hidden"
+                          value={catalogEntry.catalogEntry.entry.id}
+                        />
+                        <div className="data-grid">
+                          <label>
+                            <span>Checklist item verifications</span>
+                            <textarea
+                              className="note-input"
+                              defaultValue={formatChecklistItemVerificationLines(
+                                resolution.resolution.items,
+                                verification?.verification.items,
+                              )}
+                              name="verificationItems"
+                              placeholder="verified: Validate queued follow-up"
+                              rows={4}
+                            />
+                          </label>
+                          <label>
+                            <span>Verification note</span>
+                            <input
+                              defaultValue={
+                                verification?.verification.verificationNote ??
+                                ""
+                              }
+                              name="verificationNote"
+                              placeholder="Optional thin verification note"
+                              type="text"
+                            />
+                          </label>
+                        </div>
+                        <div className="row spread">
+                          <div />
+                          <button type="submit">
+                            {verification
+                              ? "Update verifications"
+                              : "Save verifications"}
+                          </button>
+                        </div>
+                      </form>
+                    ) : null}
                     <div className="row spread">
                       <a
                         className="link-button"
@@ -1700,6 +1956,32 @@ export function AuditViewCatalogsView({
                             <button type="submit">Clear resolutions</button>
                           </form>
                         ) : null}
+                        {verification ? (
+                          <form
+                            action="/runs/catalog"
+                            className="action-form"
+                            method="post"
+                          >
+                            <input
+                              name="returnTo"
+                              type="hidden"
+                              value={buildCatalogEntryHref(
+                                catalogEntry.catalogEntry.entry.id,
+                              )}
+                            />
+                            <input
+                              name="intent"
+                              type="hidden"
+                              value="clear-verification"
+                            />
+                            <input
+                              name="catalogEntryId"
+                              type="hidden"
+                              value={catalogEntry.catalogEntry.entry.id}
+                            />
+                            <button type="submit">Clear verifications</button>
+                          </form>
+                        ) : null}
                         <form
                           action="/runs/catalog"
                           className="action-form"
@@ -1777,6 +2059,14 @@ export function AuditViewCatalogsView({
                       .id === catalogEntry.catalogEntry.entry.id ? (
                       <div className="timeline-meta">
                         Active resolutions selected
+                      </div>
+                    ) : null}
+                    {activeCatalogChecklistItemVerification?.resolution.blocker
+                      .progress.checklist.assignment.review.visibility
+                      .catalogEntry.entry.id ===
+                    catalogEntry.catalogEntry.entry.id ? (
+                      <div className="timeline-meta">
+                        Active verifications selected
                       </div>
                     ) : null}
                   </>
@@ -3097,6 +3387,16 @@ function formatResolutionSummary(
   return `${resolvedCount}/${items.length} resolved`;
 }
 
+function formatVerificationSummary(
+  items: readonly ApiAuditCatalogChecklistItemVerificationItem[],
+): string {
+  const verifiedCount = items.filter(
+    (item) => item.state === "verified",
+  ).length;
+
+  return `${verifiedCount}/${items.length} verified`;
+}
+
 function formatChecklistItemProgressLines(
   checklistItems: readonly string[],
   progressItems:
@@ -3139,6 +3439,24 @@ function formatChecklistItemResolutionLines(
     .map(
       (item) =>
         `${resolutionByItem.get(item.item) ?? "unresolved"}: ${item.item}`,
+    )
+    .join("\n");
+}
+
+function formatChecklistItemVerificationLines(
+  resolutionItems: readonly ApiAuditCatalogChecklistItemResolutionItem[],
+  verificationItems:
+    | readonly ApiAuditCatalogChecklistItemVerificationItem[]
+    | undefined,
+): string {
+  const verificationByItem = new Map(
+    (verificationItems ?? []).map((item) => [item.item, item.state] as const),
+  );
+
+  return resolutionItems
+    .map(
+      (item) =>
+        `${verificationByItem.get(item.item) ?? "unverified"}: ${item.item}`,
     )
     .join("\n");
 }

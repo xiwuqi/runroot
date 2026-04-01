@@ -363,6 +363,53 @@ export async function POST(request: Request) {
       return Response.redirect(redirectUrl, 303);
     }
 
+    if (intent === "verify") {
+      const catalogEntryId = readTrimmedFormValue(formData, "catalogEntryId");
+      const verificationItems = readChecklistItemVerificationItems(
+        formData.get("verificationItems"),
+      );
+      const verificationNoteValue = formData.get("verificationNote");
+
+      if (!catalogEntryId) {
+        appendFlashMessage(
+          redirectUrl,
+          "error",
+          "A catalog entry id is required to update checklist item verification metadata.",
+        );
+
+        return Response.redirect(redirectUrl, 303);
+      }
+
+      if (verificationItems.length === 0) {
+        appendFlashMessage(
+          redirectUrl,
+          "error",
+          "At least one checklist item verification entry is required.",
+        );
+
+        return Response.redirect(redirectUrl, 303);
+      }
+
+      const verification =
+        await createRunrootApiClient().setAuditCatalogChecklistItemVerification(
+          catalogEntryId,
+          {
+            ...(typeof verificationNoteValue === "string"
+              ? { verificationNote: verificationNoteValue }
+              : {}),
+            items: verificationItems,
+          },
+        );
+
+      appendFlashMessage(
+        redirectUrl,
+        "notice",
+        `Checklist item verifications for ${verification.resolution.blocker.progress.checklist.assignment.review.visibility.catalogEntry.entry.name} updated.`,
+      );
+
+      return Response.redirect(redirectUrl, 303);
+    }
+
     if (intent === "clear-review") {
       const catalogEntryId = readTrimmedFormValue(formData, "catalogEntryId");
 
@@ -466,6 +513,33 @@ export async function POST(request: Request) {
         redirectUrl,
         "notice",
         `Checklist item resolutions for ${resolution.blocker.progress.checklist.assignment.review.visibility.catalogEntry.entry.name} cleared.`,
+      );
+
+      return Response.redirect(redirectUrl, 303);
+    }
+
+    if (intent === "clear-verification") {
+      const catalogEntryId = readTrimmedFormValue(formData, "catalogEntryId");
+
+      if (!catalogEntryId) {
+        appendFlashMessage(
+          redirectUrl,
+          "error",
+          "A catalog entry id is required to clear checklist item verification metadata.",
+        );
+
+        return Response.redirect(redirectUrl, 303);
+      }
+
+      const verification =
+        await createRunrootApiClient().clearAuditCatalogChecklistItemVerification(
+          catalogEntryId,
+        );
+
+      appendFlashMessage(
+        redirectUrl,
+        "notice",
+        `Checklist item verifications for ${verification.resolution.blocker.progress.checklist.assignment.review.visibility.catalogEntry.entry.name} cleared.`,
       );
 
       return Response.redirect(redirectUrl, 303);
@@ -724,6 +798,52 @@ function readChecklistItemResolutionItems(
       if (rawState !== "resolved" && rawState !== "unresolved") {
         throw new Error(
           `Checklist item resolution state must be resolved or unresolved for "${item}".`,
+        );
+      }
+
+      return {
+        item,
+        state: rawState,
+      };
+    });
+}
+
+function readChecklistItemVerificationItems(
+  value: FormDataEntryValue | null,
+): readonly {
+  readonly item: string;
+  readonly state: "verified" | "unverified";
+}[] {
+  if (typeof value !== "string") {
+    return [];
+  }
+
+  return value
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .map((line) => {
+      const separatorIndex = line.indexOf(":");
+
+      if (separatorIndex < 0) {
+        return {
+          item: line,
+          state: "unverified" as const,
+        };
+      }
+
+      const rawState = line.slice(0, separatorIndex).trim();
+      const item = line.slice(separatorIndex + 1).trim();
+
+      if (item.length === 0) {
+        throw new Error(
+          "Checklist item verification lines require a non-empty item.",
+        );
+      }
+
+      if (rawState !== "verified" && rawState !== "unverified") {
+        throw new Error(
+          `Checklist item verification state must be verified or unverified for "${item}".`,
         );
       }
 

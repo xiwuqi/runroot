@@ -261,6 +261,12 @@ export function buildServer(options: BuildServerOptions = {}) {
     })),
   );
 
+  app.get("/audit/catalog/verified", async (_request, reply) =>
+    handleOperatorResponse(reply, async () => ({
+      verified: await operator.listVerifiedCatalogEntries(),
+    })),
+  );
+
   app.post("/audit/saved-views", async (request, reply) =>
     handleOperatorResponse(reply, async () => {
       const body = request.body as {
@@ -446,6 +452,22 @@ export function buildServer(options: BuildServerOptions = {}) {
         ),
       };
     }),
+  );
+
+  app.get(
+    "/audit/catalog/:catalogEntryId/verification",
+    async (request, reply) =>
+      handleOperatorResponse(reply, async () => {
+        const params = request.params as {
+          readonly catalogEntryId: string;
+        };
+
+        return {
+          verification: await operator.getCatalogChecklistItemVerification(
+            params.catalogEntryId,
+          ),
+        };
+      }),
   );
 
   app.get("/audit/catalog/:catalogEntryId", async (request, reply) =>
@@ -652,6 +674,39 @@ export function buildServer(options: BuildServerOptions = {}) {
   );
 
   app.post(
+    "/audit/catalog/:catalogEntryId/verification",
+    async (request, reply) =>
+      handleOperatorResponse(reply, async () => {
+        const params = request.params as {
+          readonly catalogEntryId: string;
+        };
+        const body = request.body as {
+          readonly verificationNote?: string;
+          readonly items?: unknown;
+        };
+        const items = readChecklistItemVerificationItems(body?.items, "items");
+
+        if (items.length === 0) {
+          throw new OperatorInputError(
+            "items must include at least one checklist item verification entry.",
+          );
+        }
+
+        return {
+          verification: await operator.verifyCatalogEntry(
+            params.catalogEntryId,
+            {
+              ...(body?.verificationNote !== undefined
+                ? { verificationNote: body.verificationNote }
+                : {}),
+              items,
+            },
+          ),
+        };
+      }),
+  );
+
+  app.post(
     "/audit/catalog/:catalogEntryId/review/clear",
     async (request, reply) =>
       handleOperatorResponse(reply, async () => {
@@ -741,6 +796,22 @@ export function buildServer(options: BuildServerOptions = {}) {
 
         return {
           resolution: await operator.clearCatalogChecklistItemResolution(
+            params.catalogEntryId,
+          ),
+        };
+      }),
+  );
+
+  app.post(
+    "/audit/catalog/:catalogEntryId/verification/clear",
+    async (request, reply) =>
+      handleOperatorResponse(reply, async () => {
+        const params = request.params as {
+          readonly catalogEntryId: string;
+        };
+
+        return {
+          verification: await operator.clearCatalogChecklistItemVerification(
             params.catalogEntryId,
           ),
         };
@@ -1198,6 +1269,33 @@ function readChecklistItemResolutionItems(
   ) {
     throw new OperatorInputError(
       `${fieldName} must be an array of { item, state } objects with state resolved|unresolved.`,
+    );
+  }
+
+  return value;
+}
+
+function readChecklistItemVerificationItems(
+  value: unknown,
+  fieldName: string,
+): readonly {
+  readonly item: string;
+  readonly state: "verified" | "unverified";
+}[] {
+  if (
+    !Array.isArray(value) ||
+    !value.every(
+      (entry) =>
+        typeof entry === "object" &&
+        entry !== null &&
+        "item" in entry &&
+        typeof entry.item === "string" &&
+        "state" in entry &&
+        (entry.state === "verified" || entry.state === "unverified"),
+    )
+  ) {
+    throw new OperatorInputError(
+      `${fieldName} must be an array of { item, state } objects with state verified|unverified.`,
     );
   }
 

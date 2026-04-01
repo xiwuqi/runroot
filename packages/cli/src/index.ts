@@ -15,6 +15,7 @@ import {
   type ResolveAuditCatalogEntryInput,
   resolveWorkspacePath,
   type SaveAuditSavedViewInput,
+  type VerifyAuditCatalogEntryInput,
 } from "@runroot/sdk";
 
 export interface CliIo {
@@ -161,6 +162,19 @@ export async function runCli(
               resolveResolveAuditCatalogEntryInput(flags),
             ),
           });
+        case "verify":
+          if (!detail) {
+            throw new Error(
+              "audit catalog verify requires a catalog entry id.",
+            );
+          }
+
+          return writeJson(io.stdout.write, {
+            verification: await service.verifyCatalogEntry(
+              detail,
+              resolveVerifyAuditCatalogEntryInput(flags),
+            ),
+          });
         case "assigned":
           return writeJson(io.stdout.write, {
             assigned: await service.listAssignedCatalogEntries(),
@@ -172,6 +186,10 @@ export async function runCli(
         case "resolved":
           return writeJson(io.stdout.write, {
             resolved: await service.listResolvedCatalogEntries(),
+          });
+        case "verified":
+          return writeJson(io.stdout.write, {
+            verified: await service.listVerifiedCatalogEntries(),
           });
         case "checklist":
           if (!detail) {
@@ -220,6 +238,17 @@ export async function runCli(
           return writeJson(io.stdout.write, {
             resolution:
               await service.clearCatalogChecklistItemResolution(detail),
+          });
+        case "clear-verification":
+          if (!detail) {
+            throw new Error(
+              "audit catalog clear-verification requires a catalog entry id.",
+            );
+          }
+
+          return writeJson(io.stdout.write, {
+            verification:
+              await service.clearCatalogChecklistItemVerification(detail),
           });
         case "clear-assignment":
           if (!detail) {
@@ -310,6 +339,17 @@ export async function runCli(
 
           return writeJson(io.stdout.write, {
             resolution: await service.getCatalogChecklistItemResolution(detail),
+          });
+        case "inspect-verification":
+          if (!detail) {
+            throw new Error(
+              "audit catalog inspect-verification requires a catalog entry id.",
+            );
+          }
+
+          return writeJson(io.stdout.write, {
+            verification:
+              await service.getCatalogChecklistItemVerification(detail),
           });
         case "inspect-review":
           if (!detail) {
@@ -781,6 +821,22 @@ function resolveResolveAuditCatalogEntryInput(
   };
 }
 
+function resolveVerifyAuditCatalogEntryInput(
+  flags: ReadonlyMap<string, string | boolean>,
+): VerifyAuditCatalogEntryInput {
+  const itemsJson = getStringFlag(flags, "items-json");
+  const verificationNote = getStringFlag(flags, "verification-note");
+
+  if (!itemsJson) {
+    throw new Error("audit catalog verify requires --items-json <json-array>.");
+  }
+
+  return {
+    ...(verificationNote !== undefined ? { verificationNote } : {}),
+    items: resolveChecklistItemVerificationItems(itemsJson),
+  };
+}
+
 function resolveChecklistItems(itemsJson: string): readonly string[] {
   const parsedItems = JSON.parse(itemsJson) as unknown;
 
@@ -866,6 +922,32 @@ function resolveChecklistItemResolutionItems(itemsJson: string): readonly {
   ) {
     throw new Error(
       "--items-json must decode to an array of { item, state } objects with state resolved|unresolved.",
+    );
+  }
+
+  return parsedItems;
+}
+
+function resolveChecklistItemVerificationItems(itemsJson: string): readonly {
+  readonly item: string;
+  readonly state: "verified" | "unverified";
+}[] {
+  const parsedItems = JSON.parse(itemsJson) as unknown;
+
+  if (
+    !Array.isArray(parsedItems) ||
+    !parsedItems.every(
+      (item) =>
+        typeof item === "object" &&
+        item !== null &&
+        "item" in item &&
+        typeof item.item === "string" &&
+        "state" in item &&
+        (item.state === "verified" || item.state === "unverified"),
+    )
+  ) {
+    throw new Error(
+      "--items-json must decode to an array of { item, state } objects with state verified|unverified.",
     );
   }
 
@@ -980,6 +1062,7 @@ Commands:
   audit catalog assigned
   audit catalog blocked
   audit catalog resolved
+  audit catalog verified
   audit catalog checklisted
   audit catalog progressed
   audit catalog publish <saved-view-id> [--name <name>] [--description <text>]
@@ -988,16 +1071,19 @@ Commands:
   audit catalog inspect-assignment <catalog-entry-id>
   audit catalog inspect-blocker <catalog-entry-id>
   audit catalog inspect-resolution <catalog-entry-id>
+  audit catalog inspect-verification <catalog-entry-id>
   audit catalog inspect-checklist <catalog-entry-id>
   audit catalog inspect-progress <catalog-entry-id>
   audit catalog inspect-review <catalog-entry-id>
   audit catalog assign <catalog-entry-id> --assignee <operator-id> [--handoff-note <text>]
   audit catalog block <catalog-entry-id> --items-json <json-array> [--blocker-note <text>]
   audit catalog resolve <catalog-entry-id> --items-json <json-array> [--resolution-note <text>]
+  audit catalog verify <catalog-entry-id> --items-json <json-array> [--verification-note <text>]
   audit catalog checklist <catalog-entry-id> --status <pending|completed> [--items-json <json-array>]
   audit catalog progress <catalog-entry-id> --items-json <json-array> [--completion-note <text>]
   audit catalog clear-blocker <catalog-entry-id>
   audit catalog clear-resolution <catalog-entry-id>
+  audit catalog clear-verification <catalog-entry-id>
   audit catalog clear-assignment <catalog-entry-id>
   audit catalog clear-checklist <catalog-entry-id>
   audit catalog clear-progress <catalog-entry-id>
