@@ -336,4 +336,26 @@ Status: completed
   engines, broader multi-user curation, or broad observability and analytics
   platform work
 
-Status: implemented on branch
+Status: completed
+
+## Phase 24: Cross-Run Audit Catalog Checklist Item Verifications and Verification Notes
+
+- add a shared audit-catalog checklist-item-verification contract over the
+  existing checklist-item-resolution and checklist-item-blocker paths rather
+  than introducing broader checklist orchestration or a workflow engine
+- expose minimal verify, list-verified, inspect-verification,
+  clear-verification, and apply paths through the existing seams in SDK, API,
+  CLI, and web
+- keep operator surfaces thin while allowing resolved blocked progressed
+  assigned presets to carry stable per-item verification state and a thin
+  verification note without expanding into threaded collaboration,
+  fine-grained RBAC, multi-tenant access, dashboards, search, or analytics
+  products
+- execute against the formal handoff in
+  [docs/architecture/phase-24-handoff.md](./architecture/phase-24-handoff.md)
+- keep the phase focused on checklist item verifications and verification
+  notes rather than broader checklist orchestration, broader review workflow
+  engines, broader multi-user curation, or broad observability and analytics
+  platform work
+
+Status: scope freeze on branch
