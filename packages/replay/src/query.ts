@@ -59,6 +59,17 @@ import {
   type UpdateCrossRunAuditCatalogChecklistItemResolutionInput,
 } from "./checklist-item-resolution";
 import {
+  type CrossRunAuditCatalogChecklistItemVerification,
+  type CrossRunAuditCatalogChecklistItemVerificationApplication,
+  type CrossRunAuditCatalogChecklistItemVerificationCollection,
+  type CrossRunAuditCatalogChecklistItemVerificationStore,
+  type CrossRunAuditCatalogChecklistItemVerificationView,
+  compareCrossRunAuditCatalogChecklistItemVerification,
+  createCrossRunAuditCatalogChecklistItemVerification,
+  normalizeChecklistItemVerificationItems,
+  type UpdateCrossRunAuditCatalogChecklistItemVerificationInput,
+} from "./checklist-item-verification";
+import {
   type CrossRunAuditQueryFilters,
   type CrossRunAuditResults,
   compareCrossRunAuditResults,
@@ -348,6 +359,32 @@ export interface CrossRunAuditCatalogChecklistItemResolutionQuery {
     input: UpdateCrossRunAuditCatalogChecklistItemResolutionInput,
     timestamp: string,
   ): Promise<CrossRunAuditCatalogChecklistItemResolutionView>;
+}
+
+export interface CrossRunAuditCatalogChecklistItemVerificationQuery {
+  applyCatalogEntry(
+    id: string,
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+  ): Promise<
+    CrossRunAuditCatalogChecklistItemVerificationApplication | undefined
+  >;
+  clearCatalogChecklistItemVerification(
+    id: string,
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+  ): Promise<CrossRunAuditCatalogChecklistItemVerificationView | undefined>;
+  getCatalogChecklistItemVerification(
+    id: string,
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+  ): Promise<CrossRunAuditCatalogChecklistItemVerificationView | undefined>;
+  listVerifiedCatalogEntries(
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+  ): Promise<CrossRunAuditCatalogChecklistItemVerificationCollection>;
+  setCatalogChecklistItemVerification(
+    id: string,
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+    input: UpdateCrossRunAuditCatalogChecklistItemVerificationInput,
+    timestamp: string,
+  ): Promise<CrossRunAuditCatalogChecklistItemVerificationView>;
 }
 
 export function createRunTimelineQuery(
@@ -1553,6 +1590,153 @@ export function createCrossRunAuditCatalogChecklistItemResolutionQuery(
   };
 }
 
+export function createCrossRunAuditCatalogChecklistItemVerificationQuery(
+  store: CrossRunAuditCatalogChecklistItemVerificationStore,
+  resolutions: CrossRunAuditCatalogChecklistItemResolutionQuery,
+): CrossRunAuditCatalogChecklistItemVerificationQuery {
+  return {
+    async applyCatalogEntry(id, viewer) {
+      const verification = await resolveCatalogChecklistItemVerificationView(
+        store,
+        resolutions,
+        id,
+        viewer,
+      );
+
+      if (!verification) {
+        return undefined;
+      }
+
+      const application = await resolutions.applyCatalogEntry(id, viewer);
+
+      if (!application) {
+        return undefined;
+      }
+
+      return {
+        application,
+        verification,
+      };
+    },
+
+    async clearCatalogChecklistItemVerification(id, viewer) {
+      const verification = await resolveCatalogChecklistItemVerificationView(
+        store,
+        resolutions,
+        id,
+        viewer,
+      );
+
+      if (!verification) {
+        return undefined;
+      }
+
+      await store.deleteCatalogChecklistItemVerification(id);
+
+      return verification;
+    },
+
+    async getCatalogChecklistItemVerification(id, viewer) {
+      return resolveCatalogChecklistItemVerificationView(
+        store,
+        resolutions,
+        id,
+        viewer,
+      );
+    },
+
+    async listVerifiedCatalogEntries(viewer) {
+      const verifications = [
+        ...(await store.listCatalogChecklistItemVerifications()),
+      ].sort(compareCrossRunAuditCatalogChecklistItemVerification);
+      const items = (
+        await Promise.all(
+          verifications.map(async (verification) =>
+            resolveCatalogChecklistItemVerificationFromValue(
+              resolutions,
+              verification,
+              viewer,
+            ),
+          ),
+        )
+      ).filter(
+        (
+          verification,
+        ): verification is CrossRunAuditCatalogChecklistItemVerificationView =>
+          verification !== undefined,
+      );
+
+      return {
+        items,
+        totalCount: items.length,
+      };
+    },
+
+    async setCatalogChecklistItemVerification(id, viewer, input, timestamp) {
+      const resolutionView =
+        await resolutions.getCatalogChecklistItemResolution(id, viewer);
+
+      if (!resolutionView) {
+        throw new Error(
+          `Catalog entry "${id}" is not resolved and visible to operator "${viewer.operatorId}".`,
+        );
+      }
+
+      const allowedItems = resolutionView.resolution.items.map(
+        (item) => item.item,
+      );
+      const normalizedItems = normalizeChecklistItemVerificationItems(
+        input.items,
+        allowedItems,
+      );
+
+      if (normalizedItems.length === 0) {
+        throw new Error(
+          "Catalog checklist item verifications require at least one checklist item verification entry.",
+        );
+      }
+
+      const existingVerification =
+        await store.getCatalogChecklistItemVerification(id);
+      const normalizedVerificationNote = input.verificationNote?.trim();
+      const verification = existingVerification
+        ? {
+            ...(input.verificationNote === undefined
+              ? existingVerification.verificationNote
+                ? { verificationNote: existingVerification.verificationNote }
+                : {}
+              : normalizedVerificationNote
+                ? { verificationNote: normalizedVerificationNote }
+                : {}),
+            catalogEntryId: id,
+            createdAt: existingVerification.createdAt,
+            items: normalizedItems,
+            kind: existingVerification.kind,
+            operatorId: viewer.operatorId,
+            scopeId: viewer.scopeId,
+            updatedAt: timestamp,
+          }
+        : createCrossRunAuditCatalogChecklistItemVerification({
+            ...(normalizedVerificationNote
+              ? { verificationNote: normalizedVerificationNote }
+              : {}),
+            catalogEntryId: id,
+            items: normalizedItems,
+            operatorId: viewer.operatorId,
+            scopeId: viewer.scopeId,
+            timestamp,
+          });
+
+      await store.saveCatalogChecklistItemVerification(verification);
+
+      return {
+        resolution: resolutionView,
+        verification,
+      };
+    },
+  };
+}
+
 async function resolveCatalogEntryView(
   store: CrossRunAuditCatalogStore,
   savedViews: CrossRunAuditSavedViewQuery,
@@ -1864,6 +2048,59 @@ async function resolveCatalogChecklistItemResolutionFromValue(
     blocker,
     resolution: {
       ...resolution,
+      items: normalizedItems,
+    },
+  };
+}
+
+async function resolveCatalogChecklistItemVerificationView(
+  store: CrossRunAuditCatalogChecklistItemVerificationStore,
+  resolutions: CrossRunAuditCatalogChecklistItemResolutionQuery,
+  id: string,
+  viewer: CrossRunAuditCatalogVisibilityViewer,
+): Promise<CrossRunAuditCatalogChecklistItemVerificationView | undefined> {
+  const verification = await store.getCatalogChecklistItemVerification(id);
+
+  return verification
+    ? resolveCatalogChecklistItemVerificationFromValue(
+        resolutions,
+        verification,
+        viewer,
+      )
+    : undefined;
+}
+
+async function resolveCatalogChecklistItemVerificationFromValue(
+  resolutionQuery: CrossRunAuditCatalogChecklistItemResolutionQuery,
+  verification: CrossRunAuditCatalogChecklistItemVerification,
+  viewer: CrossRunAuditCatalogVisibilityViewer,
+): Promise<CrossRunAuditCatalogChecklistItemVerificationView | undefined> {
+  if (verification.scopeId !== viewer.scopeId) {
+    return undefined;
+  }
+
+  const resolution = await resolutionQuery.getCatalogChecklistItemResolution(
+    verification.catalogEntryId,
+    viewer,
+  );
+
+  if (!resolution) {
+    return undefined;
+  }
+
+  const normalizedItems = normalizeChecklistItemVerificationItems(
+    verification.items,
+    resolution.resolution.items.map((item) => item.item),
+  );
+
+  if (normalizedItems.length === 0) {
+    return undefined;
+  }
+
+  return {
+    resolution,
+    verification: {
+      ...verification,
       items: normalizedItems,
     },
   };

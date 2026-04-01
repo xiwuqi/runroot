@@ -23,6 +23,7 @@ export {
   resolveWorkspacePath,
   type SaveAuditSavedViewInput,
   type StartTemplateRunInput,
+  type VerifyAuditCatalogEntryInput,
 } from "./operator-service";
 export {
   createRunrootWorkerService,

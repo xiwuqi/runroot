@@ -1990,4 +1990,286 @@ describe("@runroot/sdk operator service integration", () => {
     );
     expect(peerResolutionsAfterClear.totalCount).toBe(0);
   });
+
+  it("verifies, lists-verified, inspects, clears, and reapplies resolved presets for inline and queued runs through the operator seam", async () => {
+    const workspaceRoot = await mkdtemp(
+      join(tmpdir(), "runroot-sdk-checklist-verifications-"),
+    );
+    const sqlitePath = join(workspaceRoot, "runroot.sqlite");
+    const now = createClock();
+    const idGenerator = createIdGenerator();
+    let savedViewCount = 0;
+    let catalogEntryCount = 0;
+    const inlineService = createRunrootOperatorService({
+      executionMode: "inline",
+      idGenerator,
+      now,
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+    const queuedService = createRunrootOperatorService({
+      executionMode: "queued",
+      idGenerator,
+      now,
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+    const worker = createRunrootWorkerService({
+      idGenerator,
+      now,
+      persistenceDriver: "sqlite",
+      sqlitePath,
+      workerId: "worker_checklist_verifications",
+    });
+    const ownerService = createRunrootOperatorService({
+      catalogEntryIdGenerator: () =>
+        `catalog_entry_verification_${++catalogEntryCount}`,
+      idGenerator,
+      now,
+      operatorId: "ops_oncall",
+      operatorScopeId: "ops",
+      persistenceDriver: "sqlite",
+      savedViewIdGenerator: () => `saved_view_verification_${++savedViewCount}`,
+      sqlitePath,
+    });
+    const peerService = createRunrootOperatorService({
+      idGenerator,
+      now,
+      operatorId: "ops_backup",
+      operatorScopeId: "ops",
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+
+    const inlineRun = await inlineService.startRun({
+      input: {
+        approvalRequired: false,
+        commandAlias: "print-ready",
+        runbookId: "node-health-check",
+      },
+      templateId: "shell-runbook-flow",
+    });
+    const queuedRun = await queuedService.startRun({
+      input: {
+        approvalRequired: false,
+        commandAlias: "print-ready",
+        runbookId: "node-health-check",
+      },
+      templateId: "shell-runbook-flow",
+    });
+
+    await worker.processNextJob();
+
+    const inlineSavedView = await ownerService.saveSavedView({
+      description: "Inline verification preset for owner follow-up",
+      name: "Inline verification preset",
+      navigation: {
+        drilldown: {
+          runId: inlineRun.id,
+        },
+        summary: {
+          executionMode: "inline",
+        },
+      },
+      refs: {
+        auditViewRunId: inlineRun.id,
+        drilldownRunId: inlineRun.id,
+      },
+    });
+    const queuedSavedView = await ownerService.saveSavedView({
+      description: "Queued verification preset for shared follow-up",
+      name: "Queued verification preset",
+      navigation: {
+        drilldown: {
+          workerId: "worker_checklist_verifications",
+        },
+        summary: {
+          executionMode: "queued",
+        },
+      },
+      refs: {
+        auditViewRunId: queuedRun.id,
+        drilldownRunId: queuedRun.id,
+      },
+    });
+    const inlineCatalogEntry = await ownerService.publishCatalogEntry({
+      savedViewId: inlineSavedView.id,
+    });
+    const queuedCatalogEntry = await ownerService.publishCatalogEntry({
+      savedViewId: queuedSavedView.id,
+    });
+
+    await ownerService.shareCatalogEntry(queuedCatalogEntry.entry.id);
+    await ownerService.reviewCatalogEntry(inlineCatalogEntry.entry.id, {
+      note: "Inline verification preset verified by the owner",
+      state: "reviewed",
+    });
+    await peerService.reviewCatalogEntry(queuedCatalogEntry.entry.id, {
+      note: "Queued verification preset ready for backup follow-up",
+      state: "recommended",
+    });
+    await ownerService.assignCatalogEntry(inlineCatalogEntry.entry.id, {
+      assigneeId: "ops_oncall",
+      handoffNote: "Inline verification preset remains with the owner",
+    });
+    await ownerService.assignCatalogEntry(queuedCatalogEntry.entry.id, {
+      assigneeId: "ops_backup",
+      handoffNote: "Queued verification preset handed to the backup operator",
+    });
+    await ownerService.checklistCatalogEntry(inlineCatalogEntry.entry.id, {
+      items: ["Confirm inline owner follow-up"],
+      state: "completed",
+    });
+    await ownerService.checklistCatalogEntry(queuedCatalogEntry.entry.id, {
+      items: ["Validate queued follow-up", "Close backup handoff"],
+      state: "pending",
+    });
+    await ownerService.progressCatalogEntry(inlineCatalogEntry.entry.id, {
+      items: [
+        {
+          item: "Confirm inline owner follow-up",
+          state: "completed",
+        },
+      ],
+    });
+    await ownerService.progressCatalogEntry(queuedCatalogEntry.entry.id, {
+      completionNote: "Queued follow-up is almost complete",
+      items: [
+        {
+          item: "Validate queued follow-up",
+          state: "completed",
+        },
+        {
+          item: "Close backup handoff",
+          state: "pending",
+        },
+      ],
+    });
+    await ownerService.blockCatalogEntry(inlineCatalogEntry.entry.id, {
+      items: [
+        {
+          item: "Confirm inline owner follow-up",
+          state: "blocked",
+        },
+      ],
+    });
+    await ownerService.blockCatalogEntry(queuedCatalogEntry.entry.id, {
+      blockerNote: "Waiting for the overnight handoff",
+      items: [
+        {
+          item: "Validate queued follow-up",
+          state: "cleared",
+        },
+        {
+          item: "Close backup handoff",
+          state: "blocked",
+        },
+      ],
+    });
+    await ownerService.resolveCatalogEntry(inlineCatalogEntry.entry.id, {
+      items: [
+        {
+          item: "Confirm inline owner follow-up",
+          state: "resolved",
+        },
+      ],
+    });
+    await ownerService.resolveCatalogEntry(queuedCatalogEntry.entry.id, {
+      resolutionNote: "Backup confirmed the follow-up closure",
+      items: [
+        {
+          item: "Validate queued follow-up",
+          state: "resolved",
+        },
+        {
+          item: "Close backup handoff",
+          state: "unresolved",
+        },
+      ],
+    });
+    await ownerService.verifyCatalogEntry(inlineCatalogEntry.entry.id, {
+      items: [
+        {
+          item: "Confirm inline owner follow-up",
+          state: "verified",
+        },
+      ],
+    });
+    await ownerService.verifyCatalogEntry(queuedCatalogEntry.entry.id, {
+      verificationNote: "Backup verified the follow-up closure",
+      items: [
+        {
+          item: "Validate queued follow-up",
+          state: "verified",
+        },
+        {
+          item: "Close backup handoff",
+          state: "unverified",
+        },
+      ],
+    });
+
+    const ownerVerifications = await ownerService.listVerifiedCatalogEntries();
+    const peerVerifications = await peerService.listVerifiedCatalogEntries();
+    const inspectedVerification =
+      await ownerService.getCatalogChecklistItemVerification(
+        queuedCatalogEntry.entry.id,
+      );
+    const appliedVerification = await peerService.applyCatalogEntry(
+      queuedCatalogEntry.entry.id,
+    );
+    const clearedVerification =
+      await ownerService.clearCatalogChecklistItemVerification(
+        queuedCatalogEntry.entry.id,
+      );
+    const peerVerificationsAfterClear =
+      await peerService.listVerifiedCatalogEntries();
+
+    expect(
+      ownerVerifications.items.map(
+        (item) =>
+          item.resolution.blocker.progress.checklist.assignment.review
+            .visibility.catalogEntry.entry.id,
+      ),
+    ).toEqual([queuedCatalogEntry.entry.id, inlineCatalogEntry.entry.id]);
+    expect(
+      peerVerifications.items.map(
+        (item) =>
+          item.resolution.blocker.progress.checklist.assignment.review
+            .visibility.catalogEntry.entry.id,
+      ),
+    ).toEqual([queuedCatalogEntry.entry.id]);
+    expect(inspectedVerification.verification).toMatchObject({
+      catalogEntryId: queuedCatalogEntry.entry.id,
+      operatorId: "ops_oncall",
+      scopeId: "ops",
+      verificationNote: "Backup verified the follow-up closure",
+    });
+    expect(inspectedVerification.verification.items).toEqual([
+      {
+        item: "Validate queued follow-up",
+        state: "verified",
+      },
+      {
+        item: "Close backup handoff",
+        state: "unverified",
+      },
+    ]);
+    expect(appliedVerification.catalogEntry.entry.id).toBe(
+      queuedCatalogEntry.entry.id,
+    );
+    expect(appliedVerification.application.savedView.id).toBe(
+      queuedSavedView.id,
+    );
+    expect(appliedVerification.application.navigation.totalSummaryCount).toBe(
+      1,
+    );
+    expect(
+      appliedVerification.application.navigation.drilldowns[0]?.result.runId,
+    ).toBe(queuedRun.id);
+    expect(clearedVerification.verification.catalogEntryId).toBe(
+      queuedCatalogEntry.entry.id,
+    );
+    expect(peerVerificationsAfterClear.totalCount).toBe(0);
+  });
 });
