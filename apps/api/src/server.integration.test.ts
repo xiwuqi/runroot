@@ -2965,4 +2965,411 @@ describe("@runroot/api integration", () => {
       await peerApp.close();
     }
   });
+
+  it("serves verify, list-verified, inspect-verification, clear-verification, and apply paths through the network API", async () => {
+    const workspaceRoot = await mkdtemp(
+      join(tmpdir(), "runroot-api-checklist-verifications-"),
+    );
+    const sqlitePath = join(workspaceRoot, "runroot.sqlite");
+    const inlineOperator = createRunrootOperatorService({
+      executionMode: "inline",
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+    const queuedOperator = createRunrootOperatorService({
+      executionMode: "queued",
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+    const workerService = (
+      await import("@runroot/sdk")
+    ).createRunrootWorkerService({
+      persistenceDriver: "sqlite",
+      sqlitePath,
+      workerId: "worker_verification_api",
+    });
+    const ownerApp = buildServer({
+      operator: createRunrootOperatorService({
+        catalogEntryIdGenerator: () => "catalog_entry_verification_api",
+        operatorId: "ops_oncall",
+        operatorScopeId: "ops",
+        persistenceDriver: "sqlite",
+        savedViewIdGenerator: () => "saved_view_verification_api",
+        sqlitePath,
+      }),
+    });
+    const peerApp = buildServer({
+      operator: createRunrootOperatorService({
+        operatorId: "ops_backup",
+        operatorScopeId: "ops",
+        persistenceDriver: "sqlite",
+        sqlitePath,
+      }),
+    });
+
+    try {
+      const inlineRun = await inlineOperator.startRun({
+        input: {
+          approvalRequired: false,
+          commandAlias: "print-ready",
+          runbookId: "node-health-check",
+        },
+        templateId: "shell-runbook-flow",
+      });
+      const queuedRun = await queuedOperator.startRun({
+        input: {
+          approvalRequired: false,
+          commandAlias: "print-ready",
+          runbookId: "node-health-check",
+        },
+        templateId: "shell-runbook-flow",
+      });
+
+      await workerService.processNextJob();
+
+      const ownerAddress = await ownerApp.listen({
+        host: "127.0.0.1",
+        port: 0,
+      });
+      const peerAddress = await peerApp.listen({
+        host: "127.0.0.1",
+        port: 0,
+      });
+
+      const saveResponse = await fetch(`${ownerAddress}/audit/saved-views`, {
+        body: JSON.stringify({
+          description: "Queued worker verification preset",
+          name: "Queued worker verification preset",
+          navigation: {
+            drilldown: {
+              workerId: "worker_verification_api",
+            },
+            summary: {
+              executionMode: "queued",
+            },
+          },
+          refs: {
+            auditViewRunId: queuedRun.id,
+            drilldownRunId: queuedRun.id,
+          },
+        }),
+        headers: {
+          "content-type": "application/json",
+        },
+        method: "POST",
+      });
+      const savedViewPayload = (await saveResponse.json()) as {
+        savedView: {
+          id: string;
+        };
+      };
+      const publishResponse = await fetch(`${ownerAddress}/audit/catalog`, {
+        body: JSON.stringify({
+          savedViewId: savedViewPayload.savedView.id,
+        }),
+        headers: {
+          "content-type": "application/json",
+        },
+        method: "POST",
+      });
+      const publishedPayload = (await publishResponse.json()) as {
+        catalogEntry: {
+          entry: {
+            id: string;
+          };
+        };
+      };
+      const shareResponse = await fetch(
+        `${ownerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/share`,
+        {
+          method: "POST",
+        },
+      );
+      const reviewResponse = await fetch(
+        `${ownerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/review`,
+        {
+          body: JSON.stringify({
+            note: `Verification ready after inline ${inlineRun.id} and queued ${queuedRun.id}`,
+            state: "recommended",
+          }),
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "POST",
+        },
+      );
+      const assignmentResponse = await fetch(
+        `${ownerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/assignment`,
+        {
+          body: JSON.stringify({
+            assigneeId: "ops_backup",
+            handoffNote: `Queued worker ${queuedRun.id} handed to backup`,
+          }),
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "POST",
+        },
+      );
+      const checklistResponse = await fetch(
+        `${ownerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/checklist`,
+        {
+          body: JSON.stringify({
+            items: ["Validate queued follow-up", "Close backup handoff"],
+            state: "pending",
+          }),
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "POST",
+        },
+      );
+      const progressResponse = await fetch(
+        `${ownerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/progress`,
+        {
+          body: JSON.stringify({
+            completionNote: "Queued follow-up is almost complete",
+            items: [
+              {
+                item: "Validate queued follow-up",
+                state: "completed",
+              },
+              {
+                item: "Close backup handoff",
+                state: "pending",
+              },
+            ],
+          }),
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "POST",
+        },
+      );
+      const blockerResponse = await fetch(
+        `${ownerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/blocker`,
+        {
+          body: JSON.stringify({
+            blockerNote: "Waiting for the overnight handoff",
+            items: [
+              {
+                item: "Validate queued follow-up",
+                state: "cleared",
+              },
+              {
+                item: "Close backup handoff",
+                state: "blocked",
+              },
+            ],
+          }),
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "POST",
+        },
+      );
+      const resolutionResponse = await fetch(
+        `${ownerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/resolution`,
+        {
+          body: JSON.stringify({
+            resolutionNote: "Backup confirmed the follow-up closure",
+            items: [
+              {
+                item: "Validate queued follow-up",
+                state: "resolved",
+              },
+              {
+                item: "Close backup handoff",
+                state: "unresolved",
+              },
+            ],
+          }),
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "POST",
+        },
+      );
+      const verificationResponse = await fetch(
+        `${ownerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/verification`,
+        {
+          body: JSON.stringify({
+            verificationNote: "Backup verified the follow-up closure",
+            items: [
+              {
+                item: "Validate queued follow-up",
+                state: "verified",
+              },
+              {
+                item: "Close backup handoff",
+                state: "unverified",
+              },
+            ],
+          }),
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "POST",
+        },
+      );
+      const verifiedResponse = await fetch(
+        `${peerAddress}/audit/catalog/verified`,
+      );
+      const inspectResponse = await fetch(
+        `${peerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/verification`,
+      );
+      const applyResponse = await fetch(
+        `${peerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/apply`,
+      );
+      const clearResponse = await fetch(
+        `${ownerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/verification/clear`,
+        {
+          method: "POST",
+        },
+      );
+      const verifiedAfterClearResponse = await fetch(
+        `${peerAddress}/audit/catalog/verified`,
+      );
+      const verificationPayload = (await verificationResponse.json()) as {
+        verification: {
+          resolution: {
+            resolution: {
+              resolutionNote?: string;
+            };
+          };
+          verification: {
+            items: Array<{
+              item: string;
+              state: "verified" | "unverified";
+            }>;
+            verificationNote?: string;
+          };
+        };
+      };
+      const verifiedPayload = (await verifiedResponse.json()) as {
+        verified: {
+          items: Array<{
+            resolution: {
+              blocker: {
+                progress: {
+                  checklist: {
+                    assignment: {
+                      review: {
+                        visibility: {
+                          catalogEntry: {
+                            entry: {
+                              id: string;
+                            };
+                          };
+                        };
+                      };
+                    };
+                  };
+                };
+              };
+            };
+            verification: {
+              verificationNote?: string;
+            };
+          }>;
+          totalCount: number;
+        };
+      };
+      const inspectPayload = (await inspectResponse.json()) as {
+        verification: {
+          verification: {
+            items: Array<{
+              item: string;
+              state: "verified" | "unverified";
+            }>;
+            verificationNote?: string;
+          };
+        };
+      };
+      const applyPayload = (await applyResponse.json()) as {
+        application: {
+          application: {
+            navigation: {
+              drilldowns: Array<{
+                result: {
+                  runId: string;
+                };
+              }>;
+              totalSummaryCount: number;
+            };
+            savedView: {
+              id: string;
+            };
+          };
+        };
+      };
+      const clearPayload = (await clearResponse.json()) as {
+        verification: {
+          verification: {
+            verificationNote?: string;
+          };
+        };
+      };
+      const verifiedAfterClearPayload =
+        (await verifiedAfterClearResponse.json()) as {
+          verified: {
+            totalCount: number;
+          };
+        };
+
+      expect(saveResponse.status).toBe(201);
+      expect(publishResponse.status).toBe(201);
+      expect(shareResponse.status).toBe(200);
+      expect(reviewResponse.status).toBe(200);
+      expect(assignmentResponse.status).toBe(200);
+      expect(checklistResponse.status).toBe(200);
+      expect(progressResponse.status).toBe(200);
+      expect(blockerResponse.status).toBe(200);
+      expect(resolutionResponse.status).toBe(200);
+      expect(verificationResponse.status).toBe(200);
+      expect(
+        verificationPayload.verification.resolution.resolution.resolutionNote,
+      ).toBe("Backup confirmed the follow-up closure");
+      expect(
+        verificationPayload.verification.verification.verificationNote,
+      ).toBe("Backup verified the follow-up closure");
+      expect(verificationPayload.verification.verification.items).toEqual([
+        {
+          item: "Validate queued follow-up",
+          state: "verified",
+        },
+        {
+          item: "Close backup handoff",
+          state: "unverified",
+        },
+      ]);
+      expect(verifiedResponse.status).toBe(200);
+      expect(verifiedPayload.verified.totalCount).toBe(1);
+      expect(
+        verifiedPayload.verified.items[0]?.resolution.blocker.progress.checklist
+          .assignment.review.visibility.catalogEntry.entry.id,
+      ).toBe("catalog_entry_verification_api");
+      expect(inspectResponse.status).toBe(200);
+      expect(
+        inspectPayload.verification.verification.verificationNote,
+      ).toContain("verified the follow-up closure");
+      expect(applyResponse.status).toBe(200);
+      expect(applyPayload.application.application.savedView.id).toBe(
+        "saved_view_verification_api",
+      );
+      expect(
+        applyPayload.application.application.navigation.drilldowns[0]?.result
+          .runId,
+      ).toBe(queuedRun.id);
+      expect(clearResponse.status).toBe(200);
+      expect(clearPayload.verification.verification.verificationNote).toBe(
+        "Backup verified the follow-up closure",
+      );
+      expect(verifiedAfterClearResponse.status).toBe(200);
+      expect(verifiedAfterClearPayload.verified.totalCount).toBe(0);
+    } finally {
+      await ownerApp.close();
+      await peerApp.close();
+    }
+  });
 });
