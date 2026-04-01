@@ -77,6 +77,20 @@ export {
   type UpdateCrossRunAuditCatalogChecklistItemResolutionInput,
 } from "./checklist-item-resolution";
 export {
+  type CreateCrossRunAuditCatalogChecklistItemVerificationInput,
+  type CrossRunAuditCatalogChecklistItemVerification,
+  type CrossRunAuditCatalogChecklistItemVerificationApplication,
+  type CrossRunAuditCatalogChecklistItemVerificationCollection,
+  type CrossRunAuditCatalogChecklistItemVerificationItem,
+  type CrossRunAuditCatalogChecklistItemVerificationState,
+  type CrossRunAuditCatalogChecklistItemVerificationStore,
+  type CrossRunAuditCatalogChecklistItemVerificationView,
+  compareCrossRunAuditCatalogChecklistItemVerification,
+  createCrossRunAuditCatalogChecklistItemVerification,
+  normalizeChecklistItemVerificationItems,
+  type UpdateCrossRunAuditCatalogChecklistItemVerificationInput,
+} from "./checklist-item-verification";
+export {
   type CrossRunAuditApprovalSummary,
   type CrossRunAuditDispatchSummary,
   type CrossRunAuditQueryFilters,
@@ -112,6 +126,7 @@ export {
   type CrossRunAuditCatalogChecklistItemBlockerQuery,
   type CrossRunAuditCatalogChecklistItemProgressQuery,
   type CrossRunAuditCatalogChecklistItemResolutionQuery,
+  type CrossRunAuditCatalogChecklistItemVerificationQuery,
   type CrossRunAuditCatalogQuery,
   type CrossRunAuditCatalogReviewAssignmentQuery,
   type CrossRunAuditCatalogReviewSignalQuery,
@@ -125,6 +140,7 @@ export {
   createCrossRunAuditCatalogChecklistItemBlockerQuery,
   createCrossRunAuditCatalogChecklistItemProgressQuery,
   createCrossRunAuditCatalogChecklistItemResolutionQuery,
+  createCrossRunAuditCatalogChecklistItemVerificationQuery,
   createCrossRunAuditCatalogQuery,
   createCrossRunAuditCatalogReviewAssignmentQuery,
   createCrossRunAuditCatalogReviewSignalQuery,
