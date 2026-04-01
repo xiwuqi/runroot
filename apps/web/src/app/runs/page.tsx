@@ -5,6 +5,7 @@ import {
   CatalogReviewSignalsView,
   ChecklistItemBlockersView,
   ChecklistItemProgressView,
+  ChecklistItemResolutionsView,
   ConsoleShell,
   CrossRunAuditNavigationView,
   ErrorState,
@@ -21,6 +22,7 @@ import {
   type ApiAuditCatalogAssignmentChecklistView,
   type ApiAuditCatalogChecklistItemBlockerView,
   type ApiAuditCatalogChecklistItemProgressView,
+  type ApiAuditCatalogChecklistItemResolutionView,
   type ApiAuditCatalogEntryApplication,
   type ApiAuditCatalogReviewAssignmentView,
   type ApiAuditCatalogReviewSignalView,
@@ -55,6 +57,7 @@ export default async function RunsPage({
     const [
       runs,
       blockedEntries,
+      resolvedEntries,
       progressedEntries,
       checklistedEntries,
       assignedEntries,
@@ -64,6 +67,7 @@ export default async function RunsPage({
       navigationResult,
       catalogVisibility,
       catalogChecklistItemBlocker,
+      catalogChecklistItemResolution,
       catalogChecklistItemProgress,
       catalogAssignmentChecklist,
       catalogReviewSignal,
@@ -71,6 +75,7 @@ export default async function RunsPage({
     ] = await Promise.all([
       api.listRuns(),
       api.listBlockedAuditCatalogEntries(),
+      api.listResolvedAuditCatalogEntries(),
       api.listProgressedAuditCatalogEntries(),
       api.listChecklistedAuditCatalogEntries(),
       api.listAssignedAuditCatalogEntries(),
@@ -91,6 +96,11 @@ export default async function RunsPage({
       catalogEntryId
         ? api
             .getAuditCatalogChecklistItemBlocker(catalogEntryId)
+            .catch(() => undefined)
+        : Promise.resolve(undefined),
+      catalogEntryId
+        ? api
+            .getAuditCatalogChecklistItemResolution(catalogEntryId)
             .catch(() => undefined)
         : Promise.resolve(undefined),
       catalogEntryId
@@ -120,6 +130,9 @@ export default async function RunsPage({
     let activeCatalogChecklistItemBlocker:
       | ApiAuditCatalogChecklistItemBlockerView
       | undefined;
+    let activeCatalogChecklistItemResolution:
+      | ApiAuditCatalogChecklistItemResolutionView
+      | undefined;
     let activeCatalogChecklistItemProgress:
       | ApiAuditCatalogChecklistItemProgressView
       | undefined;
@@ -133,6 +146,7 @@ export default async function RunsPage({
     if (hasCatalogEntryApplication(navigationResult)) {
       activeCatalogEntry = catalogVisibility;
       activeCatalogChecklistItemBlocker = catalogChecklistItemBlocker;
+      activeCatalogChecklistItemResolution = catalogChecklistItemResolution;
       activeCatalogChecklistItemProgress = catalogChecklistItemProgress;
       activeCatalogAssignmentChecklist = catalogAssignmentChecklist;
       activeCatalogReviewAssignment = catalogReviewAssignment;
@@ -156,6 +170,12 @@ export default async function RunsPage({
           blockedEntries={blockedEntries}
           {...(activeCatalogChecklistItemBlocker
             ? { activeCatalogChecklistItemBlocker }
+            : {})}
+        />
+        <ChecklistItemResolutionsView
+          resolvedEntries={resolvedEntries}
+          {...(activeCatalogChecklistItemResolution
+            ? { activeCatalogChecklistItemResolution }
             : {})}
         />
         <ChecklistItemProgressView
@@ -186,10 +206,14 @@ export default async function RunsPage({
           catalogEntries={catalogEntries}
           checklistedEntries={checklistedEntries}
           progressedEntries={progressedEntries}
+          resolvedEntries={resolvedEntries}
           reviewedEntries={reviewedEntries}
           {...(activeCatalogEntry ? { activeCatalogEntry } : {})}
           {...(activeCatalogChecklistItemBlocker
             ? { activeCatalogChecklistItemBlocker }
+            : {})}
+          {...(activeCatalogChecklistItemResolution
+            ? { activeCatalogChecklistItemResolution }
             : {})}
           {...(activeCatalogChecklistItemProgress
             ? { activeCatalogChecklistItemProgress }

@@ -1733,4 +1733,261 @@ describe("@runroot/sdk operator service integration", () => {
     );
     expect(peerBlockersAfterClear.totalCount).toBe(0);
   });
+
+  it("resolves, lists-resolved, inspects, clears, and reapplies blocked presets for inline and queued runs through the operator seam", async () => {
+    const workspaceRoot = await mkdtemp(
+      join(tmpdir(), "runroot-sdk-checklist-resolutions-"),
+    );
+    const sqlitePath = join(workspaceRoot, "runroot.sqlite");
+    const now = createClock();
+    const idGenerator = createIdGenerator();
+    let savedViewCount = 0;
+    let catalogEntryCount = 0;
+    const inlineService = createRunrootOperatorService({
+      executionMode: "inline",
+      idGenerator,
+      now,
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+    const queuedService = createRunrootOperatorService({
+      executionMode: "queued",
+      idGenerator,
+      now,
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+    const worker = createRunrootWorkerService({
+      idGenerator,
+      now,
+      persistenceDriver: "sqlite",
+      sqlitePath,
+      workerId: "worker_checklist_resolutions",
+    });
+    const ownerService = createRunrootOperatorService({
+      catalogEntryIdGenerator: () =>
+        `catalog_entry_resolution_${++catalogEntryCount}`,
+      idGenerator,
+      now,
+      operatorId: "ops_oncall",
+      operatorScopeId: "ops",
+      persistenceDriver: "sqlite",
+      savedViewIdGenerator: () => `saved_view_resolution_${++savedViewCount}`,
+      sqlitePath,
+    });
+    const peerService = createRunrootOperatorService({
+      idGenerator,
+      now,
+      operatorId: "ops_backup",
+      operatorScopeId: "ops",
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+
+    const inlineRun = await inlineService.startRun({
+      input: {
+        approvalRequired: false,
+        commandAlias: "print-ready",
+        runbookId: "node-health-check",
+      },
+      templateId: "shell-runbook-flow",
+    });
+    const queuedRun = await queuedService.startRun({
+      input: {
+        approvalRequired: false,
+        commandAlias: "print-ready",
+        runbookId: "node-health-check",
+      },
+      templateId: "shell-runbook-flow",
+    });
+
+    await worker.processNextJob();
+
+    const inlineSavedView = await ownerService.saveSavedView({
+      description: "Inline resolution preset for owner follow-up",
+      name: "Inline resolution preset",
+      navigation: {
+        drilldown: {
+          runId: inlineRun.id,
+        },
+        summary: {
+          executionMode: "inline",
+        },
+      },
+      refs: {
+        auditViewRunId: inlineRun.id,
+        drilldownRunId: inlineRun.id,
+      },
+    });
+    const queuedSavedView = await ownerService.saveSavedView({
+      description: "Queued resolution preset for shared follow-up",
+      name: "Queued resolution preset",
+      navigation: {
+        drilldown: {
+          workerId: "worker_checklist_resolutions",
+        },
+        summary: {
+          executionMode: "queued",
+        },
+      },
+      refs: {
+        auditViewRunId: queuedRun.id,
+        drilldownRunId: queuedRun.id,
+      },
+    });
+    const inlineCatalogEntry = await ownerService.publishCatalogEntry({
+      savedViewId: inlineSavedView.id,
+    });
+    const queuedCatalogEntry = await ownerService.publishCatalogEntry({
+      savedViewId: queuedSavedView.id,
+    });
+
+    await ownerService.shareCatalogEntry(queuedCatalogEntry.entry.id);
+    await ownerService.reviewCatalogEntry(inlineCatalogEntry.entry.id, {
+      note: "Inline resolution preset verified by the owner",
+      state: "reviewed",
+    });
+    await peerService.reviewCatalogEntry(queuedCatalogEntry.entry.id, {
+      note: "Queued resolution preset ready for backup follow-up",
+      state: "recommended",
+    });
+    await ownerService.assignCatalogEntry(inlineCatalogEntry.entry.id, {
+      assigneeId: "ops_oncall",
+      handoffNote: "Inline resolution preset remains with the owner",
+    });
+    await ownerService.assignCatalogEntry(queuedCatalogEntry.entry.id, {
+      assigneeId: "ops_backup",
+      handoffNote: "Queued resolution preset handed to the backup operator",
+    });
+    await ownerService.checklistCatalogEntry(inlineCatalogEntry.entry.id, {
+      items: ["Confirm inline owner follow-up"],
+      state: "completed",
+    });
+    await ownerService.checklistCatalogEntry(queuedCatalogEntry.entry.id, {
+      items: ["Validate queued follow-up", "Close backup handoff"],
+      state: "pending",
+    });
+    await ownerService.progressCatalogEntry(inlineCatalogEntry.entry.id, {
+      items: [
+        {
+          item: "Confirm inline owner follow-up",
+          state: "completed",
+        },
+      ],
+    });
+    await ownerService.progressCatalogEntry(queuedCatalogEntry.entry.id, {
+      completionNote: "Queued follow-up is almost complete",
+      items: [
+        {
+          item: "Validate queued follow-up",
+          state: "completed",
+        },
+        {
+          item: "Close backup handoff",
+          state: "pending",
+        },
+      ],
+    });
+    await ownerService.blockCatalogEntry(inlineCatalogEntry.entry.id, {
+      items: [
+        {
+          item: "Confirm inline owner follow-up",
+          state: "blocked",
+        },
+      ],
+    });
+    await ownerService.blockCatalogEntry(queuedCatalogEntry.entry.id, {
+      blockerNote: "Waiting for the overnight handoff",
+      items: [
+        {
+          item: "Validate queued follow-up",
+          state: "cleared",
+        },
+        {
+          item: "Close backup handoff",
+          state: "blocked",
+        },
+      ],
+    });
+    await ownerService.resolveCatalogEntry(inlineCatalogEntry.entry.id, {
+      items: [
+        {
+          item: "Confirm inline owner follow-up",
+          state: "resolved",
+        },
+      ],
+    });
+    await ownerService.resolveCatalogEntry(queuedCatalogEntry.entry.id, {
+      resolutionNote: "Backup confirmed the follow-up closure",
+      items: [
+        {
+          item: "Validate queued follow-up",
+          state: "resolved",
+        },
+        {
+          item: "Close backup handoff",
+          state: "unresolved",
+        },
+      ],
+    });
+
+    const ownerResolutions = await ownerService.listResolvedCatalogEntries();
+    const peerResolutions = await peerService.listResolvedCatalogEntries();
+    const inspectedResolution =
+      await ownerService.getCatalogChecklistItemResolution(
+        queuedCatalogEntry.entry.id,
+      );
+    const appliedResolution = await peerService.applyCatalogEntry(
+      queuedCatalogEntry.entry.id,
+    );
+    const clearedResolution =
+      await ownerService.clearCatalogChecklistItemResolution(
+        queuedCatalogEntry.entry.id,
+      );
+    const peerResolutionsAfterClear =
+      await peerService.listResolvedCatalogEntries();
+
+    expect(
+      ownerResolutions.items.map(
+        (item) =>
+          item.blocker.progress.checklist.assignment.review.visibility
+            .catalogEntry.entry.id,
+      ),
+    ).toEqual([queuedCatalogEntry.entry.id, inlineCatalogEntry.entry.id]);
+    expect(
+      peerResolutions.items.map(
+        (item) =>
+          item.blocker.progress.checklist.assignment.review.visibility
+            .catalogEntry.entry.id,
+      ),
+    ).toEqual([queuedCatalogEntry.entry.id]);
+    expect(inspectedResolution.resolution).toMatchObject({
+      catalogEntryId: queuedCatalogEntry.entry.id,
+      operatorId: "ops_oncall",
+      resolutionNote: "Backup confirmed the follow-up closure",
+      scopeId: "ops",
+    });
+    expect(inspectedResolution.resolution.items).toEqual([
+      {
+        item: "Validate queued follow-up",
+        state: "resolved",
+      },
+      {
+        item: "Close backup handoff",
+        state: "unresolved",
+      },
+    ]);
+    expect(appliedResolution.catalogEntry.entry.id).toBe(
+      queuedCatalogEntry.entry.id,
+    );
+    expect(appliedResolution.application.savedView.id).toBe(queuedSavedView.id);
+    expect(appliedResolution.application.navigation.totalSummaryCount).toBe(1);
+    expect(
+      appliedResolution.application.navigation.drilldowns[0]?.result.runId,
+    ).toBe(queuedRun.id);
+    expect(clearedResolution.resolution.catalogEntryId).toBe(
+      queuedCatalogEntry.entry.id,
+    );
+    expect(peerResolutionsAfterClear.totalCount).toBe(0);
+  });
 });

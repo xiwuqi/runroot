@@ -480,6 +480,43 @@ export const runtimePersistenceMigrations = [
         ON runroot_audit_catalog_checklist_item_blockers (operator_id, updated_at DESC, catalog_entry_id ASC)`,
     ],
   },
+  {
+    id: "0012_audit_catalog_checklist_item_resolutions",
+    postgres: [
+      `CREATE TABLE IF NOT EXISTS runroot_audit_catalog_checklist_item_resolutions (
+        catalog_entry_id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL,
+        operator_id TEXT NOT NULL,
+        scope_id TEXT NOT NULL,
+        resolution_note TEXT,
+        resolution_items TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        data TEXT NOT NULL
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_runroot_audit_catalog_checklist_item_resolutions_scope
+        ON runroot_audit_catalog_checklist_item_resolutions (scope_id, updated_at DESC, catalog_entry_id ASC)`,
+      `CREATE INDEX IF NOT EXISTS idx_runroot_audit_catalog_checklist_item_resolutions_operator
+        ON runroot_audit_catalog_checklist_item_resolutions (operator_id, updated_at DESC, catalog_entry_id ASC)`,
+    ],
+    sqlite: [
+      `CREATE TABLE IF NOT EXISTS runroot_audit_catalog_checklist_item_resolutions (
+        catalog_entry_id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL,
+        operator_id TEXT NOT NULL,
+        scope_id TEXT NOT NULL,
+        resolution_note TEXT,
+        resolution_items TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        data TEXT NOT NULL
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_runroot_audit_catalog_checklist_item_resolutions_scope
+        ON runroot_audit_catalog_checklist_item_resolutions (scope_id, updated_at DESC, catalog_entry_id ASC)`,
+      `CREATE INDEX IF NOT EXISTS idx_runroot_audit_catalog_checklist_item_resolutions_operator
+        ON runroot_audit_catalog_checklist_item_resolutions (operator_id, updated_at DESC, catalog_entry_id ASC)`,
+    ],
+  },
 ] as const satisfies readonly PersistenceMigration[];
 
 export function getRuntimePersistenceMigrationStatements(

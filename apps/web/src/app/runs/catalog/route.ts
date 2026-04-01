@@ -316,6 +316,53 @@ export async function POST(request: Request) {
       return Response.redirect(redirectUrl, 303);
     }
 
+    if (intent === "resolve") {
+      const catalogEntryId = readTrimmedFormValue(formData, "catalogEntryId");
+      const resolutionItems = readChecklistItemResolutionItems(
+        formData.get("resolutionItems"),
+      );
+      const resolutionNoteValue = formData.get("resolutionNote");
+
+      if (!catalogEntryId) {
+        appendFlashMessage(
+          redirectUrl,
+          "error",
+          "A catalog entry id is required to update checklist item resolution metadata.",
+        );
+
+        return Response.redirect(redirectUrl, 303);
+      }
+
+      if (resolutionItems.length === 0) {
+        appendFlashMessage(
+          redirectUrl,
+          "error",
+          "At least one checklist item resolution entry is required.",
+        );
+
+        return Response.redirect(redirectUrl, 303);
+      }
+
+      const resolution =
+        await createRunrootApiClient().setAuditCatalogChecklistItemResolution(
+          catalogEntryId,
+          {
+            ...(typeof resolutionNoteValue === "string"
+              ? { resolutionNote: resolutionNoteValue }
+              : {}),
+            items: resolutionItems,
+          },
+        );
+
+      appendFlashMessage(
+        redirectUrl,
+        "notice",
+        `Checklist item resolutions for ${resolution.blocker.progress.checklist.assignment.review.visibility.catalogEntry.entry.name} updated.`,
+      );
+
+      return Response.redirect(redirectUrl, 303);
+    }
+
     if (intent === "clear-review") {
       const catalogEntryId = readTrimmedFormValue(formData, "catalogEntryId");
 
@@ -392,6 +439,33 @@ export async function POST(request: Request) {
         redirectUrl,
         "notice",
         `Checklist item blockers for ${blocker.progress.checklist.assignment.review.visibility.catalogEntry.entry.name} cleared.`,
+      );
+
+      return Response.redirect(redirectUrl, 303);
+    }
+
+    if (intent === "clear-resolution") {
+      const catalogEntryId = readTrimmedFormValue(formData, "catalogEntryId");
+
+      if (!catalogEntryId) {
+        appendFlashMessage(
+          redirectUrl,
+          "error",
+          "A catalog entry id is required to clear checklist item resolution metadata.",
+        );
+
+        return Response.redirect(redirectUrl, 303);
+      }
+
+      const resolution =
+        await createRunrootApiClient().clearAuditCatalogChecklistItemResolution(
+          catalogEntryId,
+        );
+
+      appendFlashMessage(
+        redirectUrl,
+        "notice",
+        `Checklist item resolutions for ${resolution.blocker.progress.checklist.assignment.review.visibility.catalogEntry.entry.name} cleared.`,
       );
 
       return Response.redirect(redirectUrl, 303);
@@ -604,6 +678,52 @@ function readChecklistItemBlockerItems(
       if (rawState !== "blocked" && rawState !== "cleared") {
         throw new Error(
           `Checklist item blocker state must be blocked or cleared for "${item}".`,
+        );
+      }
+
+      return {
+        item,
+        state: rawState,
+      };
+    });
+}
+
+function readChecklistItemResolutionItems(
+  value: FormDataEntryValue | null,
+): readonly {
+  readonly item: string;
+  readonly state: "resolved" | "unresolved";
+}[] {
+  if (typeof value !== "string") {
+    return [];
+  }
+
+  return value
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .map((line) => {
+      const separatorIndex = line.indexOf(":");
+
+      if (separatorIndex < 0) {
+        return {
+          item: line,
+          state: "unresolved" as const,
+        };
+      }
+
+      const rawState = line.slice(0, separatorIndex).trim();
+      const item = line.slice(separatorIndex + 1).trim();
+
+      if (item.length === 0) {
+        throw new Error(
+          "Checklist item resolution lines require a non-empty item.",
+        );
+      }
+
+      if (rawState !== "resolved" && rawState !== "unresolved") {
+        throw new Error(
+          `Checklist item resolution state must be resolved or unresolved for "${item}".`,
         );
       }
 

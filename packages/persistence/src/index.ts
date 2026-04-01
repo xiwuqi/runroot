@@ -40,6 +40,19 @@ export {
   type SqliteAuditCatalogChecklistItemProgressStoreOptions,
 } from "./catalog-checklist-item-progress-store";
 export {
+  type ConfiguredAuditCatalogChecklistItemResolutionStoreOptions,
+  createConfiguredAuditCatalogChecklistItemResolutionStore,
+  createFileAuditCatalogChecklistItemResolutionStore,
+  createInMemoryAuditCatalogChecklistItemResolutionStore,
+  createPostgresAuditCatalogChecklistItemResolutionStore,
+  createSqliteAuditCatalogChecklistItemResolutionStore,
+  type FileAuditCatalogChecklistItemResolutionStoreOptions,
+  type InMemoryAuditCatalogChecklistItemResolutionStoreOptions,
+  type PostgresAuditCatalogChecklistItemResolutionStoreOptions,
+  resolveAuditCatalogChecklistItemResolutionsFilePath,
+  type SqliteAuditCatalogChecklistItemResolutionStoreOptions,
+} from "./catalog-checklist-item-resolution-store";
+export {
   type ConfiguredAuditCatalogReviewAssignmentStoreOptions,
   createConfiguredAuditCatalogReviewAssignmentStore,
   createFileAuditCatalogReviewAssignmentStore,
@@ -160,7 +173,7 @@ export const persistencePackageBoundary = {
   kind: "package",
   phaseOwned: 2,
   responsibility:
-    "Repository contracts, checkpoint storage, database adapters, dispatch queue persistence seams, tool-history storage adapters, additive saved-audit-view adapters, additive audit-view-catalog adapters, additive catalog-visibility adapters, additive catalog-review-signal adapters, additive catalog-review-assignment adapters, additive catalog-assignment-checklist adapters, additive checklist-item-progress adapters, and additive checklist-item-blocker adapters.",
+    "Repository contracts, checkpoint storage, database adapters, dispatch queue persistence seams, tool-history storage adapters, additive saved-audit-view adapters, additive audit-view-catalog adapters, additive catalog-visibility adapters, additive catalog-review-signal adapters, additive catalog-review-assignment adapters, additive catalog-assignment-checklist adapters, additive checklist-item-progress adapters, additive checklist-item-blocker adapters, and additive checklist-item-resolution adapters.",
   publicSurface: [
     "repository interfaces",
     "storage adapters",
@@ -175,5 +188,6 @@ export const persistencePackageBoundary = {
     "catalog assignment checklist adapters",
     "checklist item progress adapters",
     "checklist item blocker adapters",
+    "checklist item resolution adapters",
   ],
 } as const satisfies PackageBoundary;

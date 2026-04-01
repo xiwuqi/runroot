@@ -10,6 +10,9 @@ import type {
   ApiAuditCatalogChecklistItemProgressCollection,
   ApiAuditCatalogChecklistItemProgressItem,
   ApiAuditCatalogChecklistItemProgressView,
+  ApiAuditCatalogChecklistItemResolutionCollection,
+  ApiAuditCatalogChecklistItemResolutionItem,
+  ApiAuditCatalogChecklistItemResolutionView,
   ApiAuditCatalogReviewAssignmentCollection,
   ApiAuditCatalogReviewAssignmentView,
   ApiAuditCatalogReviewSignalCollection,
@@ -573,6 +576,155 @@ export function ChecklistItemBlockersView({
   );
 }
 
+export function ChecklistItemResolutionsView({
+  activeCatalogChecklistItemResolution,
+  resolvedEntries,
+}: Readonly<{
+  activeCatalogChecklistItemResolution?: ApiAuditCatalogChecklistItemResolutionView;
+  resolvedEntries: ApiAuditCatalogChecklistItemResolutionCollection;
+}>) {
+  return (
+    <section className="card">
+      <div className="row spread">
+        <div>
+          <div className="card-eyebrow">
+            Phase 23 / Checklist Item Resolutions
+          </div>
+          <h2>Checklist item resolutions</h2>
+          <p className="empty-copy">
+            Track thin per-item resolutions and a single resolution note on
+            blocked progressed presets without turning the console into a
+            workflow engine or collaboration product.
+          </p>
+        </div>
+        <div className="timeline-count">
+          {resolvedEntries.totalCount} resolved preset(s)
+        </div>
+      </div>
+
+      {activeCatalogChecklistItemResolution ? (
+        <div className="inline-note">
+          Active resolutions:{" "}
+          <strong>
+            {
+              activeCatalogChecklistItemResolution.blocker.progress.checklist
+                .assignment.review.visibility.catalogEntry.entry.name
+            }
+          </strong>
+          {" · "}
+          {formatResolutionSummary(
+            activeCatalogChecklistItemResolution.resolution.items,
+          )}
+          {activeCatalogChecklistItemResolution.resolution.resolutionNote
+            ? ` · ${activeCatalogChecklistItemResolution.resolution.resolutionNote}`
+            : ""}
+        </div>
+      ) : null}
+
+      {resolvedEntries.items.length === 0 ? (
+        <p className="empty-copy">
+          No checklist item resolutions yet. Record blockers first, then save
+          thin resolution metadata through the shared operator seam.
+        </p>
+      ) : (
+        <ol className="timeline-list">
+          {resolvedEntries.items.map((resolutionView) => (
+            <li
+              className="timeline-entry"
+              key={
+                resolutionView.blocker.progress.checklist.assignment.review
+                  .visibility.catalogEntry.entry.id
+              }
+            >
+              <div className="row spread">
+                <div>
+                  <strong>
+                    {
+                      resolutionView.blocker.progress.checklist.assignment
+                        .review.visibility.catalogEntry.entry.name
+                    }
+                  </strong>
+                  <div className="timeline-meta">
+                    {formatResolutionSummary(resolutionView.resolution.items)}
+                    {" · "}
+                    {formatBlockerSummary(resolutionView.blocker.blocker.items)}
+                    {" · "}
+                    {formatProgressSummary(
+                      resolutionView.blocker.progress.progress.items,
+                    )}
+                  </div>
+                </div>
+                <span>
+                  {formatTimestamp(resolutionView.resolution.updatedAt)}
+                </span>
+              </div>
+              <ul className="approval-history">
+                {resolutionView.resolution.items.map((item) => (
+                  <li
+                    key={`${resolutionView.resolution.catalogEntryId}:${item.item}`}
+                  >
+                    <strong>{item.state}</strong>: {item.item}
+                  </li>
+                ))}
+              </ul>
+              {resolutionView.resolution.resolutionNote ? (
+                <p className="empty-copy">
+                  {resolutionView.resolution.resolutionNote}
+                </p>
+              ) : null}
+              <div className="timeline-meta">
+                operator {resolutionView.resolution.operatorId} · scope{" "}
+                {resolutionView.resolution.scopeId}
+              </div>
+              <div className="row spread">
+                <a
+                  className="link-button"
+                  href={buildCatalogEntryHref(
+                    resolutionView.blocker.progress.checklist.assignment.review
+                      .visibility.catalogEntry.entry.id,
+                  )}
+                >
+                  Apply resolved preset
+                </a>
+                <form
+                  action="/runs/catalog"
+                  className="action-form"
+                  method="post"
+                >
+                  <input
+                    name="returnTo"
+                    type="hidden"
+                    value={buildCatalogEntryHref(
+                      resolutionView.blocker.progress.checklist.assignment
+                        .review.visibility.catalogEntry.entry.id,
+                    )}
+                  />
+                  <input name="intent" type="hidden" value="clear-resolution" />
+                  <input
+                    name="catalogEntryId"
+                    type="hidden"
+                    value={
+                      resolutionView.blocker.progress.checklist.assignment
+                        .review.visibility.catalogEntry.entry.id
+                    }
+                  />
+                  <button type="submit">Clear resolutions</button>
+                </form>
+              </div>
+              {activeCatalogChecklistItemResolution?.blocker.progress.checklist
+                .assignment.review.visibility.catalogEntry.entry.id ===
+              resolutionView.blocker.progress.checklist.assignment.review
+                .visibility.catalogEntry.entry.id ? (
+                <div className="timeline-meta">Currently applied</div>
+              ) : null}
+            </li>
+          ))}
+        </ol>
+      )}
+    </section>
+  );
+}
+
 export function CatalogReviewAssignmentsView({
   activeCatalogReviewAssignment,
   assignedEntries,
@@ -808,22 +960,26 @@ export function CatalogReviewSignalsView({
 export function AuditViewCatalogsView({
   activeCatalogEntry,
   activeCatalogChecklistItemBlocker,
+  activeCatalogChecklistItemResolution,
   activeCatalogChecklistItemProgress,
   assignedEntries,
   blockedEntries,
   catalogEntries,
   checklistedEntries,
   progressedEntries,
+  resolvedEntries,
   reviewedEntries,
 }: Readonly<{
   activeCatalogEntry?: ApiAuditCatalogVisibilityView;
   activeCatalogChecklistItemBlocker?: ApiAuditCatalogChecklistItemBlockerView;
+  activeCatalogChecklistItemResolution?: ApiAuditCatalogChecklistItemResolutionView;
   activeCatalogChecklistItemProgress?: ApiAuditCatalogChecklistItemProgressView;
   assignedEntries: ApiAuditCatalogReviewAssignmentCollection;
   blockedEntries: ApiAuditCatalogChecklistItemBlockerCollection;
   catalogEntries: ApiAuditCatalogVisibilityCollection;
   checklistedEntries: ApiAuditCatalogAssignmentChecklistCollection;
   progressedEntries: ApiAuditCatalogChecklistItemProgressCollection;
+  resolvedEntries: ApiAuditCatalogChecklistItemResolutionCollection;
   reviewedEntries: ApiAuditCatalogReviewSignalCollection;
 }>) {
   const assignmentsByCatalogEntryId = new Map(
@@ -860,6 +1016,16 @@ export function AuditViewCatalogsView({
         [
           item.progress.checklist.assignment.review.visibility.catalogEntry
             .entry.id,
+          item,
+        ] as const,
+    ),
+  );
+  const resolutionsByCatalogEntryId = new Map(
+    resolvedEntries.items.map(
+      (item) =>
+        [
+          item.blocker.progress.checklist.assignment.review.visibility
+            .catalogEntry.entry.id,
           item,
         ] as const,
     ),
@@ -917,6 +1083,9 @@ export function AuditViewCatalogsView({
                 const blocker = blockersByCatalogEntryId.get(
                   catalogEntry.catalogEntry.entry.id,
                 );
+                const resolution = resolutionsByCatalogEntryId.get(
+                  catalogEntry.catalogEntry.entry.id,
+                );
                 const reviewSignal = reviewSignalsByCatalogEntryId.get(
                   catalogEntry.catalogEntry.entry.id,
                 );
@@ -943,6 +1112,11 @@ export function AuditViewCatalogsView({
                             : ""}
                           {blocker
                             ? ` · ${formatBlockerSummary(blocker.blocker.items)}`
+                            : ""}
+                          {resolution
+                            ? ` · ${formatResolutionSummary(
+                                resolution.resolution.items,
+                              )}`
                             : ""}
                         </div>
                       </div>
@@ -994,6 +1168,19 @@ export function AuditViewCatalogsView({
                         blocker note: {blocker.blocker.blockerNote}
                       </p>
                     ) : null}
+                    {resolution?.resolution.items.length ? (
+                      <p className="empty-copy">
+                        resolutions:{" "}
+                        {resolution.resolution.items
+                          .map((item) => `${item.state}: ${item.item}`)
+                          .join(", ")}
+                      </p>
+                    ) : null}
+                    {resolution?.resolution.resolutionNote ? (
+                      <p className="empty-copy">
+                        resolution note: {resolution.resolution.resolutionNote}
+                      </p>
+                    ) : null}
                     <div className="timeline-meta">
                       saved view {catalogEntry.catalogEntry.savedView.id}
                       {catalogEntry.catalogEntry.savedView.refs.auditViewRunId
@@ -1020,6 +1207,9 @@ export function AuditViewCatalogsView({
                         : ""}
                       {blocker
                         ? ` · blocker owner ${blocker.blocker.operatorId}`
+                        : ""}
+                      {resolution
+                        ? ` · resolution owner ${resolution.resolution.operatorId}`
                         : ""}
                     </div>
                     <div className="timeline-meta">
@@ -1289,6 +1479,61 @@ export function AuditViewCatalogsView({
                         </div>
                       </form>
                     ) : null}
+                    {blocker ? (
+                      <form
+                        action="/runs/catalog"
+                        className="decision-form"
+                        method="post"
+                      >
+                        <input
+                          name="returnTo"
+                          type="hidden"
+                          value={buildCatalogEntryHref(
+                            catalogEntry.catalogEntry.entry.id,
+                          )}
+                        />
+                        <input name="intent" type="hidden" value="resolve" />
+                        <input
+                          name="catalogEntryId"
+                          type="hidden"
+                          value={catalogEntry.catalogEntry.entry.id}
+                        />
+                        <div className="data-grid">
+                          <label>
+                            <span>Checklist item resolutions</span>
+                            <textarea
+                              className="note-input"
+                              defaultValue={formatChecklistItemResolutionLines(
+                                blocker.blocker.items,
+                                resolution?.resolution.items,
+                              )}
+                              name="resolutionItems"
+                              placeholder="resolved: Validate queued follow-up"
+                              rows={4}
+                            />
+                          </label>
+                          <label>
+                            <span>Resolution note</span>
+                            <input
+                              defaultValue={
+                                resolution?.resolution.resolutionNote ?? ""
+                              }
+                              name="resolutionNote"
+                              placeholder="Optional thin resolution note"
+                              type="text"
+                            />
+                          </label>
+                        </div>
+                        <div className="row spread">
+                          <div />
+                          <button type="submit">
+                            {resolution
+                              ? "Update resolutions"
+                              : "Save resolutions"}
+                          </button>
+                        </div>
+                      </form>
+                    ) : null}
                     <div className="row spread">
                       <a
                         className="link-button"
@@ -1429,6 +1674,32 @@ export function AuditViewCatalogsView({
                             <button type="submit">Clear blockers</button>
                           </form>
                         ) : null}
+                        {resolution ? (
+                          <form
+                            action="/runs/catalog"
+                            className="action-form"
+                            method="post"
+                          >
+                            <input
+                              name="returnTo"
+                              type="hidden"
+                              value={buildCatalogEntryHref(
+                                catalogEntry.catalogEntry.entry.id,
+                              )}
+                            />
+                            <input
+                              name="intent"
+                              type="hidden"
+                              value="clear-resolution"
+                            />
+                            <input
+                              name="catalogEntryId"
+                              type="hidden"
+                              value={catalogEntry.catalogEntry.entry.id}
+                            />
+                            <button type="submit">Clear resolutions</button>
+                          </form>
+                        ) : null}
                         <form
                           action="/runs/catalog"
                           className="action-form"
@@ -1499,6 +1770,13 @@ export function AuditViewCatalogsView({
                     catalogEntry.catalogEntry.entry.id ? (
                       <div className="timeline-meta">
                         Active blockers selected
+                      </div>
+                    ) : null}
+                    {activeCatalogChecklistItemResolution?.blocker.progress
+                      .checklist.assignment.review.visibility.catalogEntry.entry
+                      .id === catalogEntry.catalogEntry.entry.id ? (
+                      <div className="timeline-meta">
+                        Active resolutions selected
                       </div>
                     ) : null}
                   </>
@@ -2809,6 +3087,16 @@ function formatBlockerSummary(
   return `${blockedCount}/${items.length} blocked`;
 }
 
+function formatResolutionSummary(
+  items: readonly ApiAuditCatalogChecklistItemResolutionItem[],
+): string {
+  const resolvedCount = items.filter(
+    (item) => item.state === "resolved",
+  ).length;
+
+  return `${resolvedCount}/${items.length} resolved`;
+}
+
 function formatChecklistItemProgressLines(
   checklistItems: readonly string[],
   progressItems:
@@ -2834,6 +3122,24 @@ function formatChecklistItemBlockerLines(
 
   return progressItems
     .map((item) => `${blockerByItem.get(item.item) ?? "cleared"}: ${item.item}`)
+    .join("\n");
+}
+
+function formatChecklistItemResolutionLines(
+  blockerItems: readonly ApiAuditCatalogChecklistItemBlockerItem[],
+  resolutionItems:
+    | readonly ApiAuditCatalogChecklistItemResolutionItem[]
+    | undefined,
+): string {
+  const resolutionByItem = new Map(
+    (resolutionItems ?? []).map((item) => [item.item, item.state] as const),
+  );
+
+  return blockerItems
+    .map(
+      (item) =>
+        `${resolutionByItem.get(item.item) ?? "unresolved"}: ${item.item}`,
+    )
     .join("\n");
 }
 

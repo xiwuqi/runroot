@@ -1686,4 +1686,318 @@ describe("@runroot/web integration", () => {
       await peerApp.close();
     }
   });
+
+  it("renders, resolves, clears, and reapplies checklist item resolutions through the existing API surface", async () => {
+    const workspaceRoot = await mkdtemp(
+      join(tmpdir(), "runroot-web-checklist-resolutions-"),
+    );
+    const sqlitePath = join(workspaceRoot, "runroot.sqlite");
+    const inlineOperator = createRunrootOperatorService({
+      executionMode: "inline",
+      operatorId: "ops_oncall",
+      operatorScopeId: "ops",
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+    const queuedOperator = createRunrootOperatorService({
+      executionMode: "queued",
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+    const workerService = (
+      await import("@runroot/sdk")
+    ).createRunrootWorkerService({
+      persistenceDriver: "sqlite",
+      sqlitePath,
+      workerId: "worker_web_resolution",
+    });
+    const ownerApp = buildServer({
+      operator: createRunrootOperatorService({
+        catalogEntryIdGenerator: () => "catalog_entry_resolution_web",
+        operatorId: "ops_oncall",
+        operatorScopeId: "ops",
+        persistenceDriver: "sqlite",
+        savedViewIdGenerator: () => "saved_view_resolution_web",
+        sqlitePath,
+      }),
+    });
+    const peerApp = buildServer({
+      operator: createRunrootOperatorService({
+        operatorId: "ops_backup",
+        operatorScopeId: "ops",
+        persistenceDriver: "sqlite",
+        sqlitePath,
+      }),
+    });
+
+    try {
+      const inlineRun = await inlineOperator.startRun({
+        input: {
+          approvalRequired: false,
+          commandAlias: "print-ready",
+          runbookId: "node-health-check",
+        },
+        templateId: "shell-runbook-flow",
+      });
+      const queuedRun = await queuedOperator.startRun({
+        input: {
+          approvalRequired: false,
+          commandAlias: "print-ready",
+          runbookId: "node-health-check",
+        },
+        templateId: "shell-runbook-flow",
+      });
+
+      await workerService.processNextJob();
+
+      const ownerAddress = await ownerApp.listen({
+        host: "127.0.0.1",
+        port: 0,
+      });
+      const peerAddress = await peerApp.listen({
+        host: "127.0.0.1",
+        port: 0,
+      });
+
+      process.env.RUNROOT_API_BASE_URL = ownerAddress;
+
+      const saveForm = new FormData();
+      saveForm.set("name", "Queued resolution preset");
+      saveForm.set("description", "Saved queued worker resolution preset");
+      saveForm.set("summaryExecutionMode", "queued");
+      saveForm.set("drilldownWorkerId", "worker_web_resolution");
+      saveForm.set("auditViewRunId", queuedRun.id);
+      saveForm.set("drilldownRunId", queuedRun.id);
+      saveForm.set("returnTo", "/runs");
+
+      const saveResponse = await saveSavedView(
+        new Request("http://localhost/runs/saved-views", {
+          body: saveForm,
+          method: "POST",
+        }),
+      );
+
+      expect(saveResponse.status).toBe(303);
+
+      const publishForm = new FormData();
+      publishForm.set("intent", "publish");
+      publishForm.set("savedViewId", "saved_view_resolution_web");
+
+      const publishResponse = await mutateCatalog(
+        new Request("http://localhost/runs/catalog", {
+          body: publishForm,
+          method: "POST",
+        }),
+      );
+
+      expect(publishResponse.status).toBe(303);
+
+      const shareForm = new FormData();
+      shareForm.set("catalogEntryId", "catalog_entry_resolution_web");
+      shareForm.set("intent", "share");
+
+      const shareResponse = await mutateCatalog(
+        new Request("http://localhost/runs/catalog", {
+          body: shareForm,
+          method: "POST",
+        }),
+      );
+
+      expect(shareResponse.status).toBe(303);
+
+      const reviewForm = new FormData();
+      reviewForm.set("catalogEntryId", "catalog_entry_resolution_web");
+      reviewForm.set("intent", "review");
+      reviewForm.set("note", `Resolution ready after inline ${inlineRun.id}`);
+      reviewForm.set("reviewState", "recommended");
+      reviewForm.set(
+        "returnTo",
+        "/runs?catalogEntryId=catalog_entry_resolution_web",
+      );
+
+      const reviewResponse = await mutateCatalog(
+        new Request("http://localhost/runs/catalog", {
+          body: reviewForm,
+          method: "POST",
+        }),
+      );
+
+      expect(reviewResponse.status).toBe(303);
+
+      const assignForm = new FormData();
+      assignForm.set("catalogEntryId", "catalog_entry_resolution_web");
+      assignForm.set("intent", "assign");
+      assignForm.set("assigneeId", "ops_backup");
+      assignForm.set(
+        "handoffNote",
+        `Queued worker ${queuedRun.id} handed to backup`,
+      );
+      assignForm.set(
+        "returnTo",
+        "/runs?catalogEntryId=catalog_entry_resolution_web",
+      );
+
+      const assignResponse = await mutateCatalog(
+        new Request("http://localhost/runs/catalog", {
+          body: assignForm,
+          method: "POST",
+        }),
+      );
+
+      expect(assignResponse.status).toBe(303);
+
+      const checklistForm = new FormData();
+      checklistForm.set("catalogEntryId", "catalog_entry_resolution_web");
+      checklistForm.set("intent", "checklist");
+      checklistForm.set("checklistState", "pending");
+      checklistForm.set(
+        "checklistItems",
+        "Validate queued follow-up\nClose backup handoff",
+      );
+      checklistForm.set(
+        "returnTo",
+        "/runs?catalogEntryId=catalog_entry_resolution_web",
+      );
+
+      const checklistResponse = await mutateCatalog(
+        new Request("http://localhost/runs/catalog", {
+          body: checklistForm,
+          method: "POST",
+        }),
+      );
+
+      expect(checklistResponse.status).toBe(303);
+
+      const progressForm = new FormData();
+      progressForm.set("catalogEntryId", "catalog_entry_resolution_web");
+      progressForm.set("intent", "progress");
+      progressForm.set(
+        "progressItems",
+        "completed: Validate queued follow-up\npending: Close backup handoff",
+      );
+      progressForm.set("completionNote", "Queued follow-up is almost complete");
+      progressForm.set(
+        "returnTo",
+        "/runs?catalogEntryId=catalog_entry_resolution_web",
+      );
+
+      const progressResponse = await mutateCatalog(
+        new Request("http://localhost/runs/catalog", {
+          body: progressForm,
+          method: "POST",
+        }),
+      );
+
+      expect(progressResponse.status).toBe(303);
+
+      const blockerForm = new FormData();
+      blockerForm.set("catalogEntryId", "catalog_entry_resolution_web");
+      blockerForm.set("intent", "block");
+      blockerForm.set(
+        "blockerItems",
+        "cleared: Validate queued follow-up\nblocked: Close backup handoff",
+      );
+      blockerForm.set("blockerNote", "Waiting for the overnight handoff");
+      blockerForm.set(
+        "returnTo",
+        "/runs?catalogEntryId=catalog_entry_resolution_web",
+      );
+
+      const blockerResponse = await mutateCatalog(
+        new Request("http://localhost/runs/catalog", {
+          body: blockerForm,
+          method: "POST",
+        }),
+      );
+
+      expect(blockerResponse.status).toBe(303);
+
+      const resolutionForm = new FormData();
+      resolutionForm.set("catalogEntryId", "catalog_entry_resolution_web");
+      resolutionForm.set("intent", "resolve");
+      resolutionForm.set(
+        "resolutionItems",
+        "resolved: Validate queued follow-up\nunresolved: Close backup handoff",
+      );
+      resolutionForm.set(
+        "resolutionNote",
+        "Backup confirmed the follow-up closure",
+      );
+      resolutionForm.set(
+        "returnTo",
+        "/runs?catalogEntryId=catalog_entry_resolution_web",
+      );
+
+      const resolutionResponse = await mutateCatalog(
+        new Request("http://localhost/runs/catalog", {
+          body: resolutionForm,
+          method: "POST",
+        }),
+      );
+
+      expect(resolutionResponse.status).toBe(303);
+
+      process.env.RUNROOT_API_BASE_URL = peerAddress;
+
+      const resolvedMarkup = renderToStaticMarkup(
+        await RunsPage({
+          searchParams: Promise.resolve({
+            catalogEntryId: "catalog_entry_resolution_web",
+          }),
+        }),
+      );
+
+      expect(resolvedMarkup).toContain("Checklist item resolutions");
+      expect(resolvedMarkup).toContain("Queued resolution preset");
+      expect(resolvedMarkup).toContain("1/2 resolved");
+      expect(resolvedMarkup).toContain("Validate queued follow-up");
+      expect(resolvedMarkup).toContain("Close backup handoff");
+      expect(resolvedMarkup).toContain(
+        "Backup confirmed the follow-up closure",
+      );
+      expect(resolvedMarkup).toContain("Apply resolved preset");
+      expect(resolvedMarkup).toContain(
+        `Queued worker ${queuedRun.id} handed to backup`,
+      );
+      expect(resolvedMarkup).toContain("Currently applied");
+
+      process.env.RUNROOT_API_BASE_URL = ownerAddress;
+
+      const clearForm = new FormData();
+      clearForm.set("catalogEntryId", "catalog_entry_resolution_web");
+      clearForm.set("intent", "clear-resolution");
+      clearForm.set(
+        "returnTo",
+        "/runs?catalogEntryId=catalog_entry_resolution_web",
+      );
+
+      const clearResponse = await mutateCatalog(
+        new Request("http://localhost/runs/catalog", {
+          body: clearForm,
+          method: "POST",
+        }),
+      );
+
+      expect(clearResponse.status).toBe(303);
+
+      process.env.RUNROOT_API_BASE_URL = peerAddress;
+
+      const clearedMarkup = renderToStaticMarkup(
+        await RunsPage({
+          searchParams: Promise.resolve({
+            catalogEntryId: "catalog_entry_resolution_web",
+          }),
+        }),
+      );
+
+      expect(clearedMarkup).toContain("Checklist item resolutions");
+      expect(clearedMarkup).toContain("No checklist item resolutions yet");
+      expect(clearedMarkup).not.toContain(
+        "Backup confirmed the follow-up closure",
+      );
+    } finally {
+      await ownerApp.close();
+      await peerApp.close();
+    }
+  });
 });

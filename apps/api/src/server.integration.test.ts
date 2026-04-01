@@ -2583,4 +2583,386 @@ describe("@runroot/api integration", () => {
       await peerApp.close();
     }
   });
+
+  it("serves resolve, list-resolved, inspect-resolution, clear-resolution, and apply paths through the network API", async () => {
+    const workspaceRoot = await mkdtemp(
+      join(tmpdir(), "runroot-api-checklist-resolutions-"),
+    );
+    const sqlitePath = join(workspaceRoot, "runroot.sqlite");
+    const inlineOperator = createRunrootOperatorService({
+      executionMode: "inline",
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+    const queuedOperator = createRunrootOperatorService({
+      executionMode: "queued",
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+    const workerService = (
+      await import("@runroot/sdk")
+    ).createRunrootWorkerService({
+      persistenceDriver: "sqlite",
+      sqlitePath,
+      workerId: "worker_resolution_api",
+    });
+    const ownerApp = buildServer({
+      operator: createRunrootOperatorService({
+        catalogEntryIdGenerator: () => "catalog_entry_resolution_api",
+        operatorId: "ops_oncall",
+        operatorScopeId: "ops",
+        persistenceDriver: "sqlite",
+        savedViewIdGenerator: () => "saved_view_resolution_api",
+        sqlitePath,
+      }),
+    });
+    const peerApp = buildServer({
+      operator: createRunrootOperatorService({
+        operatorId: "ops_backup",
+        operatorScopeId: "ops",
+        persistenceDriver: "sqlite",
+        sqlitePath,
+      }),
+    });
+
+    try {
+      const inlineRun = await inlineOperator.startRun({
+        input: {
+          approvalRequired: false,
+          commandAlias: "print-ready",
+          runbookId: "node-health-check",
+        },
+        templateId: "shell-runbook-flow",
+      });
+      const queuedRun = await queuedOperator.startRun({
+        input: {
+          approvalRequired: false,
+          commandAlias: "print-ready",
+          runbookId: "node-health-check",
+        },
+        templateId: "shell-runbook-flow",
+      });
+
+      await workerService.processNextJob();
+
+      const ownerAddress = await ownerApp.listen({
+        host: "127.0.0.1",
+        port: 0,
+      });
+      const peerAddress = await peerApp.listen({
+        host: "127.0.0.1",
+        port: 0,
+      });
+
+      const saveResponse = await fetch(`${ownerAddress}/audit/saved-views`, {
+        body: JSON.stringify({
+          description: "Queued worker resolution preset",
+          name: "Queued worker resolution preset",
+          navigation: {
+            drilldown: {
+              workerId: "worker_resolution_api",
+            },
+            summary: {
+              executionMode: "queued",
+            },
+          },
+          refs: {
+            auditViewRunId: queuedRun.id,
+            drilldownRunId: queuedRun.id,
+          },
+        }),
+        headers: {
+          "content-type": "application/json",
+        },
+        method: "POST",
+      });
+      const savedViewPayload = (await saveResponse.json()) as {
+        savedView: {
+          id: string;
+        };
+      };
+      const publishResponse = await fetch(`${ownerAddress}/audit/catalog`, {
+        body: JSON.stringify({
+          savedViewId: savedViewPayload.savedView.id,
+        }),
+        headers: {
+          "content-type": "application/json",
+        },
+        method: "POST",
+      });
+      const publishedPayload = (await publishResponse.json()) as {
+        catalogEntry: {
+          entry: {
+            id: string;
+          };
+        };
+      };
+      const shareResponse = await fetch(
+        `${ownerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/share`,
+        {
+          method: "POST",
+        },
+      );
+      const reviewResponse = await fetch(
+        `${ownerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/review`,
+        {
+          body: JSON.stringify({
+            note: `Resolution ready after inline ${inlineRun.id} and queued ${queuedRun.id}`,
+            state: "recommended",
+          }),
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "POST",
+        },
+      );
+      const assignmentResponse = await fetch(
+        `${ownerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/assignment`,
+        {
+          body: JSON.stringify({
+            assigneeId: "ops_backup",
+            handoffNote: `Queued worker ${queuedRun.id} handed to backup`,
+          }),
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "POST",
+        },
+      );
+      const checklistResponse = await fetch(
+        `${ownerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/checklist`,
+        {
+          body: JSON.stringify({
+            items: ["Validate queued follow-up", "Close backup handoff"],
+            state: "pending",
+          }),
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "POST",
+        },
+      );
+      const progressResponse = await fetch(
+        `${ownerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/progress`,
+        {
+          body: JSON.stringify({
+            completionNote: "Queued follow-up is almost complete",
+            items: [
+              {
+                item: "Validate queued follow-up",
+                state: "completed",
+              },
+              {
+                item: "Close backup handoff",
+                state: "pending",
+              },
+            ],
+          }),
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "POST",
+        },
+      );
+      const blockerResponse = await fetch(
+        `${ownerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/blocker`,
+        {
+          body: JSON.stringify({
+            blockerNote: "Waiting for the overnight handoff",
+            items: [
+              {
+                item: "Validate queued follow-up",
+                state: "cleared",
+              },
+              {
+                item: "Close backup handoff",
+                state: "blocked",
+              },
+            ],
+          }),
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "POST",
+        },
+      );
+      const resolutionResponse = await fetch(
+        `${ownerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/resolution`,
+        {
+          body: JSON.stringify({
+            resolutionNote: "Backup confirmed the follow-up closure",
+            items: [
+              {
+                item: "Validate queued follow-up",
+                state: "resolved",
+              },
+              {
+                item: "Close backup handoff",
+                state: "unresolved",
+              },
+            ],
+          }),
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "POST",
+        },
+      );
+      const resolvedResponse = await fetch(
+        `${peerAddress}/audit/catalog/resolved`,
+      );
+      const inspectResponse = await fetch(
+        `${peerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/resolution`,
+      );
+      const applyResponse = await fetch(
+        `${peerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/apply`,
+      );
+      const clearResponse = await fetch(
+        `${ownerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/resolution/clear`,
+        {
+          method: "POST",
+        },
+      );
+      const resolvedAfterClearResponse = await fetch(
+        `${peerAddress}/audit/catalog/resolved`,
+      );
+      const resolutionPayload = (await resolutionResponse.json()) as {
+        resolution: {
+          blocker: {
+            blocker: {
+              blockerNote?: string;
+            };
+          };
+          resolution: {
+            items: Array<{
+              item: string;
+              state: "resolved" | "unresolved";
+            }>;
+            resolutionNote?: string;
+          };
+        };
+      };
+      const resolvedPayload = (await resolvedResponse.json()) as {
+        resolved: {
+          items: Array<{
+            blocker: {
+              progress: {
+                checklist: {
+                  assignment: {
+                    review: {
+                      visibility: {
+                        catalogEntry: {
+                          entry: {
+                            id: string;
+                          };
+                        };
+                      };
+                    };
+                  };
+                };
+              };
+            };
+            resolution: {
+              resolutionNote?: string;
+            };
+          }>;
+          totalCount: number;
+        };
+      };
+      const inspectPayload = (await inspectResponse.json()) as {
+        resolution: {
+          resolution: {
+            items: Array<{
+              item: string;
+              state: "resolved" | "unresolved";
+            }>;
+            resolutionNote?: string;
+          };
+        };
+      };
+      const applyPayload = (await applyResponse.json()) as {
+        application: {
+          application: {
+            navigation: {
+              drilldowns: Array<{
+                result: {
+                  runId: string;
+                };
+              }>;
+              totalSummaryCount: number;
+            };
+            savedView: {
+              id: string;
+            };
+          };
+        };
+      };
+      const clearPayload = (await clearResponse.json()) as {
+        resolution: {
+          resolution: {
+            resolutionNote?: string;
+          };
+        };
+      };
+      const resolvedAfterClearPayload =
+        (await resolvedAfterClearResponse.json()) as {
+          resolved: {
+            totalCount: number;
+          };
+        };
+
+      expect(saveResponse.status).toBe(201);
+      expect(publishResponse.status).toBe(201);
+      expect(shareResponse.status).toBe(200);
+      expect(reviewResponse.status).toBe(200);
+      expect(assignmentResponse.status).toBe(200);
+      expect(checklistResponse.status).toBe(200);
+      expect(progressResponse.status).toBe(200);
+      expect(blockerResponse.status).toBe(200);
+      expect(resolutionResponse.status).toBe(200);
+      expect(resolutionPayload.resolution.blocker.blocker.blockerNote).toBe(
+        "Waiting for the overnight handoff",
+      );
+      expect(resolutionPayload.resolution.resolution.resolutionNote).toBe(
+        "Backup confirmed the follow-up closure",
+      );
+      expect(resolutionPayload.resolution.resolution.items).toEqual([
+        {
+          item: "Validate queued follow-up",
+          state: "resolved",
+        },
+        {
+          item: "Close backup handoff",
+          state: "unresolved",
+        },
+      ]);
+      expect(resolvedResponse.status).toBe(200);
+      expect(resolvedPayload.resolved.totalCount).toBe(1);
+      expect(
+        resolvedPayload.resolved.items[0]?.blocker.progress.checklist.assignment
+          .review.visibility.catalogEntry.entry.id,
+      ).toBe("catalog_entry_resolution_api");
+      expect(inspectResponse.status).toBe(200);
+      expect(inspectPayload.resolution.resolution.resolutionNote).toContain(
+        "follow-up closure",
+      );
+      expect(applyResponse.status).toBe(200);
+      expect(applyPayload.application.application.savedView.id).toBe(
+        "saved_view_resolution_api",
+      );
+      expect(
+        applyPayload.application.application.navigation.drilldowns[0]?.result
+          .runId,
+      ).toBe(queuedRun.id);
+      expect(clearResponse.status).toBe(200);
+      expect(clearPayload.resolution.resolution.resolutionNote).toBe(
+        "Backup confirmed the follow-up closure",
+      );
+      expect(resolvedAfterClearResponse.status).toBe(200);
+      expect(resolvedAfterClearPayload.resolved.totalCount).toBe(0);
+    } finally {
+      await ownerApp.close();
+      await peerApp.close();
+    }
+  });
 });
