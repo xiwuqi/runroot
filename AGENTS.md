@@ -59,6 +59,7 @@ The project is executed in phases. Only work on the current phase.
 - Phase 22: Cross-Run Audit Catalog Checklist Item Blockers and Blocker Notes
 - Phase 23: Cross-Run Audit Catalog Checklist Item Resolutions and Resolution Notes
 - Phase 24: Cross-Run Audit Catalog Checklist Item Verifications and Verification Notes
+- Phase 25: Cross-Run Audit Catalog Checklist Item Evidence References and Evidence Notes
 
 Do not pull work from later phases into the current phase unless it is required to unblock the current phase and the reason is documented.
 

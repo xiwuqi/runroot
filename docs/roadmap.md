@@ -358,4 +358,27 @@ Status: completed
   engines, broader multi-user curation, or broad observability and analytics
   platform work
 
-Status: implemented on branch
+Status: completed
+
+## Phase 25: Cross-Run Audit Catalog Checklist Item Evidence References and Evidence Notes
+
+- add a shared audit-catalog checklist-item-evidence contract over the
+  existing checklist-item-verification and checklist-item-resolution paths
+  rather than introducing broader checklist orchestration, an artifact vault,
+  or a workflow engine
+- expose minimal record-evidence, list-evidenced, inspect-evidence,
+  clear-evidence, and apply paths through the existing seams in SDK, API, CLI,
+  and web
+- keep operator surfaces thin while allowing verified resolved blocked
+  progressed assigned presets to carry stable per-item evidence references and
+  a thin evidence note without expanding into threaded collaboration,
+  fine-grained RBAC, multi-tenant access, dashboards, search, analytics, or
+  provider-payload persistence
+- execute against the formal handoff in
+  [docs/architecture/phase-25-handoff.md](./architecture/phase-25-handoff.md)
+- keep the phase focused on checklist item evidence references and evidence
+  notes rather than broader checklist orchestration, broader review workflow
+  engines, broader multi-user curation, or broad observability and analytics
+  platform work
+
+Status: repository-owned phase contract after scope freeze
