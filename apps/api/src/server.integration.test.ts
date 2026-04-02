@@ -3372,4 +3372,449 @@ describe("@runroot/api integration", () => {
       await peerApp.close();
     }
   });
+
+  it("serves record-evidence, list-evidenced, inspect-evidence, clear-evidence, and apply paths through the network API", async () => {
+    const workspaceRoot = await mkdtemp(
+      join(tmpdir(), "runroot-api-checklist-evidence-"),
+    );
+    const sqlitePath = join(workspaceRoot, "runroot.sqlite");
+    const inlineOperator = createRunrootOperatorService({
+      executionMode: "inline",
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+    const queuedOperator = createRunrootOperatorService({
+      executionMode: "queued",
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+    const workerService = (
+      await import("@runroot/sdk")
+    ).createRunrootWorkerService({
+      persistenceDriver: "sqlite",
+      sqlitePath,
+      workerId: "worker_evidence_api",
+    });
+    const ownerApp = buildServer({
+      operator: createRunrootOperatorService({
+        catalogEntryIdGenerator: () => "catalog_entry_evidence_api",
+        operatorId: "ops_oncall",
+        operatorScopeId: "ops",
+        persistenceDriver: "sqlite",
+        savedViewIdGenerator: () => "saved_view_evidence_api",
+        sqlitePath,
+      }),
+    });
+    const peerApp = buildServer({
+      operator: createRunrootOperatorService({
+        operatorId: "ops_backup",
+        operatorScopeId: "ops",
+        persistenceDriver: "sqlite",
+        sqlitePath,
+      }),
+    });
+
+    try {
+      const inlineRun = await inlineOperator.startRun({
+        input: {
+          approvalRequired: false,
+          commandAlias: "print-ready",
+          runbookId: "node-health-check",
+        },
+        templateId: "shell-runbook-flow",
+      });
+      const queuedRun = await queuedOperator.startRun({
+        input: {
+          approvalRequired: false,
+          commandAlias: "print-ready",
+          runbookId: "node-health-check",
+        },
+        templateId: "shell-runbook-flow",
+      });
+
+      await workerService.processNextJob();
+
+      const ownerAddress = await ownerApp.listen({
+        host: "127.0.0.1",
+        port: 0,
+      });
+      const peerAddress = await peerApp.listen({
+        host: "127.0.0.1",
+        port: 0,
+      });
+
+      const saveResponse = await fetch(`${ownerAddress}/audit/saved-views`, {
+        body: JSON.stringify({
+          description: "Queued worker evidence preset",
+          name: "Queued worker evidence preset",
+          navigation: {
+            drilldown: {
+              workerId: "worker_evidence_api",
+            },
+            summary: {
+              executionMode: "queued",
+            },
+          },
+          refs: {
+            auditViewRunId: queuedRun.id,
+            drilldownRunId: queuedRun.id,
+          },
+        }),
+        headers: {
+          "content-type": "application/json",
+        },
+        method: "POST",
+      });
+      const savedViewPayload = (await saveResponse.json()) as {
+        savedView: {
+          id: string;
+        };
+      };
+      const publishResponse = await fetch(`${ownerAddress}/audit/catalog`, {
+        body: JSON.stringify({
+          savedViewId: savedViewPayload.savedView.id,
+        }),
+        headers: {
+          "content-type": "application/json",
+        },
+        method: "POST",
+      });
+      const publishedPayload = (await publishResponse.json()) as {
+        catalogEntry: {
+          entry: {
+            id: string;
+          };
+        };
+      };
+      const shareResponse = await fetch(
+        `${ownerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/share`,
+        {
+          method: "POST",
+        },
+      );
+      const reviewResponse = await fetch(
+        `${ownerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/review`,
+        {
+          body: JSON.stringify({
+            note: `Evidence ready after inline ${inlineRun.id} and queued ${queuedRun.id}`,
+            state: "recommended",
+          }),
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "POST",
+        },
+      );
+      const assignmentResponse = await fetch(
+        `${ownerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/assignment`,
+        {
+          body: JSON.stringify({
+            assigneeId: "ops_backup",
+            handoffNote: `Queued worker ${queuedRun.id} handed to backup`,
+          }),
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "POST",
+        },
+      );
+      const checklistResponse = await fetch(
+        `${ownerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/checklist`,
+        {
+          body: JSON.stringify({
+            items: ["Validate queued follow-up", "Close backup handoff"],
+            state: "pending",
+          }),
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "POST",
+        },
+      );
+      const progressResponse = await fetch(
+        `${ownerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/progress`,
+        {
+          body: JSON.stringify({
+            completionNote: "Queued follow-up is almost complete",
+            items: [
+              {
+                item: "Validate queued follow-up",
+                state: "completed",
+              },
+              {
+                item: "Close backup handoff",
+                state: "pending",
+              },
+            ],
+          }),
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "POST",
+        },
+      );
+      const blockerResponse = await fetch(
+        `${ownerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/blocker`,
+        {
+          body: JSON.stringify({
+            blockerNote: "Waiting for the overnight handoff",
+            items: [
+              {
+                item: "Validate queued follow-up",
+                state: "cleared",
+              },
+              {
+                item: "Close backup handoff",
+                state: "blocked",
+              },
+            ],
+          }),
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "POST",
+        },
+      );
+      const resolutionResponse = await fetch(
+        `${ownerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/resolution`,
+        {
+          body: JSON.stringify({
+            resolutionNote: "Backup confirmed the follow-up closure",
+            items: [
+              {
+                item: "Validate queued follow-up",
+                state: "resolved",
+              },
+              {
+                item: "Close backup handoff",
+                state: "unresolved",
+              },
+            ],
+          }),
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "POST",
+        },
+      );
+      const verificationResponse = await fetch(
+        `${ownerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/verification`,
+        {
+          body: JSON.stringify({
+            verificationNote: "Backup verified the follow-up closure",
+            items: [
+              {
+                item: "Validate queued follow-up",
+                state: "verified",
+              },
+              {
+                item: "Close backup handoff",
+                state: "unverified",
+              },
+            ],
+          }),
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "POST",
+        },
+      );
+      const evidenceResponse = await fetch(
+        `${ownerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/evidence`,
+        {
+          body: JSON.stringify({
+            evidenceNote: "Backup collected stable follow-up references",
+            items: [
+              {
+                item: "Validate queued follow-up",
+                references: [
+                  "run://queued-follow-up",
+                  "note://backup-closeout",
+                ],
+              },
+              {
+                item: "Close backup handoff",
+                references: ["doc://backup-handoff"],
+              },
+            ],
+          }),
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "POST",
+        },
+      );
+      const evidencedResponse = await fetch(
+        `${peerAddress}/audit/catalog/evidenced`,
+      );
+      const inspectResponse = await fetch(
+        `${peerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/evidence`,
+      );
+      const applyResponse = await fetch(
+        `${peerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/apply`,
+      );
+      const clearResponse = await fetch(
+        `${ownerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/evidence/clear`,
+        {
+          method: "POST",
+        },
+      );
+      const evidencedAfterClearResponse = await fetch(
+        `${peerAddress}/audit/catalog/evidenced`,
+      );
+      const evidencePayload = (await evidenceResponse.json()) as {
+        evidence: {
+          verification: {
+            resolution: {
+              resolution: {
+                resolutionNote?: string;
+              };
+            };
+            verification: {
+              verificationNote?: string;
+            };
+          };
+          evidence: {
+            evidenceNote?: string;
+            items: Array<{
+              item: string;
+              references: string[];
+            }>;
+          };
+        };
+      };
+      const evidencedPayload = (await evidencedResponse.json()) as {
+        evidenced: {
+          items: Array<{
+            evidence: {
+              evidenceNote?: string;
+            };
+            verification: {
+              resolution: {
+                blocker: {
+                  progress: {
+                    checklist: {
+                      assignment: {
+                        review: {
+                          visibility: {
+                            catalogEntry: {
+                              entry: {
+                                id: string;
+                              };
+                            };
+                          };
+                        };
+                      };
+                    };
+                  };
+                };
+              };
+            };
+          }>;
+          totalCount: number;
+        };
+      };
+      const inspectPayload = (await inspectResponse.json()) as {
+        evidence: {
+          evidence: {
+            evidenceNote?: string;
+            items: Array<{
+              item: string;
+              references: string[];
+            }>;
+          };
+        };
+      };
+      const applyPayload = (await applyResponse.json()) as {
+        application: {
+          application: {
+            navigation: {
+              drilldowns: Array<{
+                result: {
+                  runId: string;
+                };
+              }>;
+              totalSummaryCount: number;
+            };
+            savedView: {
+              id: string;
+            };
+          };
+        };
+      };
+      const clearPayload = (await clearResponse.json()) as {
+        evidence: {
+          evidence: {
+            evidenceNote?: string;
+          };
+        };
+      };
+      const evidencedAfterClearPayload =
+        (await evidencedAfterClearResponse.json()) as {
+          evidenced: {
+            totalCount: number;
+          };
+        };
+
+      expect(saveResponse.status).toBe(201);
+      expect(publishResponse.status).toBe(201);
+      expect(shareResponse.status).toBe(200);
+      expect(reviewResponse.status).toBe(200);
+      expect(assignmentResponse.status).toBe(200);
+      expect(checklistResponse.status).toBe(200);
+      expect(progressResponse.status).toBe(200);
+      expect(blockerResponse.status).toBe(200);
+      expect(resolutionResponse.status).toBe(200);
+      expect(verificationResponse.status).toBe(200);
+      expect(evidenceResponse.status).toBe(200);
+      expect(
+        evidencePayload.evidence.verification.resolution.resolution
+          .resolutionNote,
+      ).toBe("Backup confirmed the follow-up closure");
+      expect(
+        evidencePayload.evidence.verification.verification.verificationNote,
+      ).toBe("Backup verified the follow-up closure");
+      expect(evidencePayload.evidence.evidence.evidenceNote).toBe(
+        "Backup collected stable follow-up references",
+      );
+      expect(evidencePayload.evidence.evidence.items).toEqual([
+        {
+          item: "Validate queued follow-up",
+          references: ["run://queued-follow-up", "note://backup-closeout"],
+        },
+        {
+          item: "Close backup handoff",
+          references: ["doc://backup-handoff"],
+        },
+      ]);
+      expect(evidencedResponse.status).toBe(200);
+      expect(evidencedPayload.evidenced.totalCount).toBe(1);
+      expect(
+        evidencedPayload.evidenced.items[0]?.verification.resolution.blocker
+          .progress.checklist.assignment.review.visibility.catalogEntry.entry
+          .id,
+      ).toBe("catalog_entry_evidence_api");
+      expect(inspectResponse.status).toBe(200);
+      expect(inspectPayload.evidence.evidence.evidenceNote).toBe(
+        "Backup collected stable follow-up references",
+      );
+      expect(applyResponse.status).toBe(200);
+      expect(applyPayload.application.application.savedView.id).toBe(
+        "saved_view_evidence_api",
+      );
+      expect(
+        applyPayload.application.application.navigation.drilldowns[0]?.result
+          .runId,
+      ).toBe(queuedRun.id);
+      expect(clearResponse.status).toBe(200);
+      expect(clearPayload.evidence.evidence.evidenceNote).toBe(
+        "Backup collected stable follow-up references",
+      );
+      expect(evidencedAfterClearResponse.status).toBe(200);
+      expect(evidencedAfterClearPayload.evidenced.totalCount).toBe(0);
+    } finally {
+      await ownerApp.close();
+      await peerApp.close();
+    }
+  });
 });

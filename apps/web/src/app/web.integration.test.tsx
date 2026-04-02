@@ -2337,4 +2337,368 @@ describe("@runroot/web integration", () => {
       await peerApp.close();
     }
   });
+
+  it("renders, records, clears, and reapplies checklist item evidence through the existing API surface", async () => {
+    const workspaceRoot = await mkdtemp(
+      join(tmpdir(), "runroot-web-checklist-evidence-"),
+    );
+    const sqlitePath = join(workspaceRoot, "runroot.sqlite");
+    const inlineOperator = createRunrootOperatorService({
+      executionMode: "inline",
+      operatorId: "ops_oncall",
+      operatorScopeId: "ops",
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+    const queuedOperator = createRunrootOperatorService({
+      executionMode: "queued",
+      persistenceDriver: "sqlite",
+      sqlitePath,
+    });
+    const workerService = (
+      await import("@runroot/sdk")
+    ).createRunrootWorkerService({
+      persistenceDriver: "sqlite",
+      sqlitePath,
+      workerId: "worker_web_evidence",
+    });
+    const ownerApp = buildServer({
+      operator: createRunrootOperatorService({
+        catalogEntryIdGenerator: () => "catalog_entry_evidence_web",
+        operatorId: "ops_oncall",
+        operatorScopeId: "ops",
+        persistenceDriver: "sqlite",
+        savedViewIdGenerator: () => "saved_view_evidence_web",
+        sqlitePath,
+      }),
+    });
+    const peerApp = buildServer({
+      operator: createRunrootOperatorService({
+        operatorId: "ops_backup",
+        operatorScopeId: "ops",
+        persistenceDriver: "sqlite",
+        sqlitePath,
+      }),
+    });
+
+    try {
+      const inlineRun = await inlineOperator.startRun({
+        input: {
+          approvalRequired: false,
+          commandAlias: "print-ready",
+          runbookId: "node-health-check",
+        },
+        templateId: "shell-runbook-flow",
+      });
+      const queuedRun = await queuedOperator.startRun({
+        input: {
+          approvalRequired: false,
+          commandAlias: "print-ready",
+          runbookId: "node-health-check",
+        },
+        templateId: "shell-runbook-flow",
+      });
+
+      await workerService.processNextJob();
+
+      const ownerAddress = await ownerApp.listen({
+        host: "127.0.0.1",
+        port: 0,
+      });
+      const peerAddress = await peerApp.listen({
+        host: "127.0.0.1",
+        port: 0,
+      });
+
+      process.env.RUNROOT_API_BASE_URL = ownerAddress;
+
+      const saveForm = new FormData();
+      saveForm.set("name", "Queued evidence preset");
+      saveForm.set("description", "Saved queued worker evidence preset");
+      saveForm.set("summaryExecutionMode", "queued");
+      saveForm.set("drilldownWorkerId", "worker_web_evidence");
+      saveForm.set("auditViewRunId", queuedRun.id);
+      saveForm.set("drilldownRunId", queuedRun.id);
+      saveForm.set("returnTo", "/runs");
+
+      const saveResponse = await saveSavedView(
+        new Request("http://localhost/runs/saved-views", {
+          body: saveForm,
+          method: "POST",
+        }),
+      );
+
+      expect(saveResponse.status).toBe(303);
+
+      const publishForm = new FormData();
+      publishForm.set("intent", "publish");
+      publishForm.set("savedViewId", "saved_view_evidence_web");
+
+      const publishResponse = await mutateCatalog(
+        new Request("http://localhost/runs/catalog", {
+          body: publishForm,
+          method: "POST",
+        }),
+      );
+
+      expect(publishResponse.status).toBe(303);
+
+      const shareForm = new FormData();
+      shareForm.set("catalogEntryId", "catalog_entry_evidence_web");
+      shareForm.set("intent", "share");
+
+      const shareResponse = await mutateCatalog(
+        new Request("http://localhost/runs/catalog", {
+          body: shareForm,
+          method: "POST",
+        }),
+      );
+
+      expect(shareResponse.status).toBe(303);
+
+      const reviewForm = new FormData();
+      reviewForm.set("catalogEntryId", "catalog_entry_evidence_web");
+      reviewForm.set("intent", "review");
+      reviewForm.set("note", `Evidence ready after inline ${inlineRun.id}`);
+      reviewForm.set("reviewState", "recommended");
+      reviewForm.set(
+        "returnTo",
+        "/runs?catalogEntryId=catalog_entry_evidence_web",
+      );
+
+      const reviewResponse = await mutateCatalog(
+        new Request("http://localhost/runs/catalog", {
+          body: reviewForm,
+          method: "POST",
+        }),
+      );
+
+      expect(reviewResponse.status).toBe(303);
+
+      const assignForm = new FormData();
+      assignForm.set("catalogEntryId", "catalog_entry_evidence_web");
+      assignForm.set("intent", "assign");
+      assignForm.set("assigneeId", "ops_backup");
+      assignForm.set(
+        "handoffNote",
+        `Queued worker ${queuedRun.id} handed to backup`,
+      );
+      assignForm.set(
+        "returnTo",
+        "/runs?catalogEntryId=catalog_entry_evidence_web",
+      );
+
+      const assignResponse = await mutateCatalog(
+        new Request("http://localhost/runs/catalog", {
+          body: assignForm,
+          method: "POST",
+        }),
+      );
+
+      expect(assignResponse.status).toBe(303);
+
+      const checklistForm = new FormData();
+      checklistForm.set("catalogEntryId", "catalog_entry_evidence_web");
+      checklistForm.set("intent", "checklist");
+      checklistForm.set("checklistState", "pending");
+      checklistForm.set(
+        "checklistItems",
+        "Validate queued follow-up\nClose backup handoff",
+      );
+      checklistForm.set(
+        "returnTo",
+        "/runs?catalogEntryId=catalog_entry_evidence_web",
+      );
+
+      const checklistResponse = await mutateCatalog(
+        new Request("http://localhost/runs/catalog", {
+          body: checklistForm,
+          method: "POST",
+        }),
+      );
+
+      expect(checklistResponse.status).toBe(303);
+
+      const progressForm = new FormData();
+      progressForm.set("catalogEntryId", "catalog_entry_evidence_web");
+      progressForm.set("intent", "progress");
+      progressForm.set(
+        "progressItems",
+        "completed: Validate queued follow-up\npending: Close backup handoff",
+      );
+      progressForm.set("completionNote", "Queued follow-up is almost complete");
+      progressForm.set(
+        "returnTo",
+        "/runs?catalogEntryId=catalog_entry_evidence_web",
+      );
+
+      const progressResponse = await mutateCatalog(
+        new Request("http://localhost/runs/catalog", {
+          body: progressForm,
+          method: "POST",
+        }),
+      );
+
+      expect(progressResponse.status).toBe(303);
+
+      const blockerForm = new FormData();
+      blockerForm.set("catalogEntryId", "catalog_entry_evidence_web");
+      blockerForm.set("intent", "block");
+      blockerForm.set(
+        "blockerItems",
+        "cleared: Validate queued follow-up\nblocked: Close backup handoff",
+      );
+      blockerForm.set("blockerNote", "Waiting for the overnight handoff");
+      blockerForm.set(
+        "returnTo",
+        "/runs?catalogEntryId=catalog_entry_evidence_web",
+      );
+
+      const blockerResponse = await mutateCatalog(
+        new Request("http://localhost/runs/catalog", {
+          body: blockerForm,
+          method: "POST",
+        }),
+      );
+
+      expect(blockerResponse.status).toBe(303);
+
+      const resolutionForm = new FormData();
+      resolutionForm.set("catalogEntryId", "catalog_entry_evidence_web");
+      resolutionForm.set("intent", "resolve");
+      resolutionForm.set(
+        "resolutionItems",
+        "resolved: Validate queued follow-up\nunresolved: Close backup handoff",
+      );
+      resolutionForm.set(
+        "resolutionNote",
+        "Backup confirmed the follow-up closure",
+      );
+      resolutionForm.set(
+        "returnTo",
+        "/runs?catalogEntryId=catalog_entry_evidence_web",
+      );
+
+      const resolutionResponse = await mutateCatalog(
+        new Request("http://localhost/runs/catalog", {
+          body: resolutionForm,
+          method: "POST",
+        }),
+      );
+
+      expect(resolutionResponse.status).toBe(303);
+
+      const verificationForm = new FormData();
+      verificationForm.set("catalogEntryId", "catalog_entry_evidence_web");
+      verificationForm.set("intent", "verify");
+      verificationForm.set(
+        "verificationItems",
+        "verified: Validate queued follow-up\nunverified: Close backup handoff",
+      );
+      verificationForm.set(
+        "verificationNote",
+        "Backup verified the follow-up closure",
+      );
+      verificationForm.set(
+        "returnTo",
+        "/runs?catalogEntryId=catalog_entry_evidence_web",
+      );
+
+      const verificationResponse = await mutateCatalog(
+        new Request("http://localhost/runs/catalog", {
+          body: verificationForm,
+          method: "POST",
+        }),
+      );
+
+      expect(verificationResponse.status).toBe(303);
+
+      const evidenceForm = new FormData();
+      evidenceForm.set("catalogEntryId", "catalog_entry_evidence_web");
+      evidenceForm.set("intent", "record-evidence");
+      evidenceForm.set(
+        "evidenceItems",
+        "Validate queued follow-up: run://queued-follow-up | note://backup-closeout\nClose backup handoff: doc://backup-handoff",
+      );
+      evidenceForm.set(
+        "evidenceNote",
+        "Backup collected stable follow-up references",
+      );
+      evidenceForm.set(
+        "returnTo",
+        "/runs?catalogEntryId=catalog_entry_evidence_web",
+      );
+
+      const evidenceResponse = await mutateCatalog(
+        new Request("http://localhost/runs/catalog", {
+          body: evidenceForm,
+          method: "POST",
+        }),
+      );
+
+      expect(evidenceResponse.status).toBe(303);
+
+      process.env.RUNROOT_API_BASE_URL = peerAddress;
+
+      const evidencedMarkup = renderToStaticMarkup(
+        await RunsPage({
+          searchParams: Promise.resolve({
+            catalogEntryId: "catalog_entry_evidence_web",
+          }),
+        }),
+      );
+
+      expect(evidencedMarkup).toContain("Checklist item evidence");
+      expect(evidencedMarkup).toContain("Queued evidence preset");
+      expect(evidencedMarkup).toContain("3 reference(s) across 2 item(s)");
+      expect(evidencedMarkup).toContain("Validate queued follow-up");
+      expect(evidencedMarkup).toContain("Close backup handoff");
+      expect(evidencedMarkup).toContain(
+        "Backup collected stable follow-up references",
+      );
+      expect(evidencedMarkup).toContain("Apply evidenced preset");
+      expect(evidencedMarkup).toContain(
+        `Queued worker ${queuedRun.id} handed to backup`,
+      );
+      expect(evidencedMarkup).toContain("Currently applied");
+
+      process.env.RUNROOT_API_BASE_URL = ownerAddress;
+
+      const clearForm = new FormData();
+      clearForm.set("catalogEntryId", "catalog_entry_evidence_web");
+      clearForm.set("intent", "clear-evidence");
+      clearForm.set(
+        "returnTo",
+        "/runs?catalogEntryId=catalog_entry_evidence_web",
+      );
+
+      const clearResponse = await mutateCatalog(
+        new Request("http://localhost/runs/catalog", {
+          body: clearForm,
+          method: "POST",
+        }),
+      );
+
+      expect(clearResponse.status).toBe(303);
+
+      process.env.RUNROOT_API_BASE_URL = peerAddress;
+
+      const clearedMarkup = renderToStaticMarkup(
+        await RunsPage({
+          searchParams: Promise.resolve({
+            catalogEntryId: "catalog_entry_evidence_web",
+          }),
+        }),
+      );
+
+      expect(clearedMarkup).toContain("Checklist item evidence");
+      expect(clearedMarkup).toContain("No checklist item evidence yet");
+      expect(clearedMarkup).not.toContain(
+        "Backup collected stable follow-up references",
+      );
+    } finally {
+      await ownerApp.close();
+      await peerApp.close();
+    }
+  });
 });
