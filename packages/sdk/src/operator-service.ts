@@ -20,6 +20,7 @@ import type { RunrootLogger, RunrootTracer } from "@runroot/observability";
 import {
   createConfiguredAuditCatalogAssignmentChecklistStore,
   createConfiguredAuditCatalogChecklistItemBlockerStore,
+  createConfiguredAuditCatalogChecklistItemEvidenceStore,
   createConfiguredAuditCatalogChecklistItemProgressStore,
   createConfiguredAuditCatalogChecklistItemResolutionStore,
   createConfiguredAuditCatalogChecklistItemVerificationStore,
@@ -42,6 +43,10 @@ import {
   type CrossRunAuditCatalogChecklistItemBlockerItem,
   type CrossRunAuditCatalogChecklistItemBlockerStore,
   type CrossRunAuditCatalogChecklistItemBlockerView,
+  type CrossRunAuditCatalogChecklistItemEvidenceCollection,
+  type CrossRunAuditCatalogChecklistItemEvidenceItem,
+  type CrossRunAuditCatalogChecklistItemEvidenceStore,
+  type CrossRunAuditCatalogChecklistItemEvidenceView,
   type CrossRunAuditCatalogChecklistItemProgressCollection,
   type CrossRunAuditCatalogChecklistItemProgressItem,
   type CrossRunAuditCatalogChecklistItemProgressStore,
@@ -82,6 +87,7 @@ import {
   type CrossRunAuditSavedViewStore,
   createCrossRunAuditCatalogAssignmentChecklistQuery,
   createCrossRunAuditCatalogChecklistItemBlockerQuery,
+  createCrossRunAuditCatalogChecklistItemEvidenceQuery,
   createCrossRunAuditCatalogChecklistItemProgressQuery,
   createCrossRunAuditCatalogChecklistItemResolutionQuery,
   createCrossRunAuditCatalogChecklistItemVerificationQuery,
@@ -184,6 +190,11 @@ export interface VerifyAuditCatalogEntryInput {
   readonly items: readonly CrossRunAuditCatalogChecklistItemVerificationItem[];
 }
 
+export interface RecordAuditCatalogEntryEvidenceInput {
+  readonly evidenceNote?: string;
+  readonly items: readonly CrossRunAuditCatalogChecklistItemEvidenceItem[];
+}
+
 export interface ReviewAuditCatalogEntryInput {
   readonly note?: string;
   readonly state: CrossRunAuditCatalogReviewState;
@@ -208,6 +219,10 @@ export interface RunrootOperatorService {
     id: string,
     input: VerifyAuditCatalogEntryInput,
   ): Promise<CrossRunAuditCatalogChecklistItemVerificationView>;
+  recordCatalogEntryEvidence(
+    id: string,
+    input: RecordAuditCatalogEntryEvidenceInput,
+  ): Promise<CrossRunAuditCatalogChecklistItemEvidenceView>;
   archiveCatalogEntry(id: string): Promise<CrossRunAuditCatalogEntryView>;
   checklistCatalogEntry(
     id: string,
@@ -222,6 +237,9 @@ export interface RunrootOperatorService {
   clearCatalogChecklistItemResolution(
     id: string,
   ): Promise<CrossRunAuditCatalogChecklistItemResolutionView>;
+  clearCatalogChecklistItemEvidence(
+    id: string,
+  ): Promise<CrossRunAuditCatalogChecklistItemEvidenceView>;
   clearCatalogChecklistItemVerification(
     id: string,
   ): Promise<CrossRunAuditCatalogChecklistItemVerificationView>;
@@ -243,6 +261,9 @@ export interface RunrootOperatorService {
   getCatalogChecklistItemResolution(
     id: string,
   ): Promise<CrossRunAuditCatalogChecklistItemResolutionView>;
+  getCatalogChecklistItemEvidence(
+    id: string,
+  ): Promise<CrossRunAuditCatalogChecklistItemEvidenceView>;
   getCatalogChecklistItemVerification(
     id: string,
   ): Promise<CrossRunAuditCatalogChecklistItemVerificationView>;
@@ -282,6 +303,7 @@ export interface RunrootOperatorService {
   listCatalogEntries(): Promise<CrossRunAuditCatalogEntryCollection>;
   listProgressedCatalogEntries(): Promise<CrossRunAuditCatalogChecklistItemProgressCollection>;
   listResolvedCatalogEntries(): Promise<CrossRunAuditCatalogChecklistItemResolutionCollection>;
+  listEvidencedCatalogEntries(): Promise<CrossRunAuditCatalogChecklistItemEvidenceCollection>;
   listVerifiedCatalogEntries(): Promise<CrossRunAuditCatalogChecklistItemVerificationCollection>;
   listReviewedCatalogEntries(): Promise<CrossRunAuditCatalogReviewSignalCollection>;
   listVisibleCatalogEntries(): Promise<CrossRunAuditCatalogVisibilityCollection>;
@@ -315,6 +337,7 @@ export interface RunrootOperatorServiceOptions {
   readonly approvalIdGenerator?: () => string;
   readonly catalogAssignmentChecklistStore?: CrossRunAuditCatalogAssignmentChecklistStore;
   readonly catalogChecklistItemBlockerStore?: CrossRunAuditCatalogChecklistItemBlockerStore;
+  readonly catalogChecklistItemEvidenceStore?: CrossRunAuditCatalogChecklistItemEvidenceStore;
   readonly catalogChecklistItemResolutionStore?: CrossRunAuditCatalogChecklistItemResolutionStore;
   readonly catalogChecklistItemVerificationStore?: CrossRunAuditCatalogChecklistItemVerificationStore;
   readonly catalogChecklistItemProgressStore?: CrossRunAuditCatalogChecklistItemProgressStore;
@@ -519,6 +542,19 @@ export function createRunrootOperatorService(
         ? { workspacePath: options.workspacePath }
         : {}),
     });
+  const catalogChecklistItemEvidenceStore =
+    options.catalogChecklistItemEvidenceStore ??
+    createConfiguredAuditCatalogChecklistItemEvidenceStore({
+      ...(options.databaseUrl ? { databaseUrl: options.databaseUrl } : {}),
+      ...(options.env ? { env: options.env } : {}),
+      ...(options.persistenceDriver
+        ? { driver: options.persistenceDriver }
+        : {}),
+      ...(options.sqlitePath ? { sqlitePath: options.sqlitePath } : {}),
+      ...(options.workspacePath
+        ? { workspacePath: options.workspacePath }
+        : {}),
+    });
   const templateRuntimeOptions: CreateTemplateRuntimeBundleOptions = {
     toolObserver: createToolTelemetryObserver({
       history: toolHistory,
@@ -649,6 +685,11 @@ export function createRunrootOperatorService(
       catalogChecklistItemVerificationStore,
       crossRunAuditCatalogChecklistItemResolutions,
     );
+  const crossRunAuditCatalogChecklistItemEvidence =
+    createCrossRunAuditCatalogChecklistItemEvidenceQuery(
+      catalogChecklistItemEvidenceStore,
+      crossRunAuditCatalogChecklistItemVerifications,
+    );
   const persistenceLocation = persistenceConfig.location;
 
   return {
@@ -728,6 +769,19 @@ export function createRunrootOperatorService(
       }
     },
 
+    async recordCatalogEntryEvidence(id, input) {
+      try {
+        return await crossRunAuditCatalogChecklistItemEvidence.setCatalogChecklistItemEvidence(
+          id,
+          operatorIdentity,
+          input,
+          now(),
+        );
+      } catch (error) {
+        throw normalizeCatalogChecklistItemEvidenceError(error, id);
+      }
+    },
+
     async archiveCatalogEntry(id) {
       const visibility = await requireOwnedCatalogVisibility(
         id,
@@ -802,6 +856,20 @@ export function createRunrootOperatorService(
       }
 
       return resolution;
+    },
+
+    async clearCatalogChecklistItemEvidence(id) {
+      const evidence =
+        await crossRunAuditCatalogChecklistItemEvidence.clearCatalogChecklistItemEvidence(
+          id,
+          operatorIdentity,
+        );
+
+      if (!evidence) {
+        throw new OperatorNotFoundError("catalog checklist item evidence", id);
+      }
+
+      return evidence;
     },
 
     async clearCatalogChecklistItemVerification(id) {
@@ -962,6 +1030,20 @@ export function createRunrootOperatorService(
       return resolution;
     },
 
+    async getCatalogChecklistItemEvidence(id) {
+      const evidence =
+        await crossRunAuditCatalogChecklistItemEvidence.getCatalogChecklistItemEvidence(
+          id,
+          operatorIdentity,
+        );
+
+      if (!evidence) {
+        throw new OperatorNotFoundError("catalog checklist item evidence", id);
+      }
+
+      return evidence;
+    },
+
     async getCatalogChecklistItemVerification(id) {
       const verification =
         await crossRunAuditCatalogChecklistItemVerifications.getCatalogChecklistItemVerification(
@@ -1101,6 +1183,12 @@ export function createRunrootOperatorService(
 
     async listResolvedCatalogEntries() {
       return crossRunAuditCatalogChecklistItemResolutions.listResolvedCatalogEntries(
+        operatorIdentity,
+      );
+    },
+
+    async listEvidencedCatalogEntries() {
+      return crossRunAuditCatalogChecklistItemEvidence.listEvidencedCatalogEntries(
         operatorIdentity,
       );
     },
@@ -1659,6 +1747,44 @@ function normalizeCatalogChecklistItemVerificationError(
   ) {
     return new OperatorNotFoundError(
       "catalog checklist item verification",
+      catalogEntryId,
+    );
+  }
+
+  return normalizeOperatorError(error);
+}
+
+function normalizeCatalogChecklistItemEvidenceError(
+  error: unknown,
+  catalogEntryId: string,
+): Error {
+  if (
+    error instanceof OperatorConflictError ||
+    error instanceof OperatorInputError ||
+    error instanceof OperatorNotFoundError
+  ) {
+    return error;
+  }
+
+  if (
+    error instanceof Error &&
+    (error.message.startsWith("Catalog checklist item evidence requires") ||
+      error.message.startsWith(`Catalog checklist item evidence "`) ||
+      error.message.startsWith(
+        `Catalog entry "${catalogEntryId}" does not define checklist item verification entries`,
+      ))
+  ) {
+    return new OperatorInputError(error.message);
+  }
+
+  if (
+    error instanceof Error &&
+    error.message.startsWith(
+      `Catalog entry "${catalogEntryId}" is not verified and visible to operator`,
+    )
+  ) {
+    return new OperatorNotFoundError(
+      "catalog checklist item evidence",
       catalogEntryId,
     );
   }

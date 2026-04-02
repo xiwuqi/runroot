@@ -12,6 +12,7 @@ import {
   OperatorError,
   type ProgressAuditCatalogEntryInput,
   type PublishAuditViewCatalogEntryInput,
+  type RecordAuditCatalogEntryEvidenceInput,
   type ResolveAuditCatalogEntryInput,
   resolveWorkspacePath,
   type SaveAuditSavedViewInput,
@@ -175,6 +176,19 @@ export async function runCli(
               resolveVerifyAuditCatalogEntryInput(flags),
             ),
           });
+        case "record-evidence":
+          if (!detail) {
+            throw new Error(
+              "audit catalog record-evidence requires a catalog entry id.",
+            );
+          }
+
+          return writeJson(io.stdout.write, {
+            evidence: await service.recordCatalogEntryEvidence(
+              detail,
+              resolveRecordAuditCatalogEntryEvidenceInput(flags),
+            ),
+          });
         case "assigned":
           return writeJson(io.stdout.write, {
             assigned: await service.listAssignedCatalogEntries(),
@@ -190,6 +204,10 @@ export async function runCli(
         case "verified":
           return writeJson(io.stdout.write, {
             verified: await service.listVerifiedCatalogEntries(),
+          });
+        case "evidenced":
+          return writeJson(io.stdout.write, {
+            evidenced: await service.listEvidencedCatalogEntries(),
           });
         case "checklist":
           if (!detail) {
@@ -249,6 +267,16 @@ export async function runCli(
           return writeJson(io.stdout.write, {
             verification:
               await service.clearCatalogChecklistItemVerification(detail),
+          });
+        case "clear-evidence":
+          if (!detail) {
+            throw new Error(
+              "audit catalog clear-evidence requires a catalog entry id.",
+            );
+          }
+
+          return writeJson(io.stdout.write, {
+            evidence: await service.clearCatalogChecklistItemEvidence(detail),
           });
         case "clear-assignment":
           if (!detail) {
@@ -350,6 +378,16 @@ export async function runCli(
           return writeJson(io.stdout.write, {
             verification:
               await service.getCatalogChecklistItemVerification(detail),
+          });
+        case "inspect-evidence":
+          if (!detail) {
+            throw new Error(
+              "audit catalog inspect-evidence requires a catalog entry id.",
+            );
+          }
+
+          return writeJson(io.stdout.write, {
+            evidence: await service.getCatalogChecklistItemEvidence(detail),
           });
         case "inspect-review":
           if (!detail) {
@@ -837,6 +875,24 @@ function resolveVerifyAuditCatalogEntryInput(
   };
 }
 
+function resolveRecordAuditCatalogEntryEvidenceInput(
+  flags: ReadonlyMap<string, string | boolean>,
+): RecordAuditCatalogEntryEvidenceInput {
+  const itemsJson = getStringFlag(flags, "items-json");
+  const evidenceNote = getStringFlag(flags, "evidence-note");
+
+  if (!itemsJson) {
+    throw new Error(
+      "audit catalog record-evidence requires --items-json <json-array>.",
+    );
+  }
+
+  return {
+    ...(evidenceNote !== undefined ? { evidenceNote } : {}),
+    items: resolveChecklistItemEvidenceItems(itemsJson),
+  };
+}
+
 function resolveChecklistItems(itemsJson: string): readonly string[] {
   const parsedItems = JSON.parse(itemsJson) as unknown;
 
@@ -954,6 +1010,35 @@ function resolveChecklistItemVerificationItems(itemsJson: string): readonly {
   return parsedItems;
 }
 
+function resolveChecklistItemEvidenceItems(itemsJson: string): readonly {
+  readonly item: string;
+  readonly references: readonly string[];
+}[] {
+  const parsedItems = JSON.parse(itemsJson) as unknown;
+
+  if (
+    !Array.isArray(parsedItems) ||
+    !parsedItems.every(
+      (item) =>
+        typeof item === "object" &&
+        item !== null &&
+        "item" in item &&
+        typeof item.item === "string" &&
+        "references" in item &&
+        Array.isArray(item.references) &&
+        item.references.every(
+          (reference: unknown) => typeof reference === "string",
+        ),
+    )
+  ) {
+    throw new Error(
+      "--items-json must decode to an array of { item, references } objects with references as a string array.",
+    );
+  }
+
+  return parsedItems;
+}
+
 function getStringFlag(
   flags: ReadonlyMap<string, string | boolean>,
   name: string,
@@ -1063,6 +1148,7 @@ Commands:
   audit catalog blocked
   audit catalog resolved
   audit catalog verified
+  audit catalog evidenced
   audit catalog checklisted
   audit catalog progressed
   audit catalog publish <saved-view-id> [--name <name>] [--description <text>]
@@ -1072,6 +1158,7 @@ Commands:
   audit catalog inspect-blocker <catalog-entry-id>
   audit catalog inspect-resolution <catalog-entry-id>
   audit catalog inspect-verification <catalog-entry-id>
+  audit catalog inspect-evidence <catalog-entry-id>
   audit catalog inspect-checklist <catalog-entry-id>
   audit catalog inspect-progress <catalog-entry-id>
   audit catalog inspect-review <catalog-entry-id>
@@ -1079,11 +1166,13 @@ Commands:
   audit catalog block <catalog-entry-id> --items-json <json-array> [--blocker-note <text>]
   audit catalog resolve <catalog-entry-id> --items-json <json-array> [--resolution-note <text>]
   audit catalog verify <catalog-entry-id> --items-json <json-array> [--verification-note <text>]
+  audit catalog record-evidence <catalog-entry-id> --items-json <json-array> [--evidence-note <text>]
   audit catalog checklist <catalog-entry-id> --status <pending|completed> [--items-json <json-array>]
   audit catalog progress <catalog-entry-id> --items-json <json-array> [--completion-note <text>]
   audit catalog clear-blocker <catalog-entry-id>
   audit catalog clear-resolution <catalog-entry-id>
   audit catalog clear-verification <catalog-entry-id>
+  audit catalog clear-evidence <catalog-entry-id>
   audit catalog clear-assignment <catalog-entry-id>
   audit catalog clear-checklist <catalog-entry-id>
   audit catalog clear-progress <catalog-entry-id>

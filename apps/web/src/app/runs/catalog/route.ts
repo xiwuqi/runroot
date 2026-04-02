@@ -410,6 +410,53 @@ export async function POST(request: Request) {
       return Response.redirect(redirectUrl, 303);
     }
 
+    if (intent === "record-evidence") {
+      const catalogEntryId = readTrimmedFormValue(formData, "catalogEntryId");
+      const evidenceItems = readChecklistItemEvidenceItems(
+        formData.get("evidenceItems"),
+      );
+      const evidenceNoteValue = formData.get("evidenceNote");
+
+      if (!catalogEntryId) {
+        appendFlashMessage(
+          redirectUrl,
+          "error",
+          "A catalog entry id is required to update checklist item evidence metadata.",
+        );
+
+        return Response.redirect(redirectUrl, 303);
+      }
+
+      if (evidenceItems.length === 0) {
+        appendFlashMessage(
+          redirectUrl,
+          "error",
+          "At least one checklist item evidence entry is required.",
+        );
+
+        return Response.redirect(redirectUrl, 303);
+      }
+
+      const evidence =
+        await createRunrootApiClient().setAuditCatalogChecklistItemEvidence(
+          catalogEntryId,
+          {
+            ...(typeof evidenceNoteValue === "string"
+              ? { evidenceNote: evidenceNoteValue }
+              : {}),
+            items: evidenceItems,
+          },
+        );
+
+      appendFlashMessage(
+        redirectUrl,
+        "notice",
+        `Checklist item evidence for ${evidence.verification.resolution.blocker.progress.checklist.assignment.review.visibility.catalogEntry.entry.name} updated.`,
+      );
+
+      return Response.redirect(redirectUrl, 303);
+    }
+
     if (intent === "clear-review") {
       const catalogEntryId = readTrimmedFormValue(formData, "catalogEntryId");
 
@@ -540,6 +587,33 @@ export async function POST(request: Request) {
         redirectUrl,
         "notice",
         `Checklist item verifications for ${verification.resolution.blocker.progress.checklist.assignment.review.visibility.catalogEntry.entry.name} cleared.`,
+      );
+
+      return Response.redirect(redirectUrl, 303);
+    }
+
+    if (intent === "clear-evidence") {
+      const catalogEntryId = readTrimmedFormValue(formData, "catalogEntryId");
+
+      if (!catalogEntryId) {
+        appendFlashMessage(
+          redirectUrl,
+          "error",
+          "A catalog entry id is required to clear checklist item evidence metadata.",
+        );
+
+        return Response.redirect(redirectUrl, 303);
+      }
+
+      const evidence =
+        await createRunrootApiClient().clearAuditCatalogChecklistItemEvidence(
+          catalogEntryId,
+        );
+
+      appendFlashMessage(
+        redirectUrl,
+        "notice",
+        `Checklist item evidence for ${evidence.verification.resolution.blocker.progress.checklist.assignment.review.visibility.catalogEntry.entry.name} cleared.`,
       );
 
       return Response.redirect(redirectUrl, 303);
@@ -850,6 +924,55 @@ function readChecklistItemVerificationItems(
       return {
         item,
         state: rawState,
+      };
+    });
+}
+
+function readChecklistItemEvidenceItems(
+  value: FormDataEntryValue | null,
+): readonly {
+  readonly item: string;
+  readonly references: readonly string[];
+}[] {
+  if (typeof value !== "string") {
+    return [];
+  }
+
+  return value
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .map((line) => {
+      const separatorIndex = line.indexOf(":");
+
+      if (separatorIndex < 0) {
+        throw new Error(
+          `Checklist item evidence lines must use "item: reference | reference" format for "${line}".`,
+        );
+      }
+
+      const item = line.slice(0, separatorIndex).trim();
+      const references = line
+        .slice(separatorIndex + 1)
+        .split("|")
+        .map((reference) => reference.trim())
+        .filter((reference) => reference.length > 0);
+
+      if (item.length === 0) {
+        throw new Error(
+          "Checklist item evidence lines require a non-empty item.",
+        );
+      }
+
+      if (references.length === 0) {
+        throw new Error(
+          `Checklist item evidence lines require at least one reference for "${item}".`,
+        );
+      }
+
+      return {
+        item,
+        references,
       };
     });
 }

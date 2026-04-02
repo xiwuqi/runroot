@@ -7,6 +7,9 @@ import type {
   ApiAuditCatalogChecklistItemBlockerCollection,
   ApiAuditCatalogChecklistItemBlockerItem,
   ApiAuditCatalogChecklistItemBlockerView,
+  ApiAuditCatalogChecklistItemEvidenceCollection,
+  ApiAuditCatalogChecklistItemEvidenceItem,
+  ApiAuditCatalogChecklistItemEvidenceView,
   ApiAuditCatalogChecklistItemProgressCollection,
   ApiAuditCatalogChecklistItemProgressItem,
   ApiAuditCatalogChecklistItemProgressView,
@@ -886,6 +889,159 @@ export function ChecklistItemVerificationsView({
   );
 }
 
+export function ChecklistItemEvidencesView({
+  activeCatalogChecklistItemEvidence,
+  evidencedEntries,
+}: Readonly<{
+  activeCatalogChecklistItemEvidence?: ApiAuditCatalogChecklistItemEvidenceView;
+  evidencedEntries: ApiAuditCatalogChecklistItemEvidenceCollection;
+}>) {
+  return (
+    <section className="card">
+      <div className="row spread">
+        <div>
+          <div className="card-eyebrow">Phase 25 / Checklist Item Evidence</div>
+          <h2>Checklist item evidence</h2>
+          <p className="empty-copy">
+            Track thin per-item evidence references and a single evidence note
+            on verified presets without turning the console into an artifact
+            vault, workflow engine, or collaboration product.
+          </p>
+        </div>
+        <div className="timeline-count">
+          {evidencedEntries.totalCount} evidenced preset(s)
+        </div>
+      </div>
+
+      {activeCatalogChecklistItemEvidence ? (
+        <div className="inline-note">
+          Active evidence:{" "}
+          <strong>
+            {
+              activeCatalogChecklistItemEvidence.verification.resolution.blocker
+                .progress.checklist.assignment.review.visibility.catalogEntry
+                .entry.name
+            }
+          </strong>
+          {" · "}
+          {formatEvidenceSummary(
+            activeCatalogChecklistItemEvidence.evidence.items,
+          )}
+          {activeCatalogChecklistItemEvidence.evidence.evidenceNote
+            ? ` · ${activeCatalogChecklistItemEvidence.evidence.evidenceNote}`
+            : ""}
+        </div>
+      ) : null}
+
+      {evidencedEntries.items.length === 0 ? (
+        <p className="empty-copy">
+          No checklist item evidence yet. Record verifications first, then save
+          thin evidence references through the shared operator seam.
+        </p>
+      ) : (
+        <ol className="timeline-list">
+          {evidencedEntries.items.map((evidenceView) => (
+            <li
+              className="timeline-entry"
+              key={
+                evidenceView.verification.resolution.blocker.progress.checklist
+                  .assignment.review.visibility.catalogEntry.entry.id
+              }
+            >
+              <div className="row spread">
+                <div>
+                  <strong>
+                    {
+                      evidenceView.verification.resolution.blocker.progress
+                        .checklist.assignment.review.visibility.catalogEntry
+                        .entry.name
+                    }
+                  </strong>
+                  <div className="timeline-meta">
+                    {formatEvidenceSummary(evidenceView.evidence.items)}
+                    {" · "}
+                    {formatVerificationSummary(
+                      evidenceView.verification.verification.items,
+                    )}
+                    {" · "}
+                    {formatResolutionSummary(
+                      evidenceView.verification.resolution.resolution.items,
+                    )}
+                  </div>
+                </div>
+                <span>{formatTimestamp(evidenceView.evidence.updatedAt)}</span>
+              </div>
+              <ul className="approval-history">
+                {evidenceView.evidence.items.map((item) => (
+                  <li
+                    key={`${evidenceView.evidence.catalogEntryId}:${item.item}`}
+                  >
+                    <strong>{item.item}</strong>: {item.references.join(" | ")}
+                  </li>
+                ))}
+              </ul>
+              {evidenceView.evidence.evidenceNote ? (
+                <p className="empty-copy">
+                  {evidenceView.evidence.evidenceNote}
+                </p>
+              ) : null}
+              <div className="timeline-meta">
+                operator {evidenceView.evidence.operatorId} · scope{" "}
+                {evidenceView.evidence.scopeId}
+              </div>
+              <div className="row spread">
+                <a
+                  className="link-button"
+                  href={buildCatalogEntryHref(
+                    evidenceView.verification.resolution.blocker.progress
+                      .checklist.assignment.review.visibility.catalogEntry.entry
+                      .id,
+                  )}
+                >
+                  Apply evidenced preset
+                </a>
+                <form
+                  action="/runs/catalog"
+                  className="action-form"
+                  method="post"
+                >
+                  <input
+                    name="returnTo"
+                    type="hidden"
+                    value={buildCatalogEntryHref(
+                      evidenceView.verification.resolution.blocker.progress
+                        .checklist.assignment.review.visibility.catalogEntry
+                        .entry.id,
+                    )}
+                  />
+                  <input name="intent" type="hidden" value="clear-evidence" />
+                  <input
+                    name="catalogEntryId"
+                    type="hidden"
+                    value={
+                      evidenceView.verification.resolution.blocker.progress
+                        .checklist.assignment.review.visibility.catalogEntry
+                        .entry.id
+                    }
+                  />
+                  <button type="submit">Clear evidence</button>
+                </form>
+              </div>
+              {activeCatalogChecklistItemEvidence?.verification.resolution
+                .blocker.progress.checklist.assignment.review.visibility
+                .catalogEntry.entry.id ===
+              evidenceView.verification.resolution.blocker.progress.checklist
+                .assignment.review.visibility.catalogEntry.entry.id ? (
+                <div className="timeline-meta">Currently applied</div>
+              ) : null}
+            </li>
+          ))}
+        </ol>
+      )}
+    </section>
+  );
+}
+
 export function CatalogReviewAssignmentsView({
   activeCatalogReviewAssignment,
   assignedEntries,
@@ -1121,6 +1277,7 @@ export function CatalogReviewSignalsView({
 export function AuditViewCatalogsView({
   activeCatalogEntry,
   activeCatalogChecklistItemBlocker,
+  activeCatalogChecklistItemEvidence,
   activeCatalogChecklistItemResolution,
   activeCatalogChecklistItemVerification,
   activeCatalogChecklistItemProgress,
@@ -1135,6 +1292,7 @@ export function AuditViewCatalogsView({
 }: Readonly<{
   activeCatalogEntry?: ApiAuditCatalogVisibilityView;
   activeCatalogChecklistItemBlocker?: ApiAuditCatalogChecklistItemBlockerView;
+  activeCatalogChecklistItemEvidence?: ApiAuditCatalogChecklistItemEvidenceView;
   activeCatalogChecklistItemResolution?: ApiAuditCatalogChecklistItemResolutionView;
   activeCatalogChecklistItemVerification?: ApiAuditCatalogChecklistItemVerificationView;
   activeCatalogChecklistItemProgress?: ApiAuditCatalogChecklistItemProgressView;
@@ -1264,6 +1422,13 @@ export function AuditViewCatalogsView({
                 const verification = verificationsByCatalogEntryId.get(
                   catalogEntry.catalogEntry.entry.id,
                 );
+                const evidence =
+                  activeCatalogChecklistItemEvidence?.verification.resolution
+                    .blocker.progress.checklist.assignment.review.visibility
+                    .catalogEntry.entry.id ===
+                  catalogEntry.catalogEntry.entry.id
+                    ? activeCatalogChecklistItemEvidence
+                    : undefined;
                 const reviewSignal = reviewSignalsByCatalogEntryId.get(
                   catalogEntry.catalogEntry.entry.id,
                 );
@@ -1378,6 +1543,22 @@ export function AuditViewCatalogsView({
                         {verification.verification.verificationNote}
                       </p>
                     ) : null}
+                    {evidence?.evidence.items.length ? (
+                      <p className="empty-copy">
+                        evidence:{" "}
+                        {evidence.evidence.items
+                          .map(
+                            (item) =>
+                              `${item.item} -> ${item.references.join(" | ")}`,
+                          )
+                          .join("; ")}
+                      </p>
+                    ) : null}
+                    {evidence?.evidence.evidenceNote ? (
+                      <p className="empty-copy">
+                        evidence note: {evidence.evidence.evidenceNote}
+                      </p>
+                    ) : null}
                     <div className="timeline-meta">
                       saved view {catalogEntry.catalogEntry.savedView.id}
                       {catalogEntry.catalogEntry.savedView.refs.auditViewRunId
@@ -1410,6 +1591,9 @@ export function AuditViewCatalogsView({
                         : ""}
                       {verification
                         ? ` · verification owner ${verification.verification.operatorId}`
+                        : ""}
+                      {evidence
+                        ? ` · evidence owner ${evidence.evidence.operatorId}`
                         : ""}
                     </div>
                     <div className="timeline-meta">
@@ -1790,6 +1974,63 @@ export function AuditViewCatalogsView({
                         </div>
                       </form>
                     ) : null}
+                    {verification ? (
+                      <form
+                        action="/runs/catalog"
+                        className="decision-form"
+                        method="post"
+                      >
+                        <input
+                          name="returnTo"
+                          type="hidden"
+                          value={buildCatalogEntryHref(
+                            catalogEntry.catalogEntry.entry.id,
+                          )}
+                        />
+                        <input
+                          name="intent"
+                          type="hidden"
+                          value="record-evidence"
+                        />
+                        <input
+                          name="catalogEntryId"
+                          type="hidden"
+                          value={catalogEntry.catalogEntry.entry.id}
+                        />
+                        <div className="data-grid">
+                          <label>
+                            <span>Checklist item evidence</span>
+                            <textarea
+                              className="note-input"
+                              defaultValue={formatChecklistItemEvidenceLines(
+                                verification.verification.items,
+                                evidence?.evidence.items,
+                              )}
+                              name="evidenceItems"
+                              placeholder="Validate queued follow-up: run://queued-follow-up | note://backup-handoff"
+                              rows={4}
+                            />
+                          </label>
+                          <label>
+                            <span>Evidence note</span>
+                            <input
+                              defaultValue={
+                                evidence?.evidence.evidenceNote ?? ""
+                              }
+                              name="evidenceNote"
+                              placeholder="Optional thin evidence note"
+                              type="text"
+                            />
+                          </label>
+                        </div>
+                        <div className="row spread">
+                          <div />
+                          <button type="submit">
+                            {evidence ? "Update evidence" : "Save evidence"}
+                          </button>
+                        </div>
+                      </form>
+                    ) : null}
                     <div className="row spread">
                       <a
                         className="link-button"
@@ -1980,6 +2221,32 @@ export function AuditViewCatalogsView({
                               value={catalogEntry.catalogEntry.entry.id}
                             />
                             <button type="submit">Clear verifications</button>
+                          </form>
+                        ) : null}
+                        {evidence ? (
+                          <form
+                            action="/runs/catalog"
+                            className="action-form"
+                            method="post"
+                          >
+                            <input
+                              name="returnTo"
+                              type="hidden"
+                              value={buildCatalogEntryHref(
+                                catalogEntry.catalogEntry.entry.id,
+                              )}
+                            />
+                            <input
+                              name="intent"
+                              type="hidden"
+                              value="clear-evidence"
+                            />
+                            <input
+                              name="catalogEntryId"
+                              type="hidden"
+                              value={catalogEntry.catalogEntry.entry.id}
+                            />
+                            <button type="submit">Clear evidence</button>
                           </form>
                         ) : null}
                         <form
@@ -3397,6 +3664,17 @@ function formatVerificationSummary(
   return `${verifiedCount}/${items.length} verified`;
 }
 
+function formatEvidenceSummary(
+  items: readonly ApiAuditCatalogChecklistItemEvidenceItem[],
+): string {
+  const referenceCount = items.reduce(
+    (count, item) => count + item.references.length,
+    0,
+  );
+
+  return `${referenceCount} reference(s) across ${items.length} item(s)`;
+}
+
 function formatChecklistItemProgressLines(
   checklistItems: readonly string[],
   progressItems:
@@ -3458,6 +3736,25 @@ function formatChecklistItemVerificationLines(
       (item) =>
         `${verificationByItem.get(item.item) ?? "unverified"}: ${item.item}`,
     )
+    .join("\n");
+}
+
+function formatChecklistItemEvidenceLines(
+  verificationItems: readonly ApiAuditCatalogChecklistItemVerificationItem[],
+  evidenceItems:
+    | readonly ApiAuditCatalogChecklistItemEvidenceItem[]
+    | undefined,
+): string {
+  const evidenceByItem = new Map(
+    (evidenceItems ?? []).map((item) => [item.item, item.references] as const),
+  );
+
+  return verificationItems
+    .map((item) => {
+      const references = evidenceByItem.get(item.item) ?? [];
+
+      return `${item.item}: ${references.join(" | ")}`.trimEnd();
+    })
     .join("\n");
 }
 

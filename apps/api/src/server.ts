@@ -267,6 +267,12 @@ export function buildServer(options: BuildServerOptions = {}) {
     })),
   );
 
+  app.get("/audit/catalog/evidenced", async (_request, reply) =>
+    handleOperatorResponse(reply, async () => ({
+      evidenced: await operator.listEvidencedCatalogEntries(),
+    })),
+  );
+
   app.post("/audit/saved-views", async (request, reply) =>
     handleOperatorResponse(reply, async () => {
       const body = request.body as {
@@ -468,6 +474,20 @@ export function buildServer(options: BuildServerOptions = {}) {
           ),
         };
       }),
+  );
+
+  app.get("/audit/catalog/:catalogEntryId/evidence", async (request, reply) =>
+    handleOperatorResponse(reply, async () => {
+      const params = request.params as {
+        readonly catalogEntryId: string;
+      };
+
+      return {
+        evidence: await operator.getCatalogChecklistItemEvidence(
+          params.catalogEntryId,
+        ),
+      };
+    }),
   );
 
   app.get("/audit/catalog/:catalogEntryId", async (request, reply) =>
@@ -706,6 +726,37 @@ export function buildServer(options: BuildServerOptions = {}) {
       }),
   );
 
+  app.post("/audit/catalog/:catalogEntryId/evidence", async (request, reply) =>
+    handleOperatorResponse(reply, async () => {
+      const params = request.params as {
+        readonly catalogEntryId: string;
+      };
+      const body = request.body as {
+        readonly evidenceNote?: string;
+        readonly items?: unknown;
+      };
+      const items = readChecklistItemEvidenceItems(body?.items, "items");
+
+      if (items.length === 0) {
+        throw new OperatorInputError(
+          "items must include at least one checklist item evidence entry.",
+        );
+      }
+
+      return {
+        evidence: await operator.recordCatalogEntryEvidence(
+          params.catalogEntryId,
+          {
+            ...(body?.evidenceNote !== undefined
+              ? { evidenceNote: body.evidenceNote }
+              : {}),
+            items,
+          },
+        ),
+      };
+    }),
+  );
+
   app.post(
     "/audit/catalog/:catalogEntryId/review/clear",
     async (request, reply) =>
@@ -812,6 +863,22 @@ export function buildServer(options: BuildServerOptions = {}) {
 
         return {
           verification: await operator.clearCatalogChecklistItemVerification(
+            params.catalogEntryId,
+          ),
+        };
+      }),
+  );
+
+  app.post(
+    "/audit/catalog/:catalogEntryId/evidence/clear",
+    async (request, reply) =>
+      handleOperatorResponse(reply, async () => {
+        const params = request.params as {
+          readonly catalogEntryId: string;
+        };
+
+        return {
+          evidence: await operator.clearCatalogChecklistItemEvidence(
             params.catalogEntryId,
           ),
         };
@@ -1296,6 +1363,36 @@ function readChecklistItemVerificationItems(
   ) {
     throw new OperatorInputError(
       `${fieldName} must be an array of { item, state } objects with state verified|unverified.`,
+    );
+  }
+
+  return value;
+}
+
+function readChecklistItemEvidenceItems(
+  value: unknown,
+  fieldName: string,
+): readonly {
+  readonly item: string;
+  readonly references: readonly string[];
+}[] {
+  if (
+    !Array.isArray(value) ||
+    !value.every(
+      (entry) =>
+        typeof entry === "object" &&
+        entry !== null &&
+        "item" in entry &&
+        typeof entry.item === "string" &&
+        "references" in entry &&
+        Array.isArray(entry.references) &&
+        entry.references.every(
+          (reference: unknown) => typeof reference === "string",
+        ),
+    )
+  ) {
+    throw new OperatorInputError(
+      `${fieldName} must be an array of { item, references } objects with references as a string array.`,
     );
   }
 
