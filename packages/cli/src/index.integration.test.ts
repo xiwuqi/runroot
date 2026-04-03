@@ -4355,7 +4355,7 @@ describe("@runroot/cli integration", () => {
     expect(verifiedAfterClearPayload.verified.totalCount).toBe(0);
   });
 
-  it("records evidence, lists-evidenced, inspects, clears, and reapplies verified catalog entries through the CLI", async () => {
+  it("records attestations, lists-attested, inspects, clears, and reapplies evidenced catalog entries through the CLI", async () => {
     const workspaceRoot = await mkdtemp(
       join(tmpdir(), "runroot-cli-checklist-evidence-"),
     );
@@ -4382,11 +4382,12 @@ describe("@runroot/cli integration", () => {
     const resolutionIo = createIo();
     const verificationIo = createIo();
     const evidenceIo = createIo();
-    const evidencedPeerIo = createIo();
-    const inspectEvidenceIo = createIo();
+    const attestationIo = createIo();
+    const attestedPeerIo = createIo();
+    const inspectAttestationIo = createIo();
     const applyIo = createIo();
-    const clearEvidenceIo = createIo();
-    const evidencedAfterClearIo = createIo();
+    const clearAttestationIo = createIo();
+    const attestedAfterClearIo = createIo();
 
     await runCli(
       ["runs", "start", "shell-runbook-flow", "--input-file", inputFile],
@@ -4723,8 +4724,39 @@ describe("@runroot/cli integration", () => {
         io: evidenceIo.io,
       },
     );
-    const evidencedPeerExitCode = await runCli(
-      ["audit", "catalog", "evidenced"],
+    const attestationExitCode = await runCli(
+      [
+        "audit",
+        "catalog",
+        "attest",
+        publishedPayload.catalogEntry.entry.id,
+        "--items-json",
+        JSON.stringify([
+          {
+            item: "Validate queued follow-up",
+            state: "attested",
+          },
+          {
+            item: "Close backup handoff",
+            state: "unattested",
+          },
+        ]),
+        "--attestation-note",
+        "Backup attested the stable follow-up evidence",
+      ],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_oncall",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: attestationIo.io,
+      },
+    );
+    const attestedPeerExitCode = await runCli(
+      ["audit", "catalog", "attested"],
       {
         cwd: workspaceRoot,
         env: {
@@ -4733,14 +4765,14 @@ describe("@runroot/cli integration", () => {
           RUNROOT_PERSISTENCE_DRIVER: "sqlite",
           RUNROOT_SQLITE_PATH: sqlitePath,
         },
-        io: evidencedPeerIo.io,
+        io: attestedPeerIo.io,
       },
     );
-    const inspectEvidenceExitCode = await runCli(
+    const inspectAttestationExitCode = await runCli(
       [
         "audit",
         "catalog",
-        "inspect-evidence",
+        "inspect-attestation",
         publishedPayload.catalogEntry.entry.id,
       ],
       {
@@ -4751,7 +4783,7 @@ describe("@runroot/cli integration", () => {
           RUNROOT_PERSISTENCE_DRIVER: "sqlite",
           RUNROOT_SQLITE_PATH: sqlitePath,
         },
-        io: inspectEvidenceIo.io,
+        io: inspectAttestationIo.io,
       },
     );
     const applyExitCode = await runCli(
@@ -4767,11 +4799,11 @@ describe("@runroot/cli integration", () => {
         io: applyIo.io,
       },
     );
-    const clearEvidenceExitCode = await runCli(
+    const clearAttestationExitCode = await runCli(
       [
         "audit",
         "catalog",
-        "clear-evidence",
+        "clear-attestation",
         publishedPayload.catalogEntry.entry.id,
       ],
       {
@@ -4782,11 +4814,11 @@ describe("@runroot/cli integration", () => {
           RUNROOT_PERSISTENCE_DRIVER: "sqlite",
           RUNROOT_SQLITE_PATH: sqlitePath,
         },
-        io: clearEvidenceIo.io,
+        io: clearAttestationIo.io,
       },
     );
-    const evidencedAfterClearExitCode = await runCli(
-      ["audit", "catalog", "evidenced"],
+    const attestedAfterClearExitCode = await runCli(
+      ["audit", "catalog", "attested"],
       {
         cwd: workspaceRoot,
         env: {
@@ -4795,44 +4827,49 @@ describe("@runroot/cli integration", () => {
           RUNROOT_PERSISTENCE_DRIVER: "sqlite",
           RUNROOT_SQLITE_PATH: sqlitePath,
         },
-        io: evidencedAfterClearIo.io,
+        io: attestedAfterClearIo.io,
       },
     );
-    const evidencePayload = JSON.parse(evidenceIo.stdout.join("")) as {
-      evidence: {
-        evidence: {
-          evidenceNote?: string;
+    const attestationPayload = JSON.parse(attestationIo.stdout.join("")) as {
+      attestation: {
+        attestation: {
+          attestationNote?: string;
           items: Array<{
             item: string;
-            references: string[];
+            state: "attested" | "unattested";
           }>;
         };
-        verification: {
-          verification: {
-            verificationNote?: string;
-          };
-        };
-      };
-    };
-    const evidencedPeerPayload = JSON.parse(
-      evidencedPeerIo.stdout.join(""),
-    ) as {
-      evidenced: {
-        items: Array<{
+        evidence: {
           evidence: {
             evidenceNote?: string;
           };
           verification: {
-            resolution: {
-              blocker: {
-                progress: {
-                  checklist: {
-                    assignment: {
-                      review: {
-                        visibility: {
-                          catalogEntry: {
-                            entry: {
-                              id: string;
+            verification: {
+              verificationNote?: string;
+            };
+          };
+        };
+      };
+    };
+    const attestedPeerPayload = JSON.parse(attestedPeerIo.stdout.join("")) as {
+      attested: {
+        items: Array<{
+          attestation: {
+            attestationNote?: string;
+          };
+          evidence: {
+            verification: {
+              resolution: {
+                blocker: {
+                  progress: {
+                    checklist: {
+                      assignment: {
+                        review: {
+                          visibility: {
+                            catalogEntry: {
+                              entry: {
+                                id: string;
+                              };
                             };
                           };
                         };
@@ -4847,15 +4884,15 @@ describe("@runroot/cli integration", () => {
         totalCount: number;
       };
     };
-    const inspectEvidencePayload = JSON.parse(
-      inspectEvidenceIo.stdout.join(""),
+    const inspectAttestationPayload = JSON.parse(
+      inspectAttestationIo.stdout.join(""),
     ) as {
-      evidence: {
-        evidence: {
-          evidenceNote?: string;
+      attestation: {
+        attestation: {
+          attestationNote?: string;
           items: Array<{
             item: string;
-            references: string[];
+            state: "attested" | "unattested";
           }>;
         };
       };
@@ -4877,19 +4914,19 @@ describe("@runroot/cli integration", () => {
         };
       };
     };
-    const clearEvidencePayload = JSON.parse(
-      clearEvidenceIo.stdout.join(""),
+    const clearAttestationPayload = JSON.parse(
+      clearAttestationIo.stdout.join(""),
     ) as {
-      evidence: {
-        evidence: {
-          evidenceNote?: string;
+      attestation: {
+        attestation: {
+          attestationNote?: string;
         };
       };
     };
-    const evidencedAfterClearPayload = JSON.parse(
-      evidencedAfterClearIo.stdout.join(""),
+    const attestedAfterClearPayload = JSON.parse(
+      attestedAfterClearIo.stdout.join(""),
     ) as {
-      evidenced: {
+      attested: {
         totalCount: number;
       };
     };
@@ -4904,35 +4941,41 @@ describe("@runroot/cli integration", () => {
     expect(resolutionExitCode).toBe(0);
     expect(verificationExitCode).toBe(0);
     expect(evidenceExitCode).toBe(0);
-    expect(evidencedPeerExitCode).toBe(0);
-    expect(inspectEvidenceExitCode).toBe(0);
+    expect(attestationExitCode).toBe(0);
+    expect(attestedPeerExitCode).toBe(0);
+    expect(inspectAttestationExitCode).toBe(0);
     expect(applyExitCode).toBe(0);
-    expect(clearEvidenceExitCode).toBe(0);
-    expect(evidencedAfterClearExitCode).toBe(0);
+    expect(clearAttestationExitCode).toBe(0);
+    expect(attestedAfterClearExitCode).toBe(0);
     expect(
-      evidencePayload.evidence.verification.verification.verificationNote,
+      attestationPayload.attestation.evidence.verification.verification
+        .verificationNote,
     ).toBe("Backup verified the follow-up closure");
-    expect(evidencePayload.evidence.evidence.evidenceNote).toBe(
+    expect(attestationPayload.attestation.evidence.evidence.evidenceNote).toBe(
       "Backup collected stable follow-up references",
     );
-    expect(evidencePayload.evidence.evidence.items).toEqual([
+    expect(attestationPayload.attestation.attestation.attestationNote).toBe(
+      "Backup attested the stable follow-up evidence",
+    );
+    expect(attestationPayload.attestation.attestation.items).toEqual([
       {
         item: "Validate queued follow-up",
-        references: ["run://queued-follow-up", "note://backup-closeout"],
+        state: "attested",
       },
       {
         item: "Close backup handoff",
-        references: ["doc://backup-handoff"],
+        state: "unattested",
       },
     ]);
-    expect(evidencedPeerPayload.evidenced.totalCount).toBe(1);
+    expect(attestedPeerPayload.attested.totalCount).toBe(1);
     expect(
-      evidencedPeerPayload.evidenced.items[0]?.verification.resolution.blocker
-        .progress.checklist.assignment.review.visibility.catalogEntry.entry.id,
+      attestedPeerPayload.attested.items[0]?.evidence.verification.resolution
+        .blocker.progress.checklist.assignment.review.visibility.catalogEntry
+        .entry.id,
     ).toBe(publishedPayload.catalogEntry.entry.id);
-    expect(inspectEvidencePayload.evidence.evidence.evidenceNote).toBe(
-      "Backup collected stable follow-up references",
-    );
+    expect(
+      inspectAttestationPayload.attestation.attestation.attestationNote,
+    ).toBe("Backup attested the stable follow-up evidence");
     expect(applyPayload.application.application.savedView.id).toBe(
       savedViewPayload.savedView.id,
     );
@@ -4940,9 +4983,9 @@ describe("@runroot/cli integration", () => {
       applyPayload.application.application.navigation.drilldowns[0]?.result
         .runId,
     ).toBe(queuedRun.run.id);
-    expect(clearEvidencePayload.evidence.evidence.evidenceNote).toBe(
-      "Backup collected stable follow-up references",
-    );
-    expect(evidencedAfterClearPayload.evidenced.totalCount).toBe(0);
+    expect(
+      clearAttestationPayload.attestation.attestation.attestationNote,
+    ).toBe("Backup attested the stable follow-up evidence");
+    expect(attestedAfterClearPayload.attested.totalCount).toBe(0);
   });
 });

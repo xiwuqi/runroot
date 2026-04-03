@@ -2273,7 +2273,7 @@ describe("@runroot/sdk operator service integration", () => {
     expect(peerVerificationsAfterClear.totalCount).toBe(0);
   });
 
-  it("records evidence, lists-evidenced, inspects, clears, and reapplies verified presets for inline and queued runs through the operator seam", async () => {
+  it("records attestations, lists-attested, inspects, clears, and reapplies evidenced presets for inline and queued runs through the operator seam", async () => {
     const workspaceRoot = await mkdtemp(
       join(tmpdir(), "runroot-sdk-checklist-evidence-"),
     );
@@ -2511,64 +2511,87 @@ describe("@runroot/sdk operator service integration", () => {
         },
       ],
     });
+    await ownerService.attestCatalogEntry(inlineCatalogEntry.entry.id, {
+      items: [
+        {
+          item: "Confirm inline owner follow-up",
+          state: "attested",
+        },
+      ],
+    });
+    await ownerService.attestCatalogEntry(queuedCatalogEntry.entry.id, {
+      attestationNote: "Backup attested the stable follow-up evidence",
+      items: [
+        {
+          item: "Validate queued follow-up",
+          state: "attested",
+        },
+        {
+          item: "Close backup handoff",
+          state: "unattested",
+        },
+      ],
+    });
 
-    const ownerEvidence = await ownerService.listEvidencedCatalogEntries();
-    const peerEvidence = await peerService.listEvidencedCatalogEntries();
-    const inspectedEvidence =
-      await ownerService.getCatalogChecklistItemEvidence(
+    const ownerAttestations = await ownerService.listAttestedCatalogEntries();
+    const peerAttestations = await peerService.listAttestedCatalogEntries();
+    const inspectedAttestation =
+      await ownerService.getCatalogChecklistItemAttestation(
         queuedCatalogEntry.entry.id,
       );
-    const appliedEvidence = await peerService.applyCatalogEntry(
+    const appliedAttestation = await peerService.applyCatalogEntry(
       queuedCatalogEntry.entry.id,
     );
-    const clearedEvidence =
-      await ownerService.clearCatalogChecklistItemEvidence(
+    const clearedAttestation =
+      await ownerService.clearCatalogChecklistItemAttestation(
         queuedCatalogEntry.entry.id,
       );
-    const peerEvidenceAfterClear =
-      await peerService.listEvidencedCatalogEntries();
+    const peerAttestationsAfterClear =
+      await peerService.listAttestedCatalogEntries();
 
     expect(
-      ownerEvidence.items.map(
+      ownerAttestations.items.map(
         (item) =>
-          item.verification.resolution.blocker.progress.checklist.assignment
-            .review.visibility.catalogEntry.entry.id,
+          item.evidence.verification.resolution.blocker.progress.checklist
+            .assignment.review.visibility.catalogEntry.entry.id,
       ),
     ).toEqual([queuedCatalogEntry.entry.id, inlineCatalogEntry.entry.id]);
     expect(
-      peerEvidence.items.map(
+      peerAttestations.items.map(
         (item) =>
-          item.verification.resolution.blocker.progress.checklist.assignment
-            .review.visibility.catalogEntry.entry.id,
+          item.evidence.verification.resolution.blocker.progress.checklist
+            .assignment.review.visibility.catalogEntry.entry.id,
       ),
     ).toEqual([queuedCatalogEntry.entry.id]);
-    expect(inspectedEvidence.evidence).toMatchObject({
+    expect(inspectedAttestation.attestation).toMatchObject({
       catalogEntryId: queuedCatalogEntry.entry.id,
-      evidenceNote: "Backup collected stable follow-up references",
+      attestationNote: "Backup attested the stable follow-up evidence",
       operatorId: "ops_oncall",
       scopeId: "ops",
     });
-    expect(inspectedEvidence.evidence.items).toEqual([
+    expect(inspectedAttestation.attestation.items).toEqual([
       {
         item: "Validate queued follow-up",
-        references: ["run://queued-follow-up", "note://backup-closeout"],
+        state: "attested",
       },
       {
         item: "Close backup handoff",
-        references: ["doc://backup-handoff"],
+        state: "unattested",
       },
     ]);
-    expect(appliedEvidence.catalogEntry.entry.id).toBe(
+    expect(appliedAttestation.catalogEntry.entry.id).toBe(
       queuedCatalogEntry.entry.id,
     );
-    expect(appliedEvidence.application.savedView.id).toBe(queuedSavedView.id);
-    expect(appliedEvidence.application.navigation.totalSummaryCount).toBe(1);
+    expect(appliedAttestation.application.savedView.id).toBe(
+      queuedSavedView.id,
+    );
+    expect(appliedAttestation.application.navigation.totalSummaryCount).toBe(1);
     expect(
-      appliedEvidence.application.navigation.drilldowns[0]?.result.runId,
+      appliedAttestation.application.navigation.drilldowns[0]?.result.runId,
     ).toBe(queuedRun.id);
-    expect(clearedEvidence.evidence.catalogEntryId).toBe(
+    expect(clearedAttestation.attestation.catalogEntryId).toBe(
       queuedCatalogEntry.entry.id,
     );
-    expect(peerEvidenceAfterClear.totalCount).toBe(0);
+    expect(peerAttestationsAfterClear.totalCount).toBe(0);
   });
 });
