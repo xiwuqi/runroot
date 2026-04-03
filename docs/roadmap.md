@@ -428,3 +428,25 @@ Status: completed
   observability and analytics platform work
 
 Status: completed
+
+## Phase 28: Cross-Run Audit Catalog Checklist Item Sign-Offs and Sign-Off Notes
+
+- add a shared audit-catalog checklist-item-signoff contract over the existing
+  checklist-item-acknowledgment and checklist-item-attestation paths rather
+  than introducing approval products, workflow gating, or a workflow engine
+- expose minimal sign-off, list-signed-off, inspect-sign-off, clear-sign-off,
+  and apply paths through the existing seams in SDK, API, CLI, and web
+- keep operator surfaces thin while allowing acknowledged attested evidenced
+  verified resolved blocked progressed assigned presets to carry stable
+  per-item sign-off state and a thin sign-off note without expanding into
+  threaded collaboration, fine-grained RBAC, multi-tenant access, dashboards,
+  search, analytics, approval products, workflow gating, or attachment-upload
+  products
+- execute against the formal handoff in
+  [docs/architecture/phase-28-handoff.md](./architecture/phase-28-handoff.md)
+- keep the phase focused on checklist item sign-offs and sign-off notes rather
+  than broader checklist orchestration, broader review workflow engines,
+  broader multi-user curation, approval products, workflow gating, or broad
+  observability and analytics platform work
+
+Status: scope frozen
