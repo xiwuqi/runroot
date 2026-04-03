@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 import type { PackageBoundary } from "@runroot/config";
 import type { JsonValue, RunStatus } from "@runroot/domain";
 import {
+  type AcknowledgeAuditCatalogEntryInput,
   type AttestAuditCatalogEntryInput,
   type BlockAuditCatalogEntryInput,
   type ChecklistAuditCatalogEntryInput,
@@ -190,6 +191,19 @@ export async function runCli(
               resolveAttestAuditCatalogEntryInput(flags),
             ),
           });
+        case "acknowledge":
+          if (!detail) {
+            throw new Error(
+              "audit catalog acknowledge requires a catalog entry id.",
+            );
+          }
+
+          return writeJson(io.stdout.write, {
+            acknowledgment: await service.acknowledgeCatalogEntry(
+              detail,
+              resolveAcknowledgeAuditCatalogEntryInput(flags),
+            ),
+          });
         case "record-evidence":
           if (!detail) {
             throw new Error(
@@ -226,6 +240,10 @@ export async function runCli(
         case "attested":
           return writeJson(io.stdout.write, {
             attested: await service.listAttestedCatalogEntries(),
+          });
+        case "acknowledged":
+          return writeJson(io.stdout.write, {
+            acknowledged: await service.listAcknowledgedCatalogEntries(),
           });
         case "checklist":
           if (!detail) {
@@ -306,6 +324,17 @@ export async function runCli(
           return writeJson(io.stdout.write, {
             attestation:
               await service.clearCatalogChecklistItemAttestation(detail),
+          });
+        case "clear-acknowledgment":
+          if (!detail) {
+            throw new Error(
+              "audit catalog clear-acknowledgment requires a catalog entry id.",
+            );
+          }
+
+          return writeJson(io.stdout.write, {
+            acknowledgment:
+              await service.clearCatalogChecklistItemAcknowledgment(detail),
           });
         case "clear-assignment":
           if (!detail) {
@@ -428,6 +457,17 @@ export async function runCli(
           return writeJson(io.stdout.write, {
             attestation:
               await service.getCatalogChecklistItemAttestation(detail),
+          });
+        case "inspect-acknowledgment":
+          if (!detail) {
+            throw new Error(
+              "audit catalog inspect-acknowledgment requires a catalog entry id.",
+            );
+          }
+
+          return writeJson(io.stdout.write, {
+            acknowledgment:
+              await service.getCatalogChecklistItemAcknowledgment(detail),
           });
         case "inspect-review":
           if (!detail) {
@@ -931,6 +971,24 @@ function resolveAttestAuditCatalogEntryInput(
   };
 }
 
+function resolveAcknowledgeAuditCatalogEntryInput(
+  flags: ReadonlyMap<string, string | boolean>,
+): AcknowledgeAuditCatalogEntryInput {
+  const itemsJson = getStringFlag(flags, "items-json");
+  const acknowledgmentNote = getStringFlag(flags, "acknowledgment-note");
+
+  if (!itemsJson) {
+    throw new Error(
+      "audit catalog acknowledge requires --items-json <json-array>.",
+    );
+  }
+
+  return {
+    ...(acknowledgmentNote !== undefined ? { acknowledgmentNote } : {}),
+    items: resolveChecklistItemAcknowledgmentItems(itemsJson),
+  };
+}
+
 function resolveRecordAuditCatalogEntryEvidenceInput(
   flags: ReadonlyMap<string, string | boolean>,
 ): RecordAuditCatalogEntryEvidenceInput {
@@ -1121,6 +1179,32 @@ function resolveChecklistItemAttestationItems(itemsJson: string): readonly {
   return parsedItems;
 }
 
+function resolveChecklistItemAcknowledgmentItems(itemsJson: string): readonly {
+  readonly item: string;
+  readonly state: "acknowledged" | "unacknowledged";
+}[] {
+  const parsedItems = JSON.parse(itemsJson) as unknown;
+
+  if (
+    !Array.isArray(parsedItems) ||
+    !parsedItems.every(
+      (item) =>
+        typeof item === "object" &&
+        item !== null &&
+        "item" in item &&
+        typeof item.item === "string" &&
+        "state" in item &&
+        (item.state === "acknowledged" || item.state === "unacknowledged"),
+    )
+  ) {
+    throw new Error(
+      "--items-json must decode to an array of { item, state } objects with state acknowledged|unacknowledged.",
+    );
+  }
+
+  return parsedItems;
+}
+
 function getStringFlag(
   flags: ReadonlyMap<string, string | boolean>,
   name: string,
@@ -1232,6 +1316,7 @@ Commands:
   audit catalog verified
   audit catalog evidenced
   audit catalog attested
+  audit catalog acknowledged
   audit catalog checklisted
   audit catalog progressed
   audit catalog publish <saved-view-id> [--name <name>] [--description <text>]
@@ -1243,6 +1328,7 @@ Commands:
   audit catalog inspect-verification <catalog-entry-id>
   audit catalog inspect-evidence <catalog-entry-id>
   audit catalog inspect-attestation <catalog-entry-id>
+  audit catalog inspect-acknowledgment <catalog-entry-id>
   audit catalog inspect-checklist <catalog-entry-id>
   audit catalog inspect-progress <catalog-entry-id>
   audit catalog inspect-review <catalog-entry-id>
@@ -1252,6 +1338,7 @@ Commands:
   audit catalog verify <catalog-entry-id> --items-json <json-array> [--verification-note <text>]
   audit catalog record-evidence <catalog-entry-id> --items-json <json-array> [--evidence-note <text>]
   audit catalog attest <catalog-entry-id> --items-json <json-array> [--attestation-note <text>]
+  audit catalog acknowledge <catalog-entry-id> --items-json <json-array> [--acknowledgment-note <text>]
   audit catalog checklist <catalog-entry-id> --status <pending|completed> [--items-json <json-array>]
   audit catalog progress <catalog-entry-id> --items-json <json-array> [--completion-note <text>]
   audit catalog clear-blocker <catalog-entry-id>
@@ -1259,6 +1346,7 @@ Commands:
   audit catalog clear-verification <catalog-entry-id>
   audit catalog clear-evidence <catalog-entry-id>
   audit catalog clear-attestation <catalog-entry-id>
+  audit catalog clear-acknowledgment <catalog-entry-id>
   audit catalog clear-assignment <catalog-entry-id>
   audit catalog clear-checklist <catalog-entry-id>
   audit catalog clear-progress <catalog-entry-id>

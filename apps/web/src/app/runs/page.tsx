@@ -3,6 +3,7 @@ import {
   AuditViewCatalogsView,
   CatalogReviewAssignmentsView,
   CatalogReviewSignalsView,
+  ChecklistItemAcknowledgmentsView,
   ChecklistItemAttestationsView,
   ChecklistItemBlockersView,
   ChecklistItemEvidencesView,
@@ -23,6 +24,7 @@ import {
 } from "../../lib/navigation";
 import {
   type ApiAuditCatalogAssignmentChecklistView,
+  type ApiAuditCatalogChecklistItemAcknowledgmentView,
   type ApiAuditCatalogChecklistItemAttestationView,
   type ApiAuditCatalogChecklistItemBlockerView,
   type ApiAuditCatalogChecklistItemEvidenceView,
@@ -62,6 +64,7 @@ export default async function RunsPage({
     const drilldownFilters = readAuditDrilldownFilters(resolvedSearchParams);
     const [
       runs,
+      acknowledgedEntries,
       blockedEntries,
       evidencedEntries,
       attestedEntries,
@@ -78,6 +81,7 @@ export default async function RunsPage({
       catalogChecklistItemBlocker,
       catalogChecklistItemResolution,
       catalogChecklistItemEvidence,
+      catalogChecklistItemAcknowledgment,
       catalogChecklistItemAttestation,
       catalogChecklistItemVerification,
       catalogChecklistItemProgress,
@@ -86,6 +90,7 @@ export default async function RunsPage({
       catalogReviewAssignment,
     ] = await Promise.all([
       api.listRuns(),
+      api.listAcknowledgedAuditCatalogEntries(),
       api.listBlockedAuditCatalogEntries(),
       api.listEvidencedAuditCatalogEntries(),
       api.listAttestedAuditCatalogEntries(),
@@ -121,6 +126,11 @@ export default async function RunsPage({
       catalogEntryId
         ? api
             .getAuditCatalogChecklistItemEvidence(catalogEntryId)
+            .catch(() => undefined)
+        : Promise.resolve(undefined),
+      catalogEntryId
+        ? api
+            .getAuditCatalogChecklistItemAcknowledgment(catalogEntryId)
             .catch(() => undefined)
         : Promise.resolve(undefined),
       catalogEntryId
@@ -166,6 +176,9 @@ export default async function RunsPage({
     let activeCatalogChecklistItemEvidence:
       | ApiAuditCatalogChecklistItemEvidenceView
       | undefined;
+    let activeCatalogChecklistItemAcknowledgment:
+      | ApiAuditCatalogChecklistItemAcknowledgmentView
+      | undefined;
     let activeCatalogChecklistItemAttestation:
       | ApiAuditCatalogChecklistItemAttestationView
       | undefined;
@@ -187,6 +200,8 @@ export default async function RunsPage({
       activeCatalogChecklistItemBlocker = catalogChecklistItemBlocker;
       activeCatalogChecklistItemResolution = catalogChecklistItemResolution;
       activeCatalogChecklistItemEvidence = catalogChecklistItemEvidence;
+      activeCatalogChecklistItemAcknowledgment =
+        catalogChecklistItemAcknowledgment;
       activeCatalogChecklistItemAttestation = catalogChecklistItemAttestation;
       activeCatalogChecklistItemVerification = catalogChecklistItemVerification;
       activeCatalogChecklistItemProgress = catalogChecklistItemProgress;
@@ -224,6 +239,12 @@ export default async function RunsPage({
           evidencedEntries={evidencedEntries}
           {...(activeCatalogChecklistItemEvidence
             ? { activeCatalogChecklistItemEvidence }
+            : {})}
+        />
+        <ChecklistItemAcknowledgmentsView
+          acknowledgedEntries={acknowledgedEntries}
+          {...(activeCatalogChecklistItemAcknowledgment
+            ? { activeCatalogChecklistItemAcknowledgment }
             : {})}
         />
         <ChecklistItemAttestationsView
@@ -266,6 +287,7 @@ export default async function RunsPage({
           catalogEntries={catalogEntries}
           checklistedEntries={checklistedEntries}
           evidencedEntries={evidencedEntries}
+          acknowledgedEntries={acknowledgedEntries}
           attestedEntries={attestedEntries}
           progressedEntries={progressedEntries}
           resolvedEntries={resolvedEntries}
@@ -280,6 +302,9 @@ export default async function RunsPage({
             : {})}
           {...(activeCatalogChecklistItemEvidence
             ? { activeCatalogChecklistItemEvidence }
+            : {})}
+          {...(activeCatalogChecklistItemAcknowledgment
+            ? { activeCatalogChecklistItemAcknowledgment }
             : {})}
           {...(activeCatalogChecklistItemAttestation
             ? { activeCatalogChecklistItemAttestation }

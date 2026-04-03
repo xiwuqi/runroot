@@ -279,6 +279,12 @@ export function buildServer(options: BuildServerOptions = {}) {
     })),
   );
 
+  app.get("/audit/catalog/acknowledged", async (_request, reply) =>
+    handleOperatorResponse(reply, async () => ({
+      acknowledged: await operator.listAcknowledgedCatalogEntries(),
+    })),
+  );
+
   app.post("/audit/saved-views", async (request, reply) =>
     handleOperatorResponse(reply, async () => {
       const body = request.body as {
@@ -506,6 +512,22 @@ export function buildServer(options: BuildServerOptions = {}) {
 
         return {
           attestation: await operator.getCatalogChecklistItemAttestation(
+            params.catalogEntryId,
+          ),
+        };
+      }),
+  );
+
+  app.get(
+    "/audit/catalog/:catalogEntryId/acknowledgment",
+    async (request, reply) =>
+      handleOperatorResponse(reply, async () => {
+        const params = request.params as {
+          readonly catalogEntryId: string;
+        };
+
+        return {
+          acknowledgment: await operator.getCatalogChecklistItemAcknowledgment(
             params.catalogEntryId,
           ),
         };
@@ -813,6 +835,42 @@ export function buildServer(options: BuildServerOptions = {}) {
   );
 
   app.post(
+    "/audit/catalog/:catalogEntryId/acknowledgment",
+    async (request, reply) =>
+      handleOperatorResponse(reply, async () => {
+        const params = request.params as {
+          readonly catalogEntryId: string;
+        };
+        const body = request.body as {
+          readonly acknowledgmentNote?: string;
+          readonly items?: unknown;
+        };
+        const items = readChecklistItemAcknowledgmentItems(
+          body?.items,
+          "items",
+        );
+
+        if (items.length === 0) {
+          throw new OperatorInputError(
+            "items must include at least one checklist item acknowledgment entry.",
+          );
+        }
+
+        return {
+          acknowledgment: await operator.acknowledgeCatalogEntry(
+            params.catalogEntryId,
+            {
+              ...(body?.acknowledgmentNote !== undefined
+                ? { acknowledgmentNote: body.acknowledgmentNote }
+                : {}),
+              items,
+            },
+          ),
+        };
+      }),
+  );
+
+  app.post(
     "/audit/catalog/:catalogEntryId/review/clear",
     async (request, reply) =>
       handleOperatorResponse(reply, async () => {
@@ -952,6 +1010,23 @@ export function buildServer(options: BuildServerOptions = {}) {
           attestation: await operator.clearCatalogChecklistItemAttestation(
             params.catalogEntryId,
           ),
+        };
+      }),
+  );
+
+  app.post(
+    "/audit/catalog/:catalogEntryId/acknowledgment/clear",
+    async (request, reply) =>
+      handleOperatorResponse(reply, async () => {
+        const params = request.params as {
+          readonly catalogEntryId: string;
+        };
+
+        return {
+          acknowledgment:
+            await operator.clearCatalogChecklistItemAcknowledgment(
+              params.catalogEntryId,
+            ),
         };
       }),
   );
@@ -1491,6 +1566,33 @@ function readChecklistItemAttestationItems(
   ) {
     throw new OperatorInputError(
       `${fieldName} must be an array of { item, state } objects with state attested|unattested.`,
+    );
+  }
+
+  return value;
+}
+
+function readChecklistItemAcknowledgmentItems(
+  value: unknown,
+  fieldName: string,
+): readonly {
+  readonly item: string;
+  readonly state: "acknowledged" | "unacknowledged";
+}[] {
+  if (
+    !Array.isArray(value) ||
+    !value.every(
+      (entry) =>
+        typeof entry === "object" &&
+        entry !== null &&
+        "item" in entry &&
+        typeof entry.item === "string" &&
+        "state" in entry &&
+        (entry.state === "acknowledged" || entry.state === "unacknowledged"),
+    )
+  ) {
+    throw new OperatorInputError(
+      `${fieldName} must be an array of { item, state } objects with state acknowledged|unacknowledged.`,
     );
   }
 

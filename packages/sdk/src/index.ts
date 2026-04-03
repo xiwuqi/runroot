@@ -7,6 +7,7 @@ export {
   OperatorNotFoundError,
 } from "./errors";
 export {
+  type AcknowledgeAuditCatalogEntryInput,
   type AssignAuditCatalogEntryInput,
   type AttestAuditCatalogEntryInput,
   type BlockAuditCatalogEntryInput,

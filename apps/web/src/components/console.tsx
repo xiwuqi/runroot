@@ -4,6 +4,9 @@ import type {
   ApiApproval,
   ApiAuditCatalogAssignmentChecklistCollection,
   ApiAuditCatalogAssignmentChecklistView,
+  ApiAuditCatalogChecklistItemAcknowledgmentCollection,
+  ApiAuditCatalogChecklistItemAcknowledgmentItem,
+  ApiAuditCatalogChecklistItemAcknowledgmentView,
   ApiAuditCatalogChecklistItemAttestationCollection,
   ApiAuditCatalogChecklistItemAttestationItem,
   ApiAuditCatalogChecklistItemAttestationView,
@@ -1210,6 +1213,171 @@ export function ChecklistItemAttestationsView({
   );
 }
 
+export function ChecklistItemAcknowledgmentsView({
+  activeCatalogChecklistItemAcknowledgment,
+  acknowledgedEntries,
+}: Readonly<{
+  activeCatalogChecklistItemAcknowledgment?: ApiAuditCatalogChecklistItemAcknowledgmentView;
+  acknowledgedEntries: ApiAuditCatalogChecklistItemAcknowledgmentCollection;
+}>) {
+  return (
+    <section className="card">
+      <div className="row spread">
+        <div>
+          <div className="card-eyebrow">
+            Phase 27 / Checklist Item Acknowledgments
+          </div>
+          <h2>Checklist item acknowledgments</h2>
+          <p className="empty-copy">
+            Track thin per-item acknowledgments and a single acknowledgment note
+            on attested presets without turning the console into an approval
+            product, workflow engine, or collaboration surface.
+          </p>
+        </div>
+        <div className="timeline-count">
+          {acknowledgedEntries.totalCount} acknowledged preset(s)
+        </div>
+      </div>
+
+      {activeCatalogChecklistItemAcknowledgment ? (
+        <div className="inline-note">
+          Active acknowledgments:{" "}
+          <strong>
+            {
+              activeCatalogChecklistItemAcknowledgment.attestation.evidence
+                .verification.resolution.blocker.progress.checklist.assignment
+                .review.visibility.catalogEntry.entry.name
+            }
+          </strong>
+          {" · "}
+          {formatAcknowledgmentSummary(
+            activeCatalogChecklistItemAcknowledgment.acknowledgment.items,
+          )}
+          {activeCatalogChecklistItemAcknowledgment.acknowledgment
+            .acknowledgmentNote
+            ? ` · ${activeCatalogChecklistItemAcknowledgment.acknowledgment.acknowledgmentNote}`
+            : ""}
+        </div>
+      ) : null}
+
+      {acknowledgedEntries.items.length === 0 ? (
+        <p className="empty-copy">
+          No checklist item acknowledgments yet. Record attestations first, then
+          save thin acknowledgment metadata through the shared operator seam.
+        </p>
+      ) : (
+        <ol className="timeline-list">
+          {acknowledgedEntries.items.map((acknowledgmentView) => (
+            <li
+              className="timeline-entry"
+              key={
+                acknowledgmentView.attestation.evidence.verification.resolution
+                  .blocker.progress.checklist.assignment.review.visibility
+                  .catalogEntry.entry.id
+              }
+            >
+              <div className="row spread">
+                <div>
+                  <strong>
+                    {
+                      acknowledgmentView.attestation.evidence.verification
+                        .resolution.blocker.progress.checklist.assignment.review
+                        .visibility.catalogEntry.entry.name
+                    }
+                  </strong>
+                  <div className="timeline-meta">
+                    {formatAcknowledgmentSummary(
+                      acknowledgmentView.acknowledgment.items,
+                    )}
+                    {" · "}
+                    {formatAttestationSummary(
+                      acknowledgmentView.attestation.attestation.items,
+                    )}
+                    {" · "}
+                    {formatEvidenceSummary(
+                      acknowledgmentView.attestation.evidence.evidence.items,
+                    )}
+                  </div>
+                </div>
+                <span>
+                  {formatTimestamp(acknowledgmentView.acknowledgment.updatedAt)}
+                </span>
+              </div>
+              <ul className="approval-history">
+                {acknowledgmentView.acknowledgment.items.map((item) => (
+                  <li
+                    key={`${acknowledgmentView.acknowledgment.catalogEntryId}:${item.item}`}
+                  >
+                    <strong>{item.state}</strong>: {item.item}
+                  </li>
+                ))}
+              </ul>
+              {acknowledgmentView.acknowledgment.acknowledgmentNote ? (
+                <p className="empty-copy">
+                  {acknowledgmentView.acknowledgment.acknowledgmentNote}
+                </p>
+              ) : null}
+              <div className="timeline-meta">
+                operator {acknowledgmentView.acknowledgment.operatorId} · scope{" "}
+                {acknowledgmentView.acknowledgment.scopeId}
+              </div>
+              <div className="row spread">
+                <a
+                  className="link-button"
+                  href={buildCatalogEntryHref(
+                    acknowledgmentView.attestation.evidence.verification
+                      .resolution.blocker.progress.checklist.assignment.review
+                      .visibility.catalogEntry.entry.id,
+                  )}
+                >
+                  Apply acknowledged preset
+                </a>
+                <form
+                  action="/runs/catalog"
+                  className="action-form"
+                  method="post"
+                >
+                  <input
+                    name="returnTo"
+                    type="hidden"
+                    value={buildCatalogEntryHref(
+                      acknowledgmentView.attestation.evidence.verification
+                        .resolution.blocker.progress.checklist.assignment.review
+                        .visibility.catalogEntry.entry.id,
+                    )}
+                  />
+                  <input
+                    name="intent"
+                    type="hidden"
+                    value="clear-acknowledgment"
+                  />
+                  <input
+                    name="catalogEntryId"
+                    type="hidden"
+                    value={
+                      acknowledgmentView.attestation.evidence.verification
+                        .resolution.blocker.progress.checklist.assignment.review
+                        .visibility.catalogEntry.entry.id
+                    }
+                  />
+                  <button type="submit">Clear acknowledgments</button>
+                </form>
+              </div>
+              {activeCatalogChecklistItemAcknowledgment?.acknowledgment
+                .catalogEntryId ===
+              acknowledgmentView.acknowledgment.catalogEntryId ? (
+                <div className="timeline-meta">
+                  Active acknowledgments selected
+                </div>
+              ) : null}
+            </li>
+          ))}
+        </ol>
+      )}
+    </section>
+  );
+}
+
 export function CatalogReviewAssignmentsView({
   activeCatalogReviewAssignment,
   assignedEntries,
@@ -1445,12 +1613,14 @@ export function CatalogReviewSignalsView({
 export function AuditViewCatalogsView({
   activeCatalogEntry,
   activeCatalogChecklistItemBlocker,
+  activeCatalogChecklistItemAcknowledgment,
   activeCatalogChecklistItemAttestation,
   activeCatalogChecklistItemEvidence,
   activeCatalogChecklistItemResolution,
   activeCatalogChecklistItemVerification,
   activeCatalogChecklistItemProgress,
   assignedEntries,
+  acknowledgedEntries,
   attestedEntries,
   blockedEntries,
   catalogEntries,
@@ -1463,12 +1633,14 @@ export function AuditViewCatalogsView({
 }: Readonly<{
   activeCatalogEntry?: ApiAuditCatalogVisibilityView;
   activeCatalogChecklistItemBlocker?: ApiAuditCatalogChecklistItemBlockerView;
+  activeCatalogChecklistItemAcknowledgment?: ApiAuditCatalogChecklistItemAcknowledgmentView;
   activeCatalogChecklistItemAttestation?: ApiAuditCatalogChecklistItemAttestationView;
   activeCatalogChecklistItemEvidence?: ApiAuditCatalogChecklistItemEvidenceView;
   activeCatalogChecklistItemResolution?: ApiAuditCatalogChecklistItemResolutionView;
   activeCatalogChecklistItemVerification?: ApiAuditCatalogChecklistItemVerificationView;
   activeCatalogChecklistItemProgress?: ApiAuditCatalogChecklistItemProgressView;
   assignedEntries: ApiAuditCatalogReviewAssignmentCollection;
+  acknowledgedEntries: ApiAuditCatalogChecklistItemAcknowledgmentCollection;
   attestedEntries: ApiAuditCatalogChecklistItemAttestationCollection;
   blockedEntries: ApiAuditCatalogChecklistItemBlockerCollection;
   catalogEntries: ApiAuditCatalogVisibilityCollection;
@@ -1557,6 +1729,16 @@ export function AuditViewCatalogsView({
         ] as const,
     ),
   );
+  const acknowledgmentsByCatalogEntryId = new Map(
+    acknowledgedEntries.items.map(
+      (item) =>
+        [
+          item.attestation.evidence.verification.resolution.blocker.progress
+            .checklist.assignment.review.visibility.catalogEntry.entry.id,
+          item,
+        ] as const,
+    ),
+  );
 
   return (
     <section className="card">
@@ -1632,6 +1814,15 @@ export function AuditViewCatalogsView({
                   catalogEntry.catalogEntry.entry.id
                     ? activeCatalogChecklistItemAttestation
                     : attestationsByCatalogEntryId.get(
+                        catalogEntry.catalogEntry.entry.id,
+                      );
+                const acknowledgment =
+                  activeCatalogChecklistItemAcknowledgment?.attestation.evidence
+                    .verification.resolution.blocker.progress.checklist
+                    .assignment.review.visibility.catalogEntry.entry.id ===
+                  catalogEntry.catalogEntry.entry.id
+                    ? activeCatalogChecklistItemAcknowledgment
+                    : acknowledgmentsByCatalogEntryId.get(
                         catalogEntry.catalogEntry.entry.id,
                       );
                 const reviewSignal = reviewSignalsByCatalogEntryId.get(
@@ -1783,6 +1974,20 @@ export function AuditViewCatalogsView({
                         {attestation.attestation.attestationNote}
                       </p>
                     ) : null}
+                    {acknowledgment?.acknowledgment.items.length ? (
+                      <p className="empty-copy">
+                        acknowledgments:{" "}
+                        {acknowledgment.acknowledgment.items
+                          .map((item) => `${item.state}: ${item.item}`)
+                          .join(", ")}
+                      </p>
+                    ) : null}
+                    {acknowledgment?.acknowledgment.acknowledgmentNote ? (
+                      <p className="empty-copy">
+                        acknowledgment note:{" "}
+                        {acknowledgment.acknowledgment.acknowledgmentNote}
+                      </p>
+                    ) : null}
                     <div className="timeline-meta">
                       saved view {catalogEntry.catalogEntry.savedView.id}
                       {catalogEntry.catalogEntry.savedView.refs.auditViewRunId
@@ -1821,6 +2026,9 @@ export function AuditViewCatalogsView({
                         : ""}
                       {attestation
                         ? ` · attestation owner ${attestation.attestation.operatorId}`
+                        : ""}
+                      {acknowledgment
+                        ? ` · acknowledgment owner ${acknowledgment.acknowledgment.operatorId}`
                         : ""}
                     </div>
                     <div className="timeline-meta">
@@ -2313,6 +2521,66 @@ export function AuditViewCatalogsView({
                         </div>
                       </form>
                     ) : null}
+                    {attestation ? (
+                      <form
+                        action="/runs/catalog"
+                        className="decision-form"
+                        method="post"
+                      >
+                        <input
+                          name="returnTo"
+                          type="hidden"
+                          value={buildCatalogEntryHref(
+                            catalogEntry.catalogEntry.entry.id,
+                          )}
+                        />
+                        <input
+                          name="intent"
+                          type="hidden"
+                          value="acknowledge"
+                        />
+                        <input
+                          name="catalogEntryId"
+                          type="hidden"
+                          value={catalogEntry.catalogEntry.entry.id}
+                        />
+                        <div className="data-grid">
+                          <label>
+                            <span>Checklist item acknowledgments</span>
+                            <textarea
+                              className="note-input"
+                              defaultValue={formatChecklistItemAcknowledgmentLines(
+                                attestation.attestation.items,
+                                acknowledgment?.acknowledgment.items,
+                              )}
+                              name="acknowledgmentItems"
+                              placeholder="acknowledged: Validate queued follow-up"
+                              rows={4}
+                            />
+                          </label>
+                          <label>
+                            <span>Acknowledgment note</span>
+                            <input
+                              defaultValue={
+                                acknowledgment?.acknowledgment
+                                  .acknowledgmentNote ?? ""
+                              }
+                              name="acknowledgmentNote"
+                              placeholder="Optional thin acknowledgment note"
+                              type="text"
+                            />
+                          </label>
+                        </div>
+                        <div className="row spread">
+                          <div />
+                          <button type="submit">
+                            {acknowledgment
+                              ? "Update acknowledgments"
+                              : "Save acknowledgments"}
+                          </button>
+                        </div>
+                      </form>
+                    ) : null}
                     <div className="row spread">
                       <a
                         className="link-button"
@@ -2557,6 +2825,32 @@ export function AuditViewCatalogsView({
                             <button type="submit">Clear attestations</button>
                           </form>
                         ) : null}
+                        {acknowledgment ? (
+                          <form
+                            action="/runs/catalog"
+                            className="action-form"
+                            method="post"
+                          >
+                            <input
+                              name="returnTo"
+                              type="hidden"
+                              value={buildCatalogEntryHref(
+                                catalogEntry.catalogEntry.entry.id,
+                              )}
+                            />
+                            <input
+                              name="intent"
+                              type="hidden"
+                              value="clear-acknowledgment"
+                            />
+                            <input
+                              name="catalogEntryId"
+                              type="hidden"
+                              value={catalogEntry.catalogEntry.entry.id}
+                            />
+                            <button type="submit">Clear acknowledgments</button>
+                          </form>
+                        ) : null}
                         <form
                           action="/runs/catalog"
                           className="action-form"
@@ -2658,6 +2952,14 @@ export function AuditViewCatalogsView({
                     catalogEntry.catalogEntry.entry.id ? (
                       <div className="timeline-meta">
                         Active attestations selected
+                      </div>
+                    ) : null}
+                    {activeCatalogChecklistItemAcknowledgment?.attestation
+                      .evidence.verification.resolution.blocker.progress
+                      .checklist.assignment.review.visibility.catalogEntry.entry
+                      .id === catalogEntry.catalogEntry.entry.id ? (
+                      <div className="timeline-meta">
+                        Active acknowledgments selected
                       </div>
                     ) : null}
                   </>
@@ -4009,6 +4311,16 @@ function formatAttestationSummary(
   return `${attestedCount}/${items.length} attested`;
 }
 
+function formatAcknowledgmentSummary(
+  items: readonly ApiAuditCatalogChecklistItemAcknowledgmentItem[],
+): string {
+  const acknowledgedCount = items.filter(
+    (item) => item.state === "acknowledged",
+  ).length;
+
+  return `${acknowledgedCount}/${items.length} acknowledged`;
+}
+
 function formatChecklistItemProgressLines(
   checklistItems: readonly string[],
   progressItems:
@@ -4106,6 +4418,24 @@ function formatChecklistItemAttestationLines(
     .map(
       (item) =>
         `${attestationByItem.get(item.item) ?? "unattested"}: ${item.item}`,
+    )
+    .join("\n");
+}
+
+function formatChecklistItemAcknowledgmentLines(
+  attestationItems: readonly ApiAuditCatalogChecklistItemAttestationItem[],
+  acknowledgmentItems:
+    | readonly ApiAuditCatalogChecklistItemAcknowledgmentItem[]
+    | undefined,
+): string {
+  const acknowledgmentByItem = new Map(
+    (acknowledgmentItems ?? []).map((item) => [item.item, item.state] as const),
+  );
+
+  return attestationItems
+    .map(
+      (item) =>
+        `${acknowledgmentByItem.get(item.item) ?? "unacknowledged"}: ${item.item}`,
     )
     .join("\n");
 }
