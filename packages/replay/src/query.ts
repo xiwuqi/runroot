@@ -26,6 +26,17 @@ import {
   type PublishCrossRunAuditCatalogEntryInput,
 } from "./catalog";
 import {
+  type CrossRunAuditCatalogChecklistItemAttestation,
+  type CrossRunAuditCatalogChecklistItemAttestationApplication,
+  type CrossRunAuditCatalogChecklistItemAttestationCollection,
+  type CrossRunAuditCatalogChecklistItemAttestationStore,
+  type CrossRunAuditCatalogChecklistItemAttestationView,
+  compareCrossRunAuditCatalogChecklistItemAttestation,
+  createCrossRunAuditCatalogChecklistItemAttestation,
+  normalizeChecklistItemAttestationItems,
+  type UpdateCrossRunAuditCatalogChecklistItemAttestationInput,
+} from "./checklist-item-attestation";
+import {
   type CrossRunAuditCatalogChecklistItemBlocker,
   type CrossRunAuditCatalogChecklistItemBlockerApplication,
   type CrossRunAuditCatalogChecklistItemBlockerCollection,
@@ -420,6 +431,32 @@ export interface CrossRunAuditCatalogChecklistItemEvidenceQuery {
     input: UpdateCrossRunAuditCatalogChecklistItemEvidenceInput,
     timestamp: string,
   ): Promise<CrossRunAuditCatalogChecklistItemEvidenceView>;
+}
+
+export interface CrossRunAuditCatalogChecklistItemAttestationQuery {
+  applyCatalogEntry(
+    id: string,
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+  ): Promise<
+    CrossRunAuditCatalogChecklistItemAttestationApplication | undefined
+  >;
+  clearCatalogChecklistItemAttestation(
+    id: string,
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+  ): Promise<CrossRunAuditCatalogChecklistItemAttestationView | undefined>;
+  getCatalogChecklistItemAttestation(
+    id: string,
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+  ): Promise<CrossRunAuditCatalogChecklistItemAttestationView | undefined>;
+  listAttestedCatalogEntries(
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+  ): Promise<CrossRunAuditCatalogChecklistItemAttestationCollection>;
+  setCatalogChecklistItemAttestation(
+    id: string,
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+    input: UpdateCrossRunAuditCatalogChecklistItemAttestationInput,
+    timestamp: string,
+  ): Promise<CrossRunAuditCatalogChecklistItemAttestationView>;
 }
 
 export function createRunTimelineQuery(
@@ -1916,6 +1953,153 @@ export function createCrossRunAuditCatalogChecklistItemEvidenceQuery(
   };
 }
 
+export function createCrossRunAuditCatalogChecklistItemAttestationQuery(
+  store: CrossRunAuditCatalogChecklistItemAttestationStore,
+  evidenceEntries: CrossRunAuditCatalogChecklistItemEvidenceQuery,
+): CrossRunAuditCatalogChecklistItemAttestationQuery {
+  return {
+    async applyCatalogEntry(id, viewer) {
+      const attestation = await resolveCatalogChecklistItemAttestationView(
+        store,
+        evidenceEntries,
+        id,
+        viewer,
+      );
+
+      if (!attestation) {
+        return undefined;
+      }
+
+      const application = await evidenceEntries.applyCatalogEntry(id, viewer);
+
+      if (!application) {
+        return undefined;
+      }
+
+      return {
+        application,
+        attestation,
+      };
+    },
+
+    async clearCatalogChecklistItemAttestation(id, viewer) {
+      const attestation = await resolveCatalogChecklistItemAttestationView(
+        store,
+        evidenceEntries,
+        id,
+        viewer,
+      );
+
+      if (!attestation) {
+        return undefined;
+      }
+
+      await store.deleteCatalogChecklistItemAttestation(id);
+
+      return attestation;
+    },
+
+    async getCatalogChecklistItemAttestation(id, viewer) {
+      return resolveCatalogChecklistItemAttestationView(
+        store,
+        evidenceEntries,
+        id,
+        viewer,
+      );
+    },
+
+    async listAttestedCatalogEntries(viewer) {
+      const attestationEntries = [
+        ...(await store.listCatalogChecklistItemAttestations()),
+      ].sort(compareCrossRunAuditCatalogChecklistItemAttestation);
+      const items = (
+        await Promise.all(
+          attestationEntries.map(async (attestation) =>
+            resolveCatalogChecklistItemAttestationFromValue(
+              evidenceEntries,
+              attestation,
+              viewer,
+            ),
+          ),
+        )
+      ).filter(
+        (
+          attestation,
+        ): attestation is CrossRunAuditCatalogChecklistItemAttestationView =>
+          attestation !== undefined,
+      );
+
+      return {
+        items,
+        totalCount: items.length,
+      };
+    },
+
+    async setCatalogChecklistItemAttestation(id, viewer, input, timestamp) {
+      const evidence = await evidenceEntries.getCatalogChecklistItemEvidence(
+        id,
+        viewer,
+      );
+
+      if (!evidence) {
+        throw new Error(
+          `Catalog entry "${id}" is not evidenced and visible to operator "${viewer.operatorId}".`,
+        );
+      }
+
+      const allowedItems = evidence.evidence.items.map((item) => item.item);
+      const normalizedItems = normalizeChecklistItemAttestationItems(
+        input.items,
+        allowedItems,
+      );
+
+      if (normalizedItems.length === 0) {
+        throw new Error(
+          "Catalog checklist item attestations require at least one checklist item attestation entry.",
+        );
+      }
+
+      const existingAttestation =
+        await store.getCatalogChecklistItemAttestation(id);
+      const normalizedAttestationNote = input.attestationNote?.trim();
+      const attestation = existingAttestation
+        ? {
+            ...(input.attestationNote === undefined
+              ? existingAttestation.attestationNote
+                ? { attestationNote: existingAttestation.attestationNote }
+                : {}
+              : normalizedAttestationNote
+                ? { attestationNote: normalizedAttestationNote }
+                : {}),
+            catalogEntryId: id,
+            createdAt: existingAttestation.createdAt,
+            items: normalizedItems,
+            kind: existingAttestation.kind,
+            operatorId: viewer.operatorId,
+            scopeId: viewer.scopeId,
+            updatedAt: timestamp,
+          }
+        : createCrossRunAuditCatalogChecklistItemAttestation({
+            ...(normalizedAttestationNote
+              ? { attestationNote: normalizedAttestationNote }
+              : {}),
+            catalogEntryId: id,
+            items: normalizedItems,
+            operatorId: viewer.operatorId,
+            scopeId: viewer.scopeId,
+            timestamp,
+          });
+
+      await store.saveCatalogChecklistItemAttestation(attestation);
+
+      return {
+        attestation,
+        evidence,
+      };
+    },
+  };
+}
+
 async function resolveCatalogEntryView(
   store: CrossRunAuditCatalogStore,
   savedViews: CrossRunAuditSavedViewQuery,
@@ -2336,5 +2520,58 @@ async function resolveCatalogChecklistItemEvidenceFromValue(
       items: normalizedItems,
     },
     verification,
+  };
+}
+
+async function resolveCatalogChecklistItemAttestationView(
+  store: CrossRunAuditCatalogChecklistItemAttestationStore,
+  evidenceQuery: CrossRunAuditCatalogChecklistItemEvidenceQuery,
+  id: string,
+  viewer: CrossRunAuditCatalogVisibilityViewer,
+): Promise<CrossRunAuditCatalogChecklistItemAttestationView | undefined> {
+  const attestation = await store.getCatalogChecklistItemAttestation(id);
+
+  return attestation
+    ? resolveCatalogChecklistItemAttestationFromValue(
+        evidenceQuery,
+        attestation,
+        viewer,
+      )
+    : undefined;
+}
+
+async function resolveCatalogChecklistItemAttestationFromValue(
+  evidenceQuery: CrossRunAuditCatalogChecklistItemEvidenceQuery,
+  attestation: CrossRunAuditCatalogChecklistItemAttestation,
+  viewer: CrossRunAuditCatalogVisibilityViewer,
+): Promise<CrossRunAuditCatalogChecklistItemAttestationView | undefined> {
+  if (attestation.scopeId !== viewer.scopeId) {
+    return undefined;
+  }
+
+  const evidence = await evidenceQuery.getCatalogChecklistItemEvidence(
+    attestation.catalogEntryId,
+    viewer,
+  );
+
+  if (!evidence) {
+    return undefined;
+  }
+
+  const normalizedItems = normalizeChecklistItemAttestationItems(
+    attestation.items,
+    evidence.evidence.items.map((item) => item.item),
+  );
+
+  if (normalizedItems.length === 0) {
+    return undefined;
+  }
+
+  return {
+    attestation: {
+      ...attestation,
+      items: normalizedItems,
+    },
+    evidence,
   };
 }
