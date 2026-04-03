@@ -3,6 +3,7 @@ import {
   AuditViewCatalogsView,
   CatalogReviewAssignmentsView,
   CatalogReviewSignalsView,
+  ChecklistItemAttestationsView,
   ChecklistItemBlockersView,
   ChecklistItemEvidencesView,
   ChecklistItemProgressView,
@@ -22,6 +23,7 @@ import {
 } from "../../lib/navigation";
 import {
   type ApiAuditCatalogAssignmentChecklistView,
+  type ApiAuditCatalogChecklistItemAttestationView,
   type ApiAuditCatalogChecklistItemBlockerView,
   type ApiAuditCatalogChecklistItemEvidenceView,
   type ApiAuditCatalogChecklistItemProgressView,
@@ -62,6 +64,7 @@ export default async function RunsPage({
       runs,
       blockedEntries,
       evidencedEntries,
+      attestedEntries,
       resolvedEntries,
       verifiedEntries,
       progressedEntries,
@@ -75,6 +78,7 @@ export default async function RunsPage({
       catalogChecklistItemBlocker,
       catalogChecklistItemResolution,
       catalogChecklistItemEvidence,
+      catalogChecklistItemAttestation,
       catalogChecklistItemVerification,
       catalogChecklistItemProgress,
       catalogAssignmentChecklist,
@@ -84,6 +88,7 @@ export default async function RunsPage({
       api.listRuns(),
       api.listBlockedAuditCatalogEntries(),
       api.listEvidencedAuditCatalogEntries(),
+      api.listAttestedAuditCatalogEntries(),
       api.listResolvedAuditCatalogEntries(),
       api.listVerifiedAuditCatalogEntries(),
       api.listProgressedAuditCatalogEntries(),
@@ -116,6 +121,11 @@ export default async function RunsPage({
       catalogEntryId
         ? api
             .getAuditCatalogChecklistItemEvidence(catalogEntryId)
+            .catch(() => undefined)
+        : Promise.resolve(undefined),
+      catalogEntryId
+        ? api
+            .getAuditCatalogChecklistItemAttestation(catalogEntryId)
             .catch(() => undefined)
         : Promise.resolve(undefined),
       catalogEntryId
@@ -156,6 +166,9 @@ export default async function RunsPage({
     let activeCatalogChecklistItemEvidence:
       | ApiAuditCatalogChecklistItemEvidenceView
       | undefined;
+    let activeCatalogChecklistItemAttestation:
+      | ApiAuditCatalogChecklistItemAttestationView
+      | undefined;
     let activeCatalogChecklistItemVerification:
       | ApiAuditCatalogChecklistItemVerificationView
       | undefined;
@@ -174,6 +187,7 @@ export default async function RunsPage({
       activeCatalogChecklistItemBlocker = catalogChecklistItemBlocker;
       activeCatalogChecklistItemResolution = catalogChecklistItemResolution;
       activeCatalogChecklistItemEvidence = catalogChecklistItemEvidence;
+      activeCatalogChecklistItemAttestation = catalogChecklistItemAttestation;
       activeCatalogChecklistItemVerification = catalogChecklistItemVerification;
       activeCatalogChecklistItemProgress = catalogChecklistItemProgress;
       activeCatalogAssignmentChecklist = catalogAssignmentChecklist;
@@ -212,6 +226,12 @@ export default async function RunsPage({
             ? { activeCatalogChecklistItemEvidence }
             : {})}
         />
+        <ChecklistItemAttestationsView
+          attestedEntries={attestedEntries}
+          {...(activeCatalogChecklistItemAttestation
+            ? { activeCatalogChecklistItemAttestation }
+            : {})}
+        />
         <ChecklistItemVerificationsView
           verifiedEntries={verifiedEntries}
           {...(activeCatalogChecklistItemVerification
@@ -245,6 +265,8 @@ export default async function RunsPage({
           blockedEntries={blockedEntries}
           catalogEntries={catalogEntries}
           checklistedEntries={checklistedEntries}
+          evidencedEntries={evidencedEntries}
+          attestedEntries={attestedEntries}
           progressedEntries={progressedEntries}
           resolvedEntries={resolvedEntries}
           verifiedEntries={verifiedEntries}
@@ -258,6 +280,9 @@ export default async function RunsPage({
             : {})}
           {...(activeCatalogChecklistItemEvidence
             ? { activeCatalogChecklistItemEvidence }
+            : {})}
+          {...(activeCatalogChecklistItemAttestation
+            ? { activeCatalogChecklistItemAttestation }
             : {})}
           {...(activeCatalogChecklistItemVerification
             ? { activeCatalogChecklistItemVerification }

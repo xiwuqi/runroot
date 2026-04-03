@@ -4,6 +4,9 @@ import type {
   ApiApproval,
   ApiAuditCatalogAssignmentChecklistCollection,
   ApiAuditCatalogAssignmentChecklistView,
+  ApiAuditCatalogChecklistItemAttestationCollection,
+  ApiAuditCatalogChecklistItemAttestationItem,
+  ApiAuditCatalogChecklistItemAttestationView,
   ApiAuditCatalogChecklistItemBlockerCollection,
   ApiAuditCatalogChecklistItemBlockerItem,
   ApiAuditCatalogChecklistItemBlockerView,
@@ -1042,6 +1045,171 @@ export function ChecklistItemEvidencesView({
   );
 }
 
+export function ChecklistItemAttestationsView({
+  activeCatalogChecklistItemAttestation,
+  attestedEntries,
+}: Readonly<{
+  activeCatalogChecklistItemAttestation?: ApiAuditCatalogChecklistItemAttestationView;
+  attestedEntries: ApiAuditCatalogChecklistItemAttestationCollection;
+}>) {
+  return (
+    <section className="card">
+      <div className="row spread">
+        <div>
+          <div className="card-eyebrow">
+            Phase 26 / Checklist Item Attestations
+          </div>
+          <h2>Checklist item attestations</h2>
+          <p className="empty-copy">
+            Track thin per-item attestations and a single attestation note on
+            evidenced presets without turning the console into an artifact
+            vault, workflow engine, or collaboration product.
+          </p>
+        </div>
+        <div className="timeline-count">
+          {attestedEntries.totalCount} attested preset(s)
+        </div>
+      </div>
+
+      {activeCatalogChecklistItemAttestation ? (
+        <div className="inline-note">
+          Active attestations:{" "}
+          <strong>
+            {
+              activeCatalogChecklistItemAttestation.evidence.verification
+                .resolution.blocker.progress.checklist.assignment.review
+                .visibility.catalogEntry.entry.name
+            }
+          </strong>
+          {" · "}
+          {formatAttestationSummary(
+            activeCatalogChecklistItemAttestation.attestation.items,
+          )}
+          {activeCatalogChecklistItemAttestation.attestation.attestationNote
+            ? ` · ${activeCatalogChecklistItemAttestation.attestation.attestationNote}`
+            : ""}
+        </div>
+      ) : null}
+
+      {attestedEntries.items.length === 0 ? (
+        <p className="empty-copy">
+          No checklist item attestations yet. Record evidence first, then save
+          thin attestation metadata through the shared operator seam.
+        </p>
+      ) : (
+        <ol className="timeline-list">
+          {attestedEntries.items.map((attestationView) => (
+            <li
+              className="timeline-entry"
+              key={
+                attestationView.evidence.verification.resolution.blocker
+                  .progress.checklist.assignment.review.visibility.catalogEntry
+                  .entry.id
+              }
+            >
+              <div className="row spread">
+                <div>
+                  <strong>
+                    {
+                      attestationView.evidence.verification.resolution.blocker
+                        .progress.checklist.assignment.review.visibility
+                        .catalogEntry.entry.name
+                    }
+                  </strong>
+                  <div className="timeline-meta">
+                    {formatAttestationSummary(
+                      attestationView.attestation.items,
+                    )}
+                    {" · "}
+                    {formatEvidenceSummary(
+                      attestationView.evidence.evidence.items,
+                    )}
+                    {" · "}
+                    {formatVerificationSummary(
+                      attestationView.evidence.verification.verification.items,
+                    )}
+                  </div>
+                </div>
+                <span>
+                  {formatTimestamp(attestationView.attestation.updatedAt)}
+                </span>
+              </div>
+              <ul className="approval-history">
+                {attestationView.attestation.items.map((item) => (
+                  <li
+                    key={`${attestationView.attestation.catalogEntryId}:${item.item}`}
+                  >
+                    <strong>{item.state}</strong>: {item.item}
+                  </li>
+                ))}
+              </ul>
+              {attestationView.attestation.attestationNote ? (
+                <p className="empty-copy">
+                  {attestationView.attestation.attestationNote}
+                </p>
+              ) : null}
+              <div className="timeline-meta">
+                operator {attestationView.attestation.operatorId} · scope{" "}
+                {attestationView.attestation.scopeId}
+              </div>
+              <div className="row spread">
+                <a
+                  className="link-button"
+                  href={buildCatalogEntryHref(
+                    attestationView.evidence.verification.resolution.blocker
+                      .progress.checklist.assignment.review.visibility
+                      .catalogEntry.entry.id,
+                  )}
+                >
+                  Apply attested preset
+                </a>
+                <form
+                  action="/runs/catalog"
+                  className="action-form"
+                  method="post"
+                >
+                  <input
+                    name="returnTo"
+                    type="hidden"
+                    value={buildCatalogEntryHref(
+                      attestationView.evidence.verification.resolution.blocker
+                        .progress.checklist.assignment.review.visibility
+                        .catalogEntry.entry.id,
+                    )}
+                  />
+                  <input
+                    name="intent"
+                    type="hidden"
+                    value="clear-attestation"
+                  />
+                  <input
+                    name="catalogEntryId"
+                    type="hidden"
+                    value={
+                      attestationView.evidence.verification.resolution.blocker
+                        .progress.checklist.assignment.review.visibility
+                        .catalogEntry.entry.id
+                    }
+                  />
+                  <button type="submit">Clear attestations</button>
+                </form>
+              </div>
+              {activeCatalogChecklistItemAttestation?.evidence.verification
+                .resolution.blocker.progress.checklist.assignment.review
+                .visibility.catalogEntry.entry.id ===
+              attestationView.evidence.verification.resolution.blocker.progress
+                .checklist.assignment.review.visibility.catalogEntry.entry
+                .id ? (
+                <div className="timeline-meta">Currently applied</div>
+              ) : null}
+            </li>
+          ))}
+        </ol>
+      )}
+    </section>
+  );
+}
+
 export function CatalogReviewAssignmentsView({
   activeCatalogReviewAssignment,
   assignedEntries,
@@ -1277,14 +1445,17 @@ export function CatalogReviewSignalsView({
 export function AuditViewCatalogsView({
   activeCatalogEntry,
   activeCatalogChecklistItemBlocker,
+  activeCatalogChecklistItemAttestation,
   activeCatalogChecklistItemEvidence,
   activeCatalogChecklistItemResolution,
   activeCatalogChecklistItemVerification,
   activeCatalogChecklistItemProgress,
   assignedEntries,
+  attestedEntries,
   blockedEntries,
   catalogEntries,
   checklistedEntries,
+  evidencedEntries,
   progressedEntries,
   resolvedEntries,
   verifiedEntries,
@@ -1292,14 +1463,17 @@ export function AuditViewCatalogsView({
 }: Readonly<{
   activeCatalogEntry?: ApiAuditCatalogVisibilityView;
   activeCatalogChecklistItemBlocker?: ApiAuditCatalogChecklistItemBlockerView;
+  activeCatalogChecklistItemAttestation?: ApiAuditCatalogChecklistItemAttestationView;
   activeCatalogChecklistItemEvidence?: ApiAuditCatalogChecklistItemEvidenceView;
   activeCatalogChecklistItemResolution?: ApiAuditCatalogChecklistItemResolutionView;
   activeCatalogChecklistItemVerification?: ApiAuditCatalogChecklistItemVerificationView;
   activeCatalogChecklistItemProgress?: ApiAuditCatalogChecklistItemProgressView;
   assignedEntries: ApiAuditCatalogReviewAssignmentCollection;
+  attestedEntries: ApiAuditCatalogChecklistItemAttestationCollection;
   blockedEntries: ApiAuditCatalogChecklistItemBlockerCollection;
   catalogEntries: ApiAuditCatalogVisibilityCollection;
   checklistedEntries: ApiAuditCatalogAssignmentChecklistCollection;
+  evidencedEntries: ApiAuditCatalogChecklistItemEvidenceCollection;
   progressedEntries: ApiAuditCatalogChecklistItemProgressCollection;
   resolvedEntries: ApiAuditCatalogChecklistItemResolutionCollection;
   verifiedEntries: ApiAuditCatalogChecklistItemVerificationCollection;
@@ -1359,6 +1533,26 @@ export function AuditViewCatalogsView({
         [
           item.resolution.blocker.progress.checklist.assignment.review
             .visibility.catalogEntry.entry.id,
+          item,
+        ] as const,
+    ),
+  );
+  const evidencesByCatalogEntryId = new Map(
+    evidencedEntries.items.map(
+      (item) =>
+        [
+          item.verification.resolution.blocker.progress.checklist.assignment
+            .review.visibility.catalogEntry.entry.id,
+          item,
+        ] as const,
+    ),
+  );
+  const attestationsByCatalogEntryId = new Map(
+    attestedEntries.items.map(
+      (item) =>
+        [
+          item.evidence.verification.resolution.blocker.progress.checklist
+            .assignment.review.visibility.catalogEntry.entry.id,
           item,
         ] as const,
     ),
@@ -1428,7 +1622,18 @@ export function AuditViewCatalogsView({
                     .catalogEntry.entry.id ===
                   catalogEntry.catalogEntry.entry.id
                     ? activeCatalogChecklistItemEvidence
-                    : undefined;
+                    : evidencesByCatalogEntryId.get(
+                        catalogEntry.catalogEntry.entry.id,
+                      );
+                const attestation =
+                  activeCatalogChecklistItemAttestation?.evidence.verification
+                    .resolution.blocker.progress.checklist.assignment.review
+                    .visibility.catalogEntry.entry.id ===
+                  catalogEntry.catalogEntry.entry.id
+                    ? activeCatalogChecklistItemAttestation
+                    : attestationsByCatalogEntryId.get(
+                        catalogEntry.catalogEntry.entry.id,
+                      );
                 const reviewSignal = reviewSignalsByCatalogEntryId.get(
                   catalogEntry.catalogEntry.entry.id,
                 );
@@ -1464,6 +1669,11 @@ export function AuditViewCatalogsView({
                           {verification
                             ? ` · ${formatVerificationSummary(
                                 verification.verification.items,
+                              )}`
+                            : ""}
+                          {attestation
+                            ? ` · ${formatAttestationSummary(
+                                attestation.attestation.items,
                               )}`
                             : ""}
                         </div>
@@ -1559,6 +1769,20 @@ export function AuditViewCatalogsView({
                         evidence note: {evidence.evidence.evidenceNote}
                       </p>
                     ) : null}
+                    {attestation?.attestation.items.length ? (
+                      <p className="empty-copy">
+                        attestations:{" "}
+                        {attestation.attestation.items
+                          .map((item) => `${item.state}: ${item.item}`)
+                          .join(", ")}
+                      </p>
+                    ) : null}
+                    {attestation?.attestation.attestationNote ? (
+                      <p className="empty-copy">
+                        attestation note:{" "}
+                        {attestation.attestation.attestationNote}
+                      </p>
+                    ) : null}
                     <div className="timeline-meta">
                       saved view {catalogEntry.catalogEntry.savedView.id}
                       {catalogEntry.catalogEntry.savedView.refs.auditViewRunId
@@ -1594,6 +1818,9 @@ export function AuditViewCatalogsView({
                         : ""}
                       {evidence
                         ? ` · evidence owner ${evidence.evidence.operatorId}`
+                        : ""}
+                      {attestation
+                        ? ` · attestation owner ${attestation.attestation.operatorId}`
                         : ""}
                     </div>
                     <div className="timeline-meta">
@@ -2031,6 +2258,61 @@ export function AuditViewCatalogsView({
                         </div>
                       </form>
                     ) : null}
+                    {evidence ? (
+                      <form
+                        action="/runs/catalog"
+                        className="decision-form"
+                        method="post"
+                      >
+                        <input
+                          name="returnTo"
+                          type="hidden"
+                          value={buildCatalogEntryHref(
+                            catalogEntry.catalogEntry.entry.id,
+                          )}
+                        />
+                        <input name="intent" type="hidden" value="attest" />
+                        <input
+                          name="catalogEntryId"
+                          type="hidden"
+                          value={catalogEntry.catalogEntry.entry.id}
+                        />
+                        <div className="data-grid">
+                          <label>
+                            <span>Checklist item attestations</span>
+                            <textarea
+                              className="note-input"
+                              defaultValue={formatChecklistItemAttestationLines(
+                                evidence.evidence.items,
+                                attestation?.attestation.items,
+                              )}
+                              name="attestationItems"
+                              placeholder="attested: Validate queued follow-up"
+                              rows={4}
+                            />
+                          </label>
+                          <label>
+                            <span>Attestation note</span>
+                            <input
+                              defaultValue={
+                                attestation?.attestation.attestationNote ?? ""
+                              }
+                              name="attestationNote"
+                              placeholder="Optional thin attestation note"
+                              type="text"
+                            />
+                          </label>
+                        </div>
+                        <div className="row spread">
+                          <div />
+                          <button type="submit">
+                            {attestation
+                              ? "Update attestations"
+                              : "Save attestations"}
+                          </button>
+                        </div>
+                      </form>
+                    ) : null}
                     <div className="row spread">
                       <a
                         className="link-button"
@@ -2249,6 +2531,32 @@ export function AuditViewCatalogsView({
                             <button type="submit">Clear evidence</button>
                           </form>
                         ) : null}
+                        {attestation ? (
+                          <form
+                            action="/runs/catalog"
+                            className="action-form"
+                            method="post"
+                          >
+                            <input
+                              name="returnTo"
+                              type="hidden"
+                              value={buildCatalogEntryHref(
+                                catalogEntry.catalogEntry.entry.id,
+                              )}
+                            />
+                            <input
+                              name="intent"
+                              type="hidden"
+                              value="clear-attestation"
+                            />
+                            <input
+                              name="catalogEntryId"
+                              type="hidden"
+                              value={catalogEntry.catalogEntry.entry.id}
+                            />
+                            <button type="submit">Clear attestations</button>
+                          </form>
+                        ) : null}
                         <form
                           action="/runs/catalog"
                           className="action-form"
@@ -2334,6 +2642,22 @@ export function AuditViewCatalogsView({
                     catalogEntry.catalogEntry.entry.id ? (
                       <div className="timeline-meta">
                         Active verifications selected
+                      </div>
+                    ) : null}
+                    {activeCatalogChecklistItemEvidence?.verification.resolution
+                      .blocker.progress.checklist.assignment.review.visibility
+                      .catalogEntry.entry.id ===
+                    catalogEntry.catalogEntry.entry.id ? (
+                      <div className="timeline-meta">
+                        Active evidence selected
+                      </div>
+                    ) : null}
+                    {activeCatalogChecklistItemAttestation?.evidence
+                      .verification.resolution.blocker.progress.checklist
+                      .assignment.review.visibility.catalogEntry.entry.id ===
+                    catalogEntry.catalogEntry.entry.id ? (
+                      <div className="timeline-meta">
+                        Active attestations selected
                       </div>
                     ) : null}
                   </>
@@ -3675,6 +3999,16 @@ function formatEvidenceSummary(
   return `${referenceCount} reference(s) across ${items.length} item(s)`;
 }
 
+function formatAttestationSummary(
+  items: readonly ApiAuditCatalogChecklistItemAttestationItem[],
+): string {
+  const attestedCount = items.filter(
+    (item) => item.state === "attested",
+  ).length;
+
+  return `${attestedCount}/${items.length} attested`;
+}
+
 function formatChecklistItemProgressLines(
   checklistItems: readonly string[],
   progressItems:
@@ -3755,6 +4089,24 @@ function formatChecklistItemEvidenceLines(
 
       return `${item.item}: ${references.join(" | ")}`.trimEnd();
     })
+    .join("\n");
+}
+
+function formatChecklistItemAttestationLines(
+  evidenceItems: readonly ApiAuditCatalogChecklistItemEvidenceItem[],
+  attestationItems:
+    | readonly ApiAuditCatalogChecklistItemAttestationItem[]
+    | undefined,
+): string {
+  const attestationByItem = new Map(
+    (attestationItems ?? []).map((item) => [item.item, item.state] as const),
+  );
+
+  return evidenceItems
+    .map(
+      (item) =>
+        `${attestationByItem.get(item.item) ?? "unattested"}: ${item.item}`,
+    )
     .join("\n");
 }
 
