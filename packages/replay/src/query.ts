@@ -37,6 +37,17 @@ import {
   type UpdateCrossRunAuditCatalogChecklistItemBlockerInput,
 } from "./checklist-item-blocker";
 import {
+  type CrossRunAuditCatalogChecklistItemEvidence,
+  type CrossRunAuditCatalogChecklistItemEvidenceApplication,
+  type CrossRunAuditCatalogChecklistItemEvidenceCollection,
+  type CrossRunAuditCatalogChecklistItemEvidenceStore,
+  type CrossRunAuditCatalogChecklistItemEvidenceView,
+  compareCrossRunAuditCatalogChecklistItemEvidence,
+  createCrossRunAuditCatalogChecklistItemEvidence,
+  normalizeChecklistItemEvidenceItems,
+  type UpdateCrossRunAuditCatalogChecklistItemEvidenceInput,
+} from "./checklist-item-evidence";
+import {
   type CrossRunAuditCatalogChecklistItemProgress,
   type CrossRunAuditCatalogChecklistItemProgressApplication,
   type CrossRunAuditCatalogChecklistItemProgressCollection,
@@ -385,6 +396,30 @@ export interface CrossRunAuditCatalogChecklistItemVerificationQuery {
     input: UpdateCrossRunAuditCatalogChecklistItemVerificationInput,
     timestamp: string,
   ): Promise<CrossRunAuditCatalogChecklistItemVerificationView>;
+}
+
+export interface CrossRunAuditCatalogChecklistItemEvidenceQuery {
+  applyCatalogEntry(
+    id: string,
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+  ): Promise<CrossRunAuditCatalogChecklistItemEvidenceApplication | undefined>;
+  clearCatalogChecklistItemEvidence(
+    id: string,
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+  ): Promise<CrossRunAuditCatalogChecklistItemEvidenceView | undefined>;
+  getCatalogChecklistItemEvidence(
+    id: string,
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+  ): Promise<CrossRunAuditCatalogChecklistItemEvidenceView | undefined>;
+  listEvidencedCatalogEntries(
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+  ): Promise<CrossRunAuditCatalogChecklistItemEvidenceCollection>;
+  setCatalogChecklistItemEvidence(
+    id: string,
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+    input: UpdateCrossRunAuditCatalogChecklistItemEvidenceInput,
+    timestamp: string,
+  ): Promise<CrossRunAuditCatalogChecklistItemEvidenceView>;
 }
 
 export function createRunTimelineQuery(
@@ -1737,6 +1772,150 @@ export function createCrossRunAuditCatalogChecklistItemVerificationQuery(
   };
 }
 
+export function createCrossRunAuditCatalogChecklistItemEvidenceQuery(
+  store: CrossRunAuditCatalogChecklistItemEvidenceStore,
+  verifications: CrossRunAuditCatalogChecklistItemVerificationQuery,
+): CrossRunAuditCatalogChecklistItemEvidenceQuery {
+  return {
+    async applyCatalogEntry(id, viewer) {
+      const evidence = await resolveCatalogChecklistItemEvidenceView(
+        store,
+        verifications,
+        id,
+        viewer,
+      );
+
+      if (!evidence) {
+        return undefined;
+      }
+
+      const application = await verifications.applyCatalogEntry(id, viewer);
+
+      if (!application) {
+        return undefined;
+      }
+
+      return {
+        application,
+        evidence,
+      };
+    },
+
+    async clearCatalogChecklistItemEvidence(id, viewer) {
+      const evidence = await resolveCatalogChecklistItemEvidenceView(
+        store,
+        verifications,
+        id,
+        viewer,
+      );
+
+      if (!evidence) {
+        return undefined;
+      }
+
+      await store.deleteCatalogChecklistItemEvidence(id);
+
+      return evidence;
+    },
+
+    async getCatalogChecklistItemEvidence(id, viewer) {
+      return resolveCatalogChecklistItemEvidenceView(
+        store,
+        verifications,
+        id,
+        viewer,
+      );
+    },
+
+    async listEvidencedCatalogEntries(viewer) {
+      const evidenceEntries = [
+        ...(await store.listCatalogChecklistItemEvidence()),
+      ].sort(compareCrossRunAuditCatalogChecklistItemEvidence);
+      const items = (
+        await Promise.all(
+          evidenceEntries.map(async (evidence) =>
+            resolveCatalogChecklistItemEvidenceFromValue(
+              verifications,
+              evidence,
+              viewer,
+            ),
+          ),
+        )
+      ).filter(
+        (evidence): evidence is CrossRunAuditCatalogChecklistItemEvidenceView =>
+          evidence !== undefined,
+      );
+
+      return {
+        items,
+        totalCount: items.length,
+      };
+    },
+
+    async setCatalogChecklistItemEvidence(id, viewer, input, timestamp) {
+      const verificationView =
+        await verifications.getCatalogChecklistItemVerification(id, viewer);
+
+      if (!verificationView) {
+        throw new Error(
+          `Catalog entry "${id}" is not verified and visible to operator "${viewer.operatorId}".`,
+        );
+      }
+
+      const allowedItems = verificationView.verification.items.map(
+        (item) => item.item,
+      );
+      const normalizedItems = normalizeChecklistItemEvidenceItems(
+        input.items,
+        allowedItems,
+      );
+
+      if (normalizedItems.length === 0) {
+        throw new Error(
+          "Catalog checklist item evidence requires at least one checklist item evidence entry.",
+        );
+      }
+
+      const existingEvidence = await store.getCatalogChecklistItemEvidence(id);
+      const normalizedEvidenceNote = input.evidenceNote?.trim();
+      const evidence = existingEvidence
+        ? {
+            ...(input.evidenceNote === undefined
+              ? existingEvidence.evidenceNote
+                ? { evidenceNote: existingEvidence.evidenceNote }
+                : {}
+              : normalizedEvidenceNote
+                ? { evidenceNote: normalizedEvidenceNote }
+                : {}),
+            catalogEntryId: id,
+            createdAt: existingEvidence.createdAt,
+            items: normalizedItems,
+            kind: existingEvidence.kind,
+            operatorId: viewer.operatorId,
+            scopeId: viewer.scopeId,
+            updatedAt: timestamp,
+          }
+        : createCrossRunAuditCatalogChecklistItemEvidence({
+            ...(normalizedEvidenceNote
+              ? { evidenceNote: normalizedEvidenceNote }
+              : {}),
+            catalogEntryId: id,
+            items: normalizedItems,
+            operatorId: viewer.operatorId,
+            scopeId: viewer.scopeId,
+            timestamp,
+          });
+
+      await store.saveCatalogChecklistItemEvidence(evidence);
+
+      return {
+        evidence,
+        verification: verificationView,
+      };
+    },
+  };
+}
+
 async function resolveCatalogEntryView(
   store: CrossRunAuditCatalogStore,
   savedViews: CrossRunAuditSavedViewQuery,
@@ -2103,5 +2282,59 @@ async function resolveCatalogChecklistItemVerificationFromValue(
       ...verification,
       items: normalizedItems,
     },
+  };
+}
+
+async function resolveCatalogChecklistItemEvidenceView(
+  store: CrossRunAuditCatalogChecklistItemEvidenceStore,
+  verifications: CrossRunAuditCatalogChecklistItemVerificationQuery,
+  id: string,
+  viewer: CrossRunAuditCatalogVisibilityViewer,
+): Promise<CrossRunAuditCatalogChecklistItemEvidenceView | undefined> {
+  const evidence = await store.getCatalogChecklistItemEvidence(id);
+
+  return evidence
+    ? resolveCatalogChecklistItemEvidenceFromValue(
+        verifications,
+        evidence,
+        viewer,
+      )
+    : undefined;
+}
+
+async function resolveCatalogChecklistItemEvidenceFromValue(
+  verificationQuery: CrossRunAuditCatalogChecklistItemVerificationQuery,
+  evidence: CrossRunAuditCatalogChecklistItemEvidence,
+  viewer: CrossRunAuditCatalogVisibilityViewer,
+): Promise<CrossRunAuditCatalogChecklistItemEvidenceView | undefined> {
+  if (evidence.scopeId !== viewer.scopeId) {
+    return undefined;
+  }
+
+  const verification =
+    await verificationQuery.getCatalogChecklistItemVerification(
+      evidence.catalogEntryId,
+      viewer,
+    );
+
+  if (!verification) {
+    return undefined;
+  }
+
+  const normalizedItems = normalizeChecklistItemEvidenceItems(
+    evidence.items,
+    verification.verification.items.map((item) => item.item),
+  );
+
+  if (normalizedItems.length === 0) {
+    return undefined;
+  }
+
+  return {
+    evidence: {
+      ...evidence,
+      items: normalizedItems,
+    },
+    verification,
   };
 }

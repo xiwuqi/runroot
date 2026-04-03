@@ -11,9 +11,9 @@ import {
 describe("@runroot/config", () => {
   it("exposes phase-aware project metadata", () => {
     expect(projectMetadata.name).toBe("Runroot");
-    expect(projectMetadata.currentPhase).toBe(24);
+    expect(projectMetadata.currentPhase).toBe(25);
     expect(projectMetadata.phaseName).toBe(
-      "Cross-Run Audit Catalog Checklist Item Verifications and Verification Notes",
+      "Cross-Run Audit Catalog Checklist Item Evidence References and Evidence Notes",
     );
   });
 

@@ -381,4 +381,4 @@ Status: completed
   engines, broader multi-user curation, or broad observability and analytics
   platform work
 
-Status: repository-owned phase contract after scope freeze
+Status: completed

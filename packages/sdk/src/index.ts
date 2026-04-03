@@ -16,6 +16,7 @@ export {
   type PendingApprovalSummary,
   type ProgressAuditCatalogEntryInput,
   type PublishAuditViewCatalogEntryInput,
+  type RecordAuditCatalogEntryEvidenceInput,
   type ResolveAuditCatalogEntryInput,
   type ReviewAuditCatalogEntryInput,
   type RunrootOperatorService,
