@@ -504,6 +504,53 @@ export async function POST(request: Request) {
       return Response.redirect(redirectUrl, 303);
     }
 
+    if (intent === "acknowledge") {
+      const catalogEntryId = readTrimmedFormValue(formData, "catalogEntryId");
+      const acknowledgmentItems = readChecklistItemAcknowledgmentItems(
+        formData.get("acknowledgmentItems"),
+      );
+      const acknowledgmentNoteValue = formData.get("acknowledgmentNote");
+
+      if (!catalogEntryId) {
+        appendFlashMessage(
+          redirectUrl,
+          "error",
+          "A catalog entry id is required to update checklist item acknowledgment metadata.",
+        );
+
+        return Response.redirect(redirectUrl, 303);
+      }
+
+      if (acknowledgmentItems.length === 0) {
+        appendFlashMessage(
+          redirectUrl,
+          "error",
+          "At least one checklist item acknowledgment entry is required.",
+        );
+
+        return Response.redirect(redirectUrl, 303);
+      }
+
+      const acknowledgment =
+        await createRunrootApiClient().setAuditCatalogChecklistItemAcknowledgment(
+          catalogEntryId,
+          {
+            ...(typeof acknowledgmentNoteValue === "string"
+              ? { acknowledgmentNote: acknowledgmentNoteValue }
+              : {}),
+            items: acknowledgmentItems,
+          },
+        );
+
+      appendFlashMessage(
+        redirectUrl,
+        "notice",
+        `Checklist item acknowledgments for ${acknowledgment.attestation.evidence.verification.resolution.blocker.progress.checklist.assignment.review.visibility.catalogEntry.entry.name} updated.`,
+      );
+
+      return Response.redirect(redirectUrl, 303);
+    }
+
     if (intent === "clear-review") {
       const catalogEntryId = readTrimmedFormValue(formData, "catalogEntryId");
 
@@ -688,6 +735,33 @@ export async function POST(request: Request) {
         redirectUrl,
         "notice",
         `Checklist item attestations for ${attestation.evidence.verification.resolution.blocker.progress.checklist.assignment.review.visibility.catalogEntry.entry.name} cleared.`,
+      );
+
+      return Response.redirect(redirectUrl, 303);
+    }
+
+    if (intent === "clear-acknowledgment") {
+      const catalogEntryId = readTrimmedFormValue(formData, "catalogEntryId");
+
+      if (!catalogEntryId) {
+        appendFlashMessage(
+          redirectUrl,
+          "error",
+          "A catalog entry id is required to clear checklist item acknowledgment metadata.",
+        );
+
+        return Response.redirect(redirectUrl, 303);
+      }
+
+      const acknowledgment =
+        await createRunrootApiClient().clearAuditCatalogChecklistItemAcknowledgment(
+          catalogEntryId,
+        );
+
+      appendFlashMessage(
+        redirectUrl,
+        "notice",
+        `Checklist item acknowledgments for ${acknowledgment.attestation.evidence.verification.resolution.blocker.progress.checklist.assignment.review.visibility.catalogEntry.entry.name} cleared.`,
       );
 
       return Response.redirect(redirectUrl, 303);
@@ -1087,6 +1161,52 @@ function readChecklistItemAttestationItems(
       if (rawState !== "attested" && rawState !== "unattested") {
         throw new Error(
           `Checklist item attestation state must be attested or unattested for "${item}".`,
+        );
+      }
+
+      return {
+        item,
+        state: rawState,
+      };
+    });
+}
+
+function readChecklistItemAcknowledgmentItems(
+  value: FormDataEntryValue | null,
+): readonly {
+  readonly item: string;
+  readonly state: "acknowledged" | "unacknowledged";
+}[] {
+  if (typeof value !== "string") {
+    return [];
+  }
+
+  return value
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .map((line) => {
+      const separatorIndex = line.indexOf(":");
+
+      if (separatorIndex < 0) {
+        return {
+          item: line,
+          state: "unacknowledged" as const,
+        };
+      }
+
+      const rawState = line.slice(0, separatorIndex).trim();
+      const item = line.slice(separatorIndex + 1).trim();
+
+      if (item.length === 0) {
+        throw new Error(
+          "Checklist item acknowledgment lines require a non-empty item.",
+        );
+      }
+
+      if (rawState !== "acknowledged" && rawState !== "unacknowledged") {
+        throw new Error(
+          `Checklist item acknowledgment state must be acknowledged or unacknowledged for "${item}".`,
         );
       }
 

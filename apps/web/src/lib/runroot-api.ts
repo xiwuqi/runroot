@@ -558,6 +558,32 @@ export interface ApiAuditCatalogChecklistItemEvidenceCollection {
   readonly totalCount: number;
 }
 
+export interface ApiAuditCatalogChecklistItemAcknowledgmentItem {
+  readonly item: string;
+  readonly state: "acknowledged" | "unacknowledged";
+}
+
+export interface ApiAuditCatalogChecklistItemAcknowledgment {
+  readonly acknowledgmentNote?: string;
+  readonly catalogEntryId: string;
+  readonly createdAt: string;
+  readonly items: readonly ApiAuditCatalogChecklistItemAcknowledgmentItem[];
+  readonly kind: "catalog-checklist-item-acknowledgment";
+  readonly operatorId: string;
+  readonly scopeId: string;
+  readonly updatedAt: string;
+}
+
+export interface ApiAuditCatalogChecklistItemAcknowledgmentView {
+  readonly acknowledgment: ApiAuditCatalogChecklistItemAcknowledgment;
+  readonly attestation: ApiAuditCatalogChecklistItemAttestationView;
+}
+
+export interface ApiAuditCatalogChecklistItemAcknowledgmentCollection {
+  readonly items: readonly ApiAuditCatalogChecklistItemAcknowledgmentView[];
+  readonly totalCount: number;
+}
+
 export interface ApiAuditCatalogChecklistItemAttestationItem {
   readonly item: string;
   readonly state: "attested" | "unattested";
@@ -625,6 +651,11 @@ export interface UpdateApiAuditCatalogChecklistItemAttestationInput {
   readonly items: readonly ApiAuditCatalogChecklistItemAttestationItem[];
 }
 
+export interface UpdateApiAuditCatalogChecklistItemAcknowledgmentInput {
+  readonly acknowledgmentNote?: string;
+  readonly items: readonly ApiAuditCatalogChecklistItemAcknowledgmentItem[];
+}
+
 export interface UpdateApiAuditCatalogReviewAssignmentInput {
   readonly assigneeId: string;
   readonly handoffNote?: string;
@@ -673,6 +704,9 @@ export interface RunrootApiClient {
   clearAuditCatalogChecklistItemEvidence(
     catalogEntryId: string,
   ): Promise<ApiAuditCatalogChecklistItemEvidenceView>;
+  clearAuditCatalogChecklistItemAcknowledgment(
+    catalogEntryId: string,
+  ): Promise<ApiAuditCatalogChecklistItemAcknowledgmentView>;
   clearAuditCatalogChecklistItemAttestation(
     catalogEntryId: string,
   ): Promise<ApiAuditCatalogChecklistItemAttestationView>;
@@ -703,6 +737,9 @@ export interface RunrootApiClient {
   getAuditCatalogChecklistItemEvidence(
     catalogEntryId: string,
   ): Promise<ApiAuditCatalogChecklistItemEvidenceView>;
+  getAuditCatalogChecklistItemAcknowledgment(
+    catalogEntryId: string,
+  ): Promise<ApiAuditCatalogChecklistItemAcknowledgmentView>;
   getAuditCatalogChecklistItemAttestation(
     catalogEntryId: string,
   ): Promise<ApiAuditCatalogChecklistItemAttestationView>;
@@ -738,6 +775,7 @@ export interface RunrootApiClient {
   getSavedAuditView(savedViewId: string): Promise<ApiAuditSavedView>;
   listAssignedAuditCatalogEntries(): Promise<ApiAuditCatalogReviewAssignmentCollection>;
   listBlockedAuditCatalogEntries(): Promise<ApiAuditCatalogChecklistItemBlockerCollection>;
+  listAcknowledgedAuditCatalogEntries(): Promise<ApiAuditCatalogChecklistItemAcknowledgmentCollection>;
   listEvidencedAuditCatalogEntries(): Promise<ApiAuditCatalogChecklistItemEvidenceCollection>;
   listAttestedAuditCatalogEntries(): Promise<ApiAuditCatalogChecklistItemAttestationCollection>;
   listResolvedAuditCatalogEntries(): Promise<ApiAuditCatalogChecklistItemResolutionCollection>;
@@ -773,6 +811,10 @@ export interface RunrootApiClient {
     catalogEntryId: string,
     input: UpdateApiAuditCatalogChecklistItemEvidenceInput,
   ): Promise<ApiAuditCatalogChecklistItemEvidenceView>;
+  setAuditCatalogChecklistItemAcknowledgment(
+    catalogEntryId: string,
+    input: UpdateApiAuditCatalogChecklistItemAcknowledgmentInput,
+  ): Promise<ApiAuditCatalogChecklistItemAcknowledgmentView>;
   setAuditCatalogChecklistItemAttestation(
     catalogEntryId: string,
     input: UpdateApiAuditCatalogChecklistItemAttestationInput,
@@ -1013,6 +1055,18 @@ export function createRunrootApiClient(
       return payload.evidence;
     },
 
+    async clearAuditCatalogChecklistItemAcknowledgment(catalogEntryId) {
+      const payload = await requestJson<{
+        acknowledgment: ApiAuditCatalogChecklistItemAcknowledgmentView;
+      }>(
+        `/audit/catalog/${catalogEntryId}/acknowledgment/clear`,
+        { method: "POST" },
+        "web.api.clearAuditCatalogChecklistItemAcknowledgment",
+      );
+
+      return payload.acknowledgment;
+    },
+
     async clearAuditCatalogChecklistItemAttestation(catalogEntryId) {
       const payload = await requestJson<{
         attestation: ApiAuditCatalogChecklistItemAttestationView;
@@ -1131,6 +1185,18 @@ export function createRunrootApiClient(
       );
 
       return payload.evidence;
+    },
+
+    async getAuditCatalogChecklistItemAcknowledgment(catalogEntryId) {
+      const payload = await requestJson<{
+        acknowledgment: ApiAuditCatalogChecklistItemAcknowledgmentView;
+      }>(
+        `/audit/catalog/${catalogEntryId}/acknowledgment`,
+        { method: "GET" },
+        "web.api.getAuditCatalogChecklistItemAcknowledgment",
+      );
+
+      return payload.acknowledgment;
     },
 
     async getAuditCatalogChecklistItemAttestation(catalogEntryId) {
@@ -1369,6 +1435,18 @@ export function createRunrootApiClient(
       return payload.attested;
     },
 
+    async listAcknowledgedAuditCatalogEntries() {
+      const payload = await requestJson<{
+        acknowledged: ApiAuditCatalogChecklistItemAcknowledgmentCollection;
+      }>(
+        "/audit/catalog/acknowledged",
+        { method: "GET" },
+        "web.api.listAcknowledgedAuditCatalogEntries",
+      );
+
+      return payload.acknowledged;
+    },
+
     async listVerifiedAuditCatalogEntries() {
       const payload = await requestJson<{
         verified: ApiAuditCatalogChecklistItemVerificationCollection;
@@ -1577,6 +1655,24 @@ export function createRunrootApiClient(
       );
 
       return payload.attestation;
+    },
+
+    async setAuditCatalogChecklistItemAcknowledgment(catalogEntryId, input) {
+      const payload = await requestJson<{
+        acknowledgment: ApiAuditCatalogChecklistItemAcknowledgmentView;
+      }>(
+        `/audit/catalog/${catalogEntryId}/acknowledgment`,
+        {
+          body: JSON.stringify(input),
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "POST",
+        },
+        "web.api.setAuditCatalogChecklistItemAcknowledgment",
+      );
+
+      return payload.acknowledgment;
     },
 
     async setAuditCatalogAssignmentChecklist(catalogEntryId, input) {

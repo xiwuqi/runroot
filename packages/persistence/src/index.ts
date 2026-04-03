@@ -14,6 +14,19 @@ export {
   type SqliteAuditCatalogAssignmentChecklistStoreOptions,
 } from "./catalog-assignment-checklist-store";
 export {
+  type ConfiguredAuditCatalogChecklistItemAcknowledgmentStoreOptions,
+  createConfiguredAuditCatalogChecklistItemAcknowledgmentStore,
+  createFileAuditCatalogChecklistItemAcknowledgmentStore,
+  createInMemoryAuditCatalogChecklistItemAcknowledgmentStore,
+  createPostgresAuditCatalogChecklistItemAcknowledgmentStore,
+  createSqliteAuditCatalogChecklistItemAcknowledgmentStore,
+  type FileAuditCatalogChecklistItemAcknowledgmentStoreOptions,
+  type InMemoryAuditCatalogChecklistItemAcknowledgmentStoreOptions,
+  type PostgresAuditCatalogChecklistItemAcknowledgmentStoreOptions,
+  resolveAuditCatalogChecklistItemAcknowledgmentFilePath,
+  type SqliteAuditCatalogChecklistItemAcknowledgmentStoreOptions,
+} from "./catalog-checklist-item-acknowledgment-store";
+export {
   type ConfiguredAuditCatalogChecklistItemAttestationStoreOptions,
   createConfiguredAuditCatalogChecklistItemAttestationStore,
   createFileAuditCatalogChecklistItemAttestationStore,
@@ -212,7 +225,7 @@ export const persistencePackageBoundary = {
   kind: "package",
   phaseOwned: 2,
   responsibility:
-    "Repository contracts, checkpoint storage, database adapters, dispatch queue persistence seams, tool-history storage adapters, additive saved-audit-view adapters, additive audit-view-catalog adapters, additive catalog-visibility adapters, additive catalog-review-signal adapters, additive catalog-review-assignment adapters, additive catalog-assignment-checklist adapters, additive checklist-item-progress adapters, additive checklist-item-blocker adapters, additive checklist-item-resolution adapters, additive checklist-item-verification adapters, additive checklist-item-evidence adapters, and additive checklist-item-attestation adapters.",
+    "Repository contracts, checkpoint storage, database adapters, dispatch queue persistence seams, tool-history storage adapters, additive saved-audit-view adapters, additive audit-view-catalog adapters, additive catalog-visibility adapters, additive catalog-review-signal adapters, additive catalog-review-assignment adapters, additive catalog-assignment-checklist adapters, additive checklist-item-progress adapters, additive checklist-item-blocker adapters, additive checklist-item-resolution adapters, additive checklist-item-verification adapters, additive checklist-item-evidence adapters, additive checklist-item-attestation adapters, and additive checklist-item-acknowledgment adapters.",
   publicSurface: [
     "repository interfaces",
     "storage adapters",
