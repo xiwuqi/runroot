@@ -405,3 +405,26 @@ Status: completed
   observability and analytics platform work
 
 Status: completed
+
+## Phase 27: Cross-Run Audit Catalog Checklist Item Acknowledgments and Acknowledgment Notes
+
+- add a shared audit-catalog checklist-item-acknowledgment contract over the
+  existing checklist-item-attestation and checklist-item-evidence paths rather
+  than introducing approval gating, artifact-vault behavior, or a workflow
+  engine
+- expose minimal acknowledge, list-acknowledged, inspect-acknowledgment,
+  clear-acknowledgment, and apply paths through the existing seams in SDK,
+  API, CLI, and web
+- keep operator surfaces thin while allowing attested evidenced verified
+  resolved blocked progressed assigned presets to carry stable per-item
+  acknowledgment state and a thin acknowledgment note without expanding into
+  threaded collaboration, fine-grained RBAC, multi-tenant access, dashboards,
+  search, analytics, or attachment-upload products
+- execute against the formal handoff in
+  [docs/architecture/phase-27-handoff.md](./architecture/phase-27-handoff.md)
+- keep the phase focused on checklist item acknowledgments and acknowledgment
+  notes rather than broader checklist orchestration, broader review workflow
+  engines, broader multi-user curation, approval products, or broad
+  observability and analytics platform work
+
+Status: scope frozen
