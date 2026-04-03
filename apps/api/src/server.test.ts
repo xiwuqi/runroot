@@ -25,7 +25,7 @@ describe("@runroot/api", () => {
     expect(response.json()).toEqual({
       status: "ok",
       project: "Runroot",
-      phase: 26,
+      phase: 27,
     });
   });
 
