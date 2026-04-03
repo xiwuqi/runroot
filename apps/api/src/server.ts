@@ -273,6 +273,12 @@ export function buildServer(options: BuildServerOptions = {}) {
     })),
   );
 
+  app.get("/audit/catalog/attested", async (_request, reply) =>
+    handleOperatorResponse(reply, async () => ({
+      attested: await operator.listAttestedCatalogEntries(),
+    })),
+  );
+
   app.post("/audit/saved-views", async (request, reply) =>
     handleOperatorResponse(reply, async () => {
       const body = request.body as {
@@ -488,6 +494,22 @@ export function buildServer(options: BuildServerOptions = {}) {
         ),
       };
     }),
+  );
+
+  app.get(
+    "/audit/catalog/:catalogEntryId/attestation",
+    async (request, reply) =>
+      handleOperatorResponse(reply, async () => {
+        const params = request.params as {
+          readonly catalogEntryId: string;
+        };
+
+        return {
+          attestation: await operator.getCatalogChecklistItemAttestation(
+            params.catalogEntryId,
+          ),
+        };
+      }),
   );
 
   app.get("/audit/catalog/:catalogEntryId", async (request, reply) =>
@@ -758,6 +780,39 @@ export function buildServer(options: BuildServerOptions = {}) {
   );
 
   app.post(
+    "/audit/catalog/:catalogEntryId/attestation",
+    async (request, reply) =>
+      handleOperatorResponse(reply, async () => {
+        const params = request.params as {
+          readonly catalogEntryId: string;
+        };
+        const body = request.body as {
+          readonly attestationNote?: string;
+          readonly items?: unknown;
+        };
+        const items = readChecklistItemAttestationItems(body?.items, "items");
+
+        if (items.length === 0) {
+          throw new OperatorInputError(
+            "items must include at least one checklist item attestation entry.",
+          );
+        }
+
+        return {
+          attestation: await operator.attestCatalogEntry(
+            params.catalogEntryId,
+            {
+              ...(body?.attestationNote !== undefined
+                ? { attestationNote: body.attestationNote }
+                : {}),
+              items,
+            },
+          ),
+        };
+      }),
+  );
+
+  app.post(
     "/audit/catalog/:catalogEntryId/review/clear",
     async (request, reply) =>
       handleOperatorResponse(reply, async () => {
@@ -879,6 +934,22 @@ export function buildServer(options: BuildServerOptions = {}) {
 
         return {
           evidence: await operator.clearCatalogChecklistItemEvidence(
+            params.catalogEntryId,
+          ),
+        };
+      }),
+  );
+
+  app.post(
+    "/audit/catalog/:catalogEntryId/attestation/clear",
+    async (request, reply) =>
+      handleOperatorResponse(reply, async () => {
+        const params = request.params as {
+          readonly catalogEntryId: string;
+        };
+
+        return {
+          attestation: await operator.clearCatalogChecklistItemAttestation(
             params.catalogEntryId,
           ),
         };
@@ -1393,6 +1464,33 @@ function readChecklistItemEvidenceItems(
   ) {
     throw new OperatorInputError(
       `${fieldName} must be an array of { item, references } objects with references as a string array.`,
+    );
+  }
+
+  return value;
+}
+
+function readChecklistItemAttestationItems(
+  value: unknown,
+  fieldName: string,
+): readonly {
+  readonly item: string;
+  readonly state: "attested" | "unattested";
+}[] {
+  if (
+    !Array.isArray(value) ||
+    !value.every(
+      (entry) =>
+        typeof entry === "object" &&
+        entry !== null &&
+        "item" in entry &&
+        typeof entry.item === "string" &&
+        "state" in entry &&
+        (entry.state === "attested" || entry.state === "unattested"),
+    )
+  ) {
+    throw new OperatorInputError(
+      `${fieldName} must be an array of { item, state } objects with state attested|unattested.`,
     );
   }
 

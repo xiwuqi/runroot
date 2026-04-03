@@ -457,6 +457,53 @@ export async function POST(request: Request) {
       return Response.redirect(redirectUrl, 303);
     }
 
+    if (intent === "attest") {
+      const catalogEntryId = readTrimmedFormValue(formData, "catalogEntryId");
+      const attestationItems = readChecklistItemAttestationItems(
+        formData.get("attestationItems"),
+      );
+      const attestationNoteValue = formData.get("attestationNote");
+
+      if (!catalogEntryId) {
+        appendFlashMessage(
+          redirectUrl,
+          "error",
+          "A catalog entry id is required to update checklist item attestation metadata.",
+        );
+
+        return Response.redirect(redirectUrl, 303);
+      }
+
+      if (attestationItems.length === 0) {
+        appendFlashMessage(
+          redirectUrl,
+          "error",
+          "At least one checklist item attestation entry is required.",
+        );
+
+        return Response.redirect(redirectUrl, 303);
+      }
+
+      const attestation =
+        await createRunrootApiClient().setAuditCatalogChecklistItemAttestation(
+          catalogEntryId,
+          {
+            ...(typeof attestationNoteValue === "string"
+              ? { attestationNote: attestationNoteValue }
+              : {}),
+            items: attestationItems,
+          },
+        );
+
+      appendFlashMessage(
+        redirectUrl,
+        "notice",
+        `Checklist item attestations for ${attestation.evidence.verification.resolution.blocker.progress.checklist.assignment.review.visibility.catalogEntry.entry.name} updated.`,
+      );
+
+      return Response.redirect(redirectUrl, 303);
+    }
+
     if (intent === "clear-review") {
       const catalogEntryId = readTrimmedFormValue(formData, "catalogEntryId");
 
@@ -614,6 +661,33 @@ export async function POST(request: Request) {
         redirectUrl,
         "notice",
         `Checklist item evidence for ${evidence.verification.resolution.blocker.progress.checklist.assignment.review.visibility.catalogEntry.entry.name} cleared.`,
+      );
+
+      return Response.redirect(redirectUrl, 303);
+    }
+
+    if (intent === "clear-attestation") {
+      const catalogEntryId = readTrimmedFormValue(formData, "catalogEntryId");
+
+      if (!catalogEntryId) {
+        appendFlashMessage(
+          redirectUrl,
+          "error",
+          "A catalog entry id is required to clear checklist item attestation metadata.",
+        );
+
+        return Response.redirect(redirectUrl, 303);
+      }
+
+      const attestation =
+        await createRunrootApiClient().clearAuditCatalogChecklistItemAttestation(
+          catalogEntryId,
+        );
+
+      appendFlashMessage(
+        redirectUrl,
+        "notice",
+        `Checklist item attestations for ${attestation.evidence.verification.resolution.blocker.progress.checklist.assignment.review.visibility.catalogEntry.entry.name} cleared.`,
       );
 
       return Response.redirect(redirectUrl, 303);
@@ -973,6 +1047,52 @@ function readChecklistItemEvidenceItems(
       return {
         item,
         references,
+      };
+    });
+}
+
+function readChecklistItemAttestationItems(
+  value: FormDataEntryValue | null,
+): readonly {
+  readonly item: string;
+  readonly state: "attested" | "unattested";
+}[] {
+  if (typeof value !== "string") {
+    return [];
+  }
+
+  return value
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .map((line) => {
+      const separatorIndex = line.indexOf(":");
+
+      if (separatorIndex < 0) {
+        return {
+          item: line,
+          state: "unattested" as const,
+        };
+      }
+
+      const rawState = line.slice(0, separatorIndex).trim();
+      const item = line.slice(separatorIndex + 1).trim();
+
+      if (item.length === 0) {
+        throw new Error(
+          "Checklist item attestation lines require a non-empty item.",
+        );
+      }
+
+      if (rawState !== "attested" && rawState !== "unattested") {
+        throw new Error(
+          `Checklist item attestation state must be attested or unattested for "${item}".`,
+        );
+      }
+
+      return {
+        item,
+        state: rawState,
       };
     });
 }

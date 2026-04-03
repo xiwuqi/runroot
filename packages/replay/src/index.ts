@@ -35,6 +35,20 @@ export {
   type PublishCrossRunAuditCatalogEntryInput,
 } from "./catalog";
 export {
+  type CreateCrossRunAuditCatalogChecklistItemAttestationInput,
+  type CrossRunAuditCatalogChecklistItemAttestation,
+  type CrossRunAuditCatalogChecklistItemAttestationApplication,
+  type CrossRunAuditCatalogChecklistItemAttestationCollection,
+  type CrossRunAuditCatalogChecklistItemAttestationItem,
+  type CrossRunAuditCatalogChecklistItemAttestationState,
+  type CrossRunAuditCatalogChecklistItemAttestationStore,
+  type CrossRunAuditCatalogChecklistItemAttestationView,
+  compareCrossRunAuditCatalogChecklistItemAttestation,
+  createCrossRunAuditCatalogChecklistItemAttestation,
+  normalizeChecklistItemAttestationItems,
+  type UpdateCrossRunAuditCatalogChecklistItemAttestationInput,
+} from "./checklist-item-attestation";
+export {
   type CreateCrossRunAuditCatalogChecklistItemBlockerInput,
   type CrossRunAuditCatalogChecklistItemBlocker,
   type CrossRunAuditCatalogChecklistItemBlockerApplication,
@@ -136,6 +150,7 @@ export {
 } from "./navigation";
 export {
   type CrossRunAuditCatalogAssignmentChecklistQuery,
+  type CrossRunAuditCatalogChecklistItemAttestationQuery,
   type CrossRunAuditCatalogChecklistItemBlockerQuery,
   type CrossRunAuditCatalogChecklistItemEvidenceQuery,
   type CrossRunAuditCatalogChecklistItemProgressQuery,
@@ -151,6 +166,7 @@ export {
   type CrossRunAuditReader,
   type CrossRunAuditSavedViewQuery,
   createCrossRunAuditCatalogAssignmentChecklistQuery,
+  createCrossRunAuditCatalogChecklistItemAttestationQuery,
   createCrossRunAuditCatalogChecklistItemBlockerQuery,
   createCrossRunAuditCatalogChecklistItemEvidenceQuery,
   createCrossRunAuditCatalogChecklistItemProgressQuery,

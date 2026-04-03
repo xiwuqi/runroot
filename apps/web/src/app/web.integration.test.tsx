@@ -2338,7 +2338,7 @@ describe("@runroot/web integration", () => {
     }
   });
 
-  it("renders, records, clears, and reapplies checklist item evidence through the existing API surface", async () => {
+  it("renders, records, clears, and reapplies checklist item attestations through the existing API surface", async () => {
     const workspaceRoot = await mkdtemp(
       join(tmpdir(), "runroot-web-checklist-evidence-"),
     );
@@ -2638,9 +2638,34 @@ describe("@runroot/web integration", () => {
 
       expect(evidenceResponse.status).toBe(303);
 
+      const attestationForm = new FormData();
+      attestationForm.set("catalogEntryId", "catalog_entry_evidence_web");
+      attestationForm.set("intent", "attest");
+      attestationForm.set(
+        "attestationItems",
+        "attested: Validate queued follow-up\nunattested: Close backup handoff",
+      );
+      attestationForm.set(
+        "attestationNote",
+        "Backup attested the stable follow-up evidence",
+      );
+      attestationForm.set(
+        "returnTo",
+        "/runs?catalogEntryId=catalog_entry_evidence_web",
+      );
+
+      const attestationResponse = await mutateCatalog(
+        new Request("http://localhost/runs/catalog", {
+          body: attestationForm,
+          method: "POST",
+        }),
+      );
+
+      expect(attestationResponse.status).toBe(303);
+
       process.env.RUNROOT_API_BASE_URL = peerAddress;
 
-      const evidencedMarkup = renderToStaticMarkup(
+      const attestedMarkup = renderToStaticMarkup(
         await RunsPage({
           searchParams: Promise.resolve({
             catalogEntryId: "catalog_entry_evidence_web",
@@ -2648,25 +2673,25 @@ describe("@runroot/web integration", () => {
         }),
       );
 
-      expect(evidencedMarkup).toContain("Checklist item evidence");
-      expect(evidencedMarkup).toContain("Queued evidence preset");
-      expect(evidencedMarkup).toContain("3 reference(s) across 2 item(s)");
-      expect(evidencedMarkup).toContain("Validate queued follow-up");
-      expect(evidencedMarkup).toContain("Close backup handoff");
-      expect(evidencedMarkup).toContain(
-        "Backup collected stable follow-up references",
+      expect(attestedMarkup).toContain("Checklist item attestations");
+      expect(attestedMarkup).toContain("Queued evidence preset");
+      expect(attestedMarkup).toContain("1/2 attested");
+      expect(attestedMarkup).toContain("Validate queued follow-up");
+      expect(attestedMarkup).toContain("Close backup handoff");
+      expect(attestedMarkup).toContain(
+        "Backup attested the stable follow-up evidence",
       );
-      expect(evidencedMarkup).toContain("Apply evidenced preset");
-      expect(evidencedMarkup).toContain(
+      expect(attestedMarkup).toContain("Apply attested preset");
+      expect(attestedMarkup).toContain(
         `Queued worker ${queuedRun.id} handed to backup`,
       );
-      expect(evidencedMarkup).toContain("Currently applied");
+      expect(attestedMarkup).toContain("Active attestations selected");
 
       process.env.RUNROOT_API_BASE_URL = ownerAddress;
 
       const clearForm = new FormData();
       clearForm.set("catalogEntryId", "catalog_entry_evidence_web");
-      clearForm.set("intent", "clear-evidence");
+      clearForm.set("intent", "clear-attestation");
       clearForm.set(
         "returnTo",
         "/runs?catalogEntryId=catalog_entry_evidence_web",
@@ -2691,10 +2716,10 @@ describe("@runroot/web integration", () => {
         }),
       );
 
-      expect(clearedMarkup).toContain("Checklist item evidence");
-      expect(clearedMarkup).toContain("No checklist item evidence yet");
+      expect(clearedMarkup).toContain("Checklist item attestations");
+      expect(clearedMarkup).toContain("No checklist item attestations yet");
       expect(clearedMarkup).not.toContain(
-        "Backup collected stable follow-up references",
+        "Backup attested the stable follow-up evidence",
       );
     } finally {
       await ownerApp.close();

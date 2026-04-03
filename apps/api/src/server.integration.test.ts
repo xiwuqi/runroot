@@ -3373,7 +3373,7 @@ describe("@runroot/api integration", () => {
     }
   });
 
-  it("serves record-evidence, list-evidenced, inspect-evidence, clear-evidence, and apply paths through the network API", async () => {
+  it("serves attest, list-attested, inspect-attestation, clear-attestation, and apply paths through the network API", async () => {
     const workspaceRoot = await mkdtemp(
       join(tmpdir(), "runroot-api-checklist-evidence-"),
     );
@@ -3644,62 +3644,86 @@ describe("@runroot/api integration", () => {
           method: "POST",
         },
       );
-      const evidencedResponse = await fetch(
-        `${peerAddress}/audit/catalog/evidenced`,
+      const attestationResponse = await fetch(
+        `${ownerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/attestation`,
+        {
+          body: JSON.stringify({
+            attestationNote: "Backup attested the stable follow-up evidence",
+            items: [
+              {
+                item: "Validate queued follow-up",
+                state: "attested",
+              },
+              {
+                item: "Close backup handoff",
+                state: "unattested",
+              },
+            ],
+          }),
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "POST",
+        },
+      );
+      const attestedResponse = await fetch(
+        `${peerAddress}/audit/catalog/attested`,
       );
       const inspectResponse = await fetch(
-        `${peerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/evidence`,
+        `${peerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/attestation`,
       );
       const applyResponse = await fetch(
         `${peerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/apply`,
       );
       const clearResponse = await fetch(
-        `${ownerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/evidence/clear`,
+        `${ownerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/attestation/clear`,
         {
           method: "POST",
         },
       );
-      const evidencedAfterClearResponse = await fetch(
-        `${peerAddress}/audit/catalog/evidenced`,
+      const attestedAfterClearResponse = await fetch(
+        `${peerAddress}/audit/catalog/attested`,
       );
-      const evidencePayload = (await evidenceResponse.json()) as {
-        evidence: {
-          verification: {
-            resolution: {
-              resolution: {
-                resolutionNote?: string;
-              };
-            };
-            verification: {
-              verificationNote?: string;
-            };
-          };
-          evidence: {
-            evidenceNote?: string;
+      const attestationPayload = (await attestationResponse.json()) as {
+        attestation: {
+          attestation: {
+            attestationNote?: string;
             items: Array<{
               item: string;
-              references: string[];
+              state: "attested" | "unattested";
             }>;
           };
-        };
-      };
-      const evidencedPayload = (await evidencedResponse.json()) as {
-        evidenced: {
-          items: Array<{
+          evidence: {
             evidence: {
               evidenceNote?: string;
             };
             verification: {
-              resolution: {
-                blocker: {
-                  progress: {
-                    checklist: {
-                      assignment: {
-                        review: {
-                          visibility: {
-                            catalogEntry: {
-                              entry: {
-                                id: string;
+              verification: {
+                verificationNote?: string;
+              };
+            };
+          };
+        };
+      };
+      const attestedPayload = (await attestedResponse.json()) as {
+        attested: {
+          items: Array<{
+            attestation: {
+              attestationNote?: string;
+            };
+            evidence: {
+              verification: {
+                resolution: {
+                  blocker: {
+                    progress: {
+                      checklist: {
+                        assignment: {
+                          review: {
+                            visibility: {
+                              catalogEntry: {
+                                entry: {
+                                  id: string;
+                                };
                               };
                             };
                           };
@@ -3715,12 +3739,12 @@ describe("@runroot/api integration", () => {
         };
       };
       const inspectPayload = (await inspectResponse.json()) as {
-        evidence: {
-          evidence: {
-            evidenceNote?: string;
+        attestation: {
+          attestation: {
+            attestationNote?: string;
             items: Array<{
               item: string;
-              references: string[];
+              state: "attested" | "unattested";
             }>;
           };
         };
@@ -3743,15 +3767,15 @@ describe("@runroot/api integration", () => {
         };
       };
       const clearPayload = (await clearResponse.json()) as {
-        evidence: {
-          evidence: {
-            evidenceNote?: string;
+        attestation: {
+          attestation: {
+            attestationNote?: string;
           };
         };
       };
-      const evidencedAfterClearPayload =
-        (await evidencedAfterClearResponse.json()) as {
-          evidenced: {
+      const attestedAfterClearPayload =
+        (await attestedAfterClearResponse.json()) as {
+          attested: {
             totalCount: number;
           };
         };
@@ -3767,36 +3791,37 @@ describe("@runroot/api integration", () => {
       expect(resolutionResponse.status).toBe(200);
       expect(verificationResponse.status).toBe(200);
       expect(evidenceResponse.status).toBe(200);
+      expect(attestationResponse.status).toBe(200);
       expect(
-        evidencePayload.evidence.verification.resolution.resolution
-          .resolutionNote,
-      ).toBe("Backup confirmed the follow-up closure");
-      expect(
-        evidencePayload.evidence.verification.verification.verificationNote,
+        attestationPayload.attestation.evidence.verification.verification
+          .verificationNote,
       ).toBe("Backup verified the follow-up closure");
-      expect(evidencePayload.evidence.evidence.evidenceNote).toBe(
-        "Backup collected stable follow-up references",
+      expect(
+        attestationPayload.attestation.evidence.evidence.evidenceNote,
+      ).toBe("Backup collected stable follow-up references");
+      expect(attestationPayload.attestation.attestation.attestationNote).toBe(
+        "Backup attested the stable follow-up evidence",
       );
-      expect(evidencePayload.evidence.evidence.items).toEqual([
+      expect(attestationPayload.attestation.attestation.items).toEqual([
         {
           item: "Validate queued follow-up",
-          references: ["run://queued-follow-up", "note://backup-closeout"],
+          state: "attested",
         },
         {
           item: "Close backup handoff",
-          references: ["doc://backup-handoff"],
+          state: "unattested",
         },
       ]);
-      expect(evidencedResponse.status).toBe(200);
-      expect(evidencedPayload.evidenced.totalCount).toBe(1);
+      expect(attestedResponse.status).toBe(200);
+      expect(attestedPayload.attested.totalCount).toBe(1);
       expect(
-        evidencedPayload.evidenced.items[0]?.verification.resolution.blocker
-          .progress.checklist.assignment.review.visibility.catalogEntry.entry
-          .id,
+        attestedPayload.attested.items[0]?.evidence.verification.resolution
+          .blocker.progress.checklist.assignment.review.visibility.catalogEntry
+          .entry.id,
       ).toBe("catalog_entry_evidence_api");
       expect(inspectResponse.status).toBe(200);
-      expect(inspectPayload.evidence.evidence.evidenceNote).toBe(
-        "Backup collected stable follow-up references",
+      expect(inspectPayload.attestation.attestation.attestationNote).toBe(
+        "Backup attested the stable follow-up evidence",
       );
       expect(applyResponse.status).toBe(200);
       expect(applyPayload.application.application.savedView.id).toBe(
@@ -3807,11 +3832,11 @@ describe("@runroot/api integration", () => {
           .runId,
       ).toBe(queuedRun.id);
       expect(clearResponse.status).toBe(200);
-      expect(clearPayload.evidence.evidence.evidenceNote).toBe(
-        "Backup collected stable follow-up references",
+      expect(clearPayload.attestation.attestation.attestationNote).toBe(
+        "Backup attested the stable follow-up evidence",
       );
-      expect(evidencedAfterClearResponse.status).toBe(200);
-      expect(evidencedAfterClearPayload.evidenced.totalCount).toBe(0);
+      expect(attestedAfterClearResponse.status).toBe(200);
+      expect(attestedAfterClearPayload.attested.totalCount).toBe(0);
     } finally {
       await ownerApp.close();
       await peerApp.close();
