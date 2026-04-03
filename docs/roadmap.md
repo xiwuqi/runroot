@@ -382,3 +382,26 @@ Status: completed
   platform work
 
 Status: completed
+
+## Phase 26: Cross-Run Audit Catalog Checklist Item Attestations and Attestation Notes
+
+- add a shared audit-catalog checklist-item-attestation contract over the
+  existing checklist-item-evidence and checklist-item-verification paths
+  rather than introducing provider-payload persistence, an artifact vault, or
+  a workflow engine
+- expose minimal attest, list-attested, inspect-attestation,
+  clear-attestation, and apply paths through the existing seams in SDK, API,
+  CLI, and web
+- keep operator surfaces thin while allowing evidenced verified resolved
+  blocked progressed assigned presets to carry stable per-item attestation
+  state and a thin attestation note without expanding into threaded
+  collaboration, fine-grained RBAC, multi-tenant access, dashboards, search,
+  analytics, or copied binary artifact persistence
+- execute against the formal handoff in
+  [docs/architecture/phase-26-handoff.md](./architecture/phase-26-handoff.md)
+- keep the phase focused on checklist item attestations and attestation notes
+  rather than broader checklist orchestration, broader review workflow
+  engines, broader multi-user curation, artifact-vault products, or broad
+  observability and analytics platform work
+
+Status: scope frozen
