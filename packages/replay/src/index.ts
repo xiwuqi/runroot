@@ -35,6 +35,20 @@ export {
   type PublishCrossRunAuditCatalogEntryInput,
 } from "./catalog";
 export {
+  type CreateCrossRunAuditCatalogChecklistItemAcknowledgmentInput,
+  type CrossRunAuditCatalogChecklistItemAcknowledgment,
+  type CrossRunAuditCatalogChecklistItemAcknowledgmentApplication,
+  type CrossRunAuditCatalogChecklistItemAcknowledgmentCollection,
+  type CrossRunAuditCatalogChecklistItemAcknowledgmentItem,
+  type CrossRunAuditCatalogChecklistItemAcknowledgmentState,
+  type CrossRunAuditCatalogChecklistItemAcknowledgmentStore,
+  type CrossRunAuditCatalogChecklistItemAcknowledgmentView,
+  compareCrossRunAuditCatalogChecklistItemAcknowledgment,
+  createCrossRunAuditCatalogChecklistItemAcknowledgment,
+  normalizeChecklistItemAcknowledgmentItems,
+  type UpdateCrossRunAuditCatalogChecklistItemAcknowledgmentInput,
+} from "./checklist-item-acknowledgment";
+export {
   type CreateCrossRunAuditCatalogChecklistItemAttestationInput,
   type CrossRunAuditCatalogChecklistItemAttestation,
   type CrossRunAuditCatalogChecklistItemAttestationApplication,
@@ -150,6 +164,7 @@ export {
 } from "./navigation";
 export {
   type CrossRunAuditCatalogAssignmentChecklistQuery,
+  type CrossRunAuditCatalogChecklistItemAcknowledgmentQuery,
   type CrossRunAuditCatalogChecklistItemAttestationQuery,
   type CrossRunAuditCatalogChecklistItemBlockerQuery,
   type CrossRunAuditCatalogChecklistItemEvidenceQuery,
@@ -166,6 +181,7 @@ export {
   type CrossRunAuditReader,
   type CrossRunAuditSavedViewQuery,
   createCrossRunAuditCatalogAssignmentChecklistQuery,
+  createCrossRunAuditCatalogChecklistItemAcknowledgmentQuery,
   createCrossRunAuditCatalogChecklistItemAttestationQuery,
   createCrossRunAuditCatalogChecklistItemBlockerQuery,
   createCrossRunAuditCatalogChecklistItemEvidenceQuery,

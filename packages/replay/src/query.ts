@@ -26,6 +26,17 @@ import {
   type PublishCrossRunAuditCatalogEntryInput,
 } from "./catalog";
 import {
+  type CrossRunAuditCatalogChecklistItemAcknowledgment,
+  type CrossRunAuditCatalogChecklistItemAcknowledgmentApplication,
+  type CrossRunAuditCatalogChecklistItemAcknowledgmentCollection,
+  type CrossRunAuditCatalogChecklistItemAcknowledgmentStore,
+  type CrossRunAuditCatalogChecklistItemAcknowledgmentView,
+  compareCrossRunAuditCatalogChecklistItemAcknowledgment,
+  createCrossRunAuditCatalogChecklistItemAcknowledgment,
+  normalizeChecklistItemAcknowledgmentItems,
+  type UpdateCrossRunAuditCatalogChecklistItemAcknowledgmentInput,
+} from "./checklist-item-acknowledgment";
+import {
   type CrossRunAuditCatalogChecklistItemAttestation,
   type CrossRunAuditCatalogChecklistItemAttestationApplication,
   type CrossRunAuditCatalogChecklistItemAttestationCollection,
@@ -431,6 +442,32 @@ export interface CrossRunAuditCatalogChecklistItemEvidenceQuery {
     input: UpdateCrossRunAuditCatalogChecklistItemEvidenceInput,
     timestamp: string,
   ): Promise<CrossRunAuditCatalogChecklistItemEvidenceView>;
+}
+
+export interface CrossRunAuditCatalogChecklistItemAcknowledgmentQuery {
+  applyCatalogEntry(
+    id: string,
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+  ): Promise<
+    CrossRunAuditCatalogChecklistItemAcknowledgmentApplication | undefined
+  >;
+  clearCatalogChecklistItemAcknowledgment(
+    id: string,
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+  ): Promise<CrossRunAuditCatalogChecklistItemAcknowledgmentView | undefined>;
+  getCatalogChecklistItemAcknowledgment(
+    id: string,
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+  ): Promise<CrossRunAuditCatalogChecklistItemAcknowledgmentView | undefined>;
+  listAcknowledgedCatalogEntries(
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+  ): Promise<CrossRunAuditCatalogChecklistItemAcknowledgmentCollection>;
+  setCatalogChecklistItemAcknowledgment(
+    id: string,
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+    input: UpdateCrossRunAuditCatalogChecklistItemAcknowledgmentInput,
+    timestamp: string,
+  ): Promise<CrossRunAuditCatalogChecklistItemAcknowledgmentView>;
 }
 
 export interface CrossRunAuditCatalogChecklistItemAttestationQuery {
@@ -2100,6 +2137,161 @@ export function createCrossRunAuditCatalogChecklistItemAttestationQuery(
   };
 }
 
+export function createCrossRunAuditCatalogChecklistItemAcknowledgmentQuery(
+  store: CrossRunAuditCatalogChecklistItemAcknowledgmentStore,
+  attestationEntries: CrossRunAuditCatalogChecklistItemAttestationQuery,
+): CrossRunAuditCatalogChecklistItemAcknowledgmentQuery {
+  return {
+    async applyCatalogEntry(id, viewer) {
+      const acknowledgment =
+        await resolveCatalogChecklistItemAcknowledgmentView(
+          store,
+          attestationEntries,
+          id,
+          viewer,
+        );
+
+      if (!acknowledgment) {
+        return undefined;
+      }
+
+      const application = await attestationEntries.applyCatalogEntry(
+        id,
+        viewer,
+      );
+
+      if (!application) {
+        return undefined;
+      }
+
+      return {
+        acknowledgment,
+        application,
+      };
+    },
+
+    async clearCatalogChecklistItemAcknowledgment(id, viewer) {
+      const acknowledgment =
+        await resolveCatalogChecklistItemAcknowledgmentView(
+          store,
+          attestationEntries,
+          id,
+          viewer,
+        );
+
+      if (!acknowledgment) {
+        return undefined;
+      }
+
+      await store.deleteCatalogChecklistItemAcknowledgment(id);
+
+      return acknowledgment;
+    },
+
+    async getCatalogChecklistItemAcknowledgment(id, viewer) {
+      return resolveCatalogChecklistItemAcknowledgmentView(
+        store,
+        attestationEntries,
+        id,
+        viewer,
+      );
+    },
+
+    async listAcknowledgedCatalogEntries(viewer) {
+      const acknowledgmentEntries = [
+        ...(await store.listCatalogChecklistItemAcknowledgments()),
+      ].sort(compareCrossRunAuditCatalogChecklistItemAcknowledgment);
+      const items = (
+        await Promise.all(
+          acknowledgmentEntries.map(async (acknowledgment) =>
+            resolveCatalogChecklistItemAcknowledgmentFromValue(
+              attestationEntries,
+              acknowledgment,
+              viewer,
+            ),
+          ),
+        )
+      ).filter(
+        (
+          acknowledgment,
+        ): acknowledgment is CrossRunAuditCatalogChecklistItemAcknowledgmentView =>
+          acknowledgment !== undefined,
+      );
+
+      return {
+        items,
+        totalCount: items.length,
+      };
+    },
+
+    async setCatalogChecklistItemAcknowledgment(id, viewer, input, timestamp) {
+      const attestation =
+        await attestationEntries.getCatalogChecklistItemAttestation(id, viewer);
+
+      if (!attestation) {
+        throw new Error(
+          `Catalog entry "${id}" is not attested and visible to operator "${viewer.operatorId}".`,
+        );
+      }
+
+      const allowedItems = attestation.attestation.items.map(
+        (item) => item.item,
+      );
+      const normalizedItems = normalizeChecklistItemAcknowledgmentItems(
+        input.items,
+        allowedItems,
+      );
+
+      if (normalizedItems.length === 0) {
+        throw new Error(
+          "Catalog checklist item acknowledgments require at least one checklist item acknowledgment entry.",
+        );
+      }
+
+      const existingAcknowledgment =
+        await store.getCatalogChecklistItemAcknowledgment(id);
+      const normalizedAcknowledgmentNote = input.acknowledgmentNote?.trim();
+      const acknowledgment = existingAcknowledgment
+        ? {
+            ...(input.acknowledgmentNote === undefined
+              ? existingAcknowledgment.acknowledgmentNote
+                ? {
+                    acknowledgmentNote:
+                      existingAcknowledgment.acknowledgmentNote,
+                  }
+                : {}
+              : normalizedAcknowledgmentNote
+                ? { acknowledgmentNote: normalizedAcknowledgmentNote }
+                : {}),
+            catalogEntryId: id,
+            createdAt: existingAcknowledgment.createdAt,
+            items: normalizedItems,
+            kind: existingAcknowledgment.kind,
+            operatorId: viewer.operatorId,
+            scopeId: viewer.scopeId,
+            updatedAt: timestamp,
+          }
+        : createCrossRunAuditCatalogChecklistItemAcknowledgment({
+            ...(normalizedAcknowledgmentNote
+              ? { acknowledgmentNote: normalizedAcknowledgmentNote }
+              : {}),
+            catalogEntryId: id,
+            items: normalizedItems,
+            operatorId: viewer.operatorId,
+            scopeId: viewer.scopeId,
+            timestamp,
+          });
+
+      await store.saveCatalogChecklistItemAcknowledgment(acknowledgment);
+
+      return {
+        acknowledgment,
+        attestation,
+      };
+    },
+  };
+}
+
 async function resolveCatalogEntryView(
   store: CrossRunAuditCatalogStore,
   savedViews: CrossRunAuditSavedViewQuery,
@@ -2573,5 +2765,58 @@ async function resolveCatalogChecklistItemAttestationFromValue(
       items: normalizedItems,
     },
     evidence,
+  };
+}
+
+async function resolveCatalogChecklistItemAcknowledgmentView(
+  store: CrossRunAuditCatalogChecklistItemAcknowledgmentStore,
+  attestationQuery: CrossRunAuditCatalogChecklistItemAttestationQuery,
+  id: string,
+  viewer: CrossRunAuditCatalogVisibilityViewer,
+): Promise<CrossRunAuditCatalogChecklistItemAcknowledgmentView | undefined> {
+  const acknowledgment = await store.getCatalogChecklistItemAcknowledgment(id);
+
+  return acknowledgment
+    ? resolveCatalogChecklistItemAcknowledgmentFromValue(
+        attestationQuery,
+        acknowledgment,
+        viewer,
+      )
+    : undefined;
+}
+
+async function resolveCatalogChecklistItemAcknowledgmentFromValue(
+  attestationQuery: CrossRunAuditCatalogChecklistItemAttestationQuery,
+  acknowledgment: CrossRunAuditCatalogChecklistItemAcknowledgment,
+  viewer: CrossRunAuditCatalogVisibilityViewer,
+): Promise<CrossRunAuditCatalogChecklistItemAcknowledgmentView | undefined> {
+  if (acknowledgment.scopeId !== viewer.scopeId) {
+    return undefined;
+  }
+
+  const attestation = await attestationQuery.getCatalogChecklistItemAttestation(
+    acknowledgment.catalogEntryId,
+    viewer,
+  );
+
+  if (!attestation) {
+    return undefined;
+  }
+
+  const normalizedItems = normalizeChecklistItemAcknowledgmentItems(
+    acknowledgment.items,
+    attestation.attestation.items.map((item) => item.item),
+  );
+
+  if (normalizedItems.length === 0) {
+    return undefined;
+  }
+
+  return {
+    acknowledgment: {
+      ...acknowledgment,
+      items: normalizedItems,
+    },
+    attestation,
   };
 }
