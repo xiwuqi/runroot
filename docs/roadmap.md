@@ -453,9 +453,10 @@ Status: completed
 
 ## Phase 29: Cross-Run Audit Catalog Checklist Item Exceptions and Exception Notes
 
-- suggested freeze: add a shared audit-catalog checklist-item-exception
-  contract over the existing checklist-item-signoff and
-  checklist-item-acknowledgment paths rather than introducing approval
+- add a shared audit-catalog checklist-item-exception
+  contract over the existing checklist-item-signoff,
+  checklist-item-acknowledgment, and checklist-item-attestation paths rather
+  than introducing approval
   products, workflow gating, or a workflow engine
 - expose minimal record-exception, list-excepted, inspect-exception,
   clear-exception, and apply paths through the existing seams in SDK, API,
@@ -473,4 +474,4 @@ Status: completed
   engines, broader multi-user curation, approval products, workflow gating,
   or broad observability and analytics platform work
 
-Status: scope frozen
+Status: completed
