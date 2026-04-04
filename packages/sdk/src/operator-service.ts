@@ -25,6 +25,7 @@ import {
   createConfiguredAuditCatalogChecklistItemEvidenceStore,
   createConfiguredAuditCatalogChecklistItemProgressStore,
   createConfiguredAuditCatalogChecklistItemResolutionStore,
+  createConfiguredAuditCatalogChecklistItemSignoffStore,
   createConfiguredAuditCatalogChecklistItemVerificationStore,
   createConfiguredAuditCatalogReviewAssignmentStore,
   createConfiguredAuditCatalogReviewSignalStore,
@@ -65,6 +66,10 @@ import {
   type CrossRunAuditCatalogChecklistItemResolutionItem,
   type CrossRunAuditCatalogChecklistItemResolutionStore,
   type CrossRunAuditCatalogChecklistItemResolutionView,
+  type CrossRunAuditCatalogChecklistItemSignoffCollection,
+  type CrossRunAuditCatalogChecklistItemSignoffItem,
+  type CrossRunAuditCatalogChecklistItemSignoffStore,
+  type CrossRunAuditCatalogChecklistItemSignoffView,
   type CrossRunAuditCatalogChecklistItemVerificationCollection,
   type CrossRunAuditCatalogChecklistItemVerificationItem,
   type CrossRunAuditCatalogChecklistItemVerificationStore,
@@ -102,6 +107,7 @@ import {
   createCrossRunAuditCatalogChecklistItemEvidenceQuery,
   createCrossRunAuditCatalogChecklistItemProgressQuery,
   createCrossRunAuditCatalogChecklistItemResolutionQuery,
+  createCrossRunAuditCatalogChecklistItemSignoffQuery,
   createCrossRunAuditCatalogChecklistItemVerificationQuery,
   createCrossRunAuditCatalogQuery,
   createCrossRunAuditCatalogReviewAssignmentQuery,
@@ -217,6 +223,11 @@ export interface AcknowledgeAuditCatalogEntryInput {
   readonly items: readonly CrossRunAuditCatalogChecklistItemAcknowledgmentItem[];
 }
 
+export interface SignOffAuditCatalogEntryInput {
+  readonly signoffNote?: string;
+  readonly items: readonly CrossRunAuditCatalogChecklistItemSignoffItem[];
+}
+
 export interface ReviewAuditCatalogEntryInput {
   readonly note?: string;
   readonly state: CrossRunAuditCatalogReviewState;
@@ -245,6 +256,10 @@ export interface RunrootOperatorService {
     id: string,
     input: AttestAuditCatalogEntryInput,
   ): Promise<CrossRunAuditCatalogChecklistItemAttestationView>;
+  signOffCatalogEntry(
+    id: string,
+    input: SignOffAuditCatalogEntryInput,
+  ): Promise<CrossRunAuditCatalogChecklistItemSignoffView>;
   acknowledgeCatalogEntry(
     id: string,
     input: AcknowledgeAuditCatalogEntryInput,
@@ -270,6 +285,9 @@ export interface RunrootOperatorService {
   clearCatalogChecklistItemAttestation(
     id: string,
   ): Promise<CrossRunAuditCatalogChecklistItemAttestationView>;
+  clearCatalogChecklistItemSignoff(
+    id: string,
+  ): Promise<CrossRunAuditCatalogChecklistItemSignoffView>;
   clearCatalogChecklistItemAcknowledgment(
     id: string,
   ): Promise<CrossRunAuditCatalogChecklistItemAcknowledgmentView>;
@@ -300,6 +318,9 @@ export interface RunrootOperatorService {
   getCatalogChecklistItemAttestation(
     id: string,
   ): Promise<CrossRunAuditCatalogChecklistItemAttestationView>;
+  getCatalogChecklistItemSignoff(
+    id: string,
+  ): Promise<CrossRunAuditCatalogChecklistItemSignoffView>;
   getCatalogChecklistItemAcknowledgment(
     id: string,
   ): Promise<CrossRunAuditCatalogChecklistItemAcknowledgmentView>;
@@ -340,6 +361,7 @@ export interface RunrootOperatorService {
     filters?: CrossRunAuditDrilldownFilters,
   ): Promise<CrossRunAuditDrilldownResults>;
   listAssignedCatalogEntries(): Promise<CrossRunAuditCatalogReviewAssignmentCollection>;
+  listSignedOffCatalogEntries(): Promise<CrossRunAuditCatalogChecklistItemSignoffCollection>;
   listAcknowledgedCatalogEntries(): Promise<CrossRunAuditCatalogChecklistItemAcknowledgmentCollection>;
   listBlockedCatalogEntries(): Promise<CrossRunAuditCatalogChecklistItemBlockerCollection>;
   listChecklistedCatalogEntries(): Promise<CrossRunAuditCatalogAssignmentChecklistCollection>;
@@ -380,6 +402,7 @@ export interface RunrootOperatorService {
 export interface RunrootOperatorServiceOptions {
   readonly approvalIdGenerator?: () => string;
   readonly catalogAssignmentChecklistStore?: CrossRunAuditCatalogAssignmentChecklistStore;
+  readonly catalogChecklistItemSignoffStore?: CrossRunAuditCatalogChecklistItemSignoffStore;
   readonly catalogChecklistItemAcknowledgmentStore?: CrossRunAuditCatalogChecklistItemAcknowledgmentStore;
   readonly catalogChecklistItemAttestationStore?: CrossRunAuditCatalogChecklistItemAttestationStore;
   readonly catalogChecklistItemBlockerStore?: CrossRunAuditCatalogChecklistItemBlockerStore;
@@ -601,6 +624,19 @@ export function createRunrootOperatorService(
         ? { workspacePath: options.workspacePath }
         : {}),
     });
+  const catalogChecklistItemSignoffStore =
+    options.catalogChecklistItemSignoffStore ??
+    createConfiguredAuditCatalogChecklistItemSignoffStore({
+      ...(options.databaseUrl ? { databaseUrl: options.databaseUrl } : {}),
+      ...(options.env ? { env: options.env } : {}),
+      ...(options.persistenceDriver
+        ? { driver: options.persistenceDriver }
+        : {}),
+      ...(options.sqlitePath ? { sqlitePath: options.sqlitePath } : {}),
+      ...(options.workspacePath
+        ? { workspacePath: options.workspacePath }
+        : {}),
+    });
   const catalogChecklistItemAcknowledgmentStore =
     options.catalogChecklistItemAcknowledgmentStore ??
     createConfiguredAuditCatalogChecklistItemAcknowledgmentStore({
@@ -772,6 +808,11 @@ export function createRunrootOperatorService(
       catalogChecklistItemAcknowledgmentStore,
       crossRunAuditCatalogChecklistItemAttestations,
     );
+  const crossRunAuditCatalogChecklistItemSignoffs =
+    createCrossRunAuditCatalogChecklistItemSignoffQuery(
+      catalogChecklistItemSignoffStore,
+      crossRunAuditCatalogChecklistItemAcknowledgments,
+    );
   const persistenceLocation = persistenceConfig.location;
 
   return {
@@ -874,6 +915,19 @@ export function createRunrootOperatorService(
         );
       } catch (error) {
         throw normalizeCatalogChecklistItemAcknowledgmentError(error, id);
+      }
+    },
+
+    async signOffCatalogEntry(id, input) {
+      try {
+        return await crossRunAuditCatalogChecklistItemSignoffs.setCatalogChecklistItemSignoff(
+          id,
+          operatorIdentity,
+          input,
+          now(),
+        );
+      } catch (error) {
+        throw normalizeCatalogChecklistItemSignoffError(error, id);
       }
     },
 
@@ -998,6 +1052,20 @@ export function createRunrootOperatorService(
       }
 
       return acknowledgment;
+    },
+
+    async clearCatalogChecklistItemSignoff(id) {
+      const signoff =
+        await crossRunAuditCatalogChecklistItemSignoffs.clearCatalogChecklistItemSignoff(
+          id,
+          operatorIdentity,
+        );
+
+      if (!signoff) {
+        throw new OperatorNotFoundError("catalog checklist item signoff", id);
+      }
+
+      return signoff;
     },
 
     async clearCatalogChecklistItemEvidence(id) {
@@ -1206,6 +1274,20 @@ export function createRunrootOperatorService(
       return acknowledgment;
     },
 
+    async getCatalogChecklistItemSignoff(id) {
+      const signoff =
+        await crossRunAuditCatalogChecklistItemSignoffs.getCatalogChecklistItemSignoff(
+          id,
+          operatorIdentity,
+        );
+
+      if (!signoff) {
+        throw new OperatorNotFoundError("catalog checklist item signoff", id);
+      }
+
+      return signoff;
+    },
+
     async getCatalogChecklistItemEvidence(id) {
       const evidence =
         await crossRunAuditCatalogChecklistItemEvidence.getCatalogChecklistItemEvidence(
@@ -1371,6 +1453,12 @@ export function createRunrootOperatorService(
 
     async listAcknowledgedCatalogEntries() {
       return crossRunAuditCatalogChecklistItemAcknowledgments.listAcknowledgedCatalogEntries(
+        operatorIdentity,
+      );
+    },
+
+    async listSignedOffCatalogEntries() {
+      return crossRunAuditCatalogChecklistItemSignoffs.listSignedOffCatalogEntries(
         operatorIdentity,
       );
     },
@@ -2051,6 +2139,44 @@ function normalizeCatalogChecklistItemAcknowledgmentError(
   ) {
     return new OperatorNotFoundError(
       "catalog checklist item acknowledgment",
+      catalogEntryId,
+    );
+  }
+
+  return normalizeOperatorError(error);
+}
+
+function normalizeCatalogChecklistItemSignoffError(
+  error: unknown,
+  catalogEntryId: string,
+): Error {
+  if (
+    error instanceof OperatorConflictError ||
+    error instanceof OperatorInputError ||
+    error instanceof OperatorNotFoundError
+  ) {
+    return error;
+  }
+
+  if (
+    error instanceof Error &&
+    (error.message.startsWith("Catalog checklist item signoffs require") ||
+      error.message.startsWith(`Catalog checklist item signoff "`) ||
+      error.message.startsWith(
+        `Catalog entry "${catalogEntryId}" does not define checklist item acknowledgment entries`,
+      ))
+  ) {
+    return new OperatorInputError(error.message);
+  }
+
+  if (
+    error instanceof Error &&
+    error.message.startsWith(
+      `Catalog entry "${catalogEntryId}" is not acknowledged and visible to operator`,
+    )
+  ) {
+    return new OperatorNotFoundError(
+      "catalog checklist item signoff",
       catalogEntryId,
     );
   }

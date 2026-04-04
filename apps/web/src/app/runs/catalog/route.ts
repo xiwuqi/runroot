@@ -551,6 +551,53 @@ export async function POST(request: Request) {
       return Response.redirect(redirectUrl, 303);
     }
 
+    if (intent === "sign-off") {
+      const catalogEntryId = readTrimmedFormValue(formData, "catalogEntryId");
+      const signoffItems = readChecklistItemSignoffItems(
+        formData.get("signoffItems"),
+      );
+      const signoffNoteValue = formData.get("signoffNote");
+
+      if (!catalogEntryId) {
+        appendFlashMessage(
+          redirectUrl,
+          "error",
+          "A catalog entry id is required to update checklist item sign-off metadata.",
+        );
+
+        return Response.redirect(redirectUrl, 303);
+      }
+
+      if (signoffItems.length === 0) {
+        appendFlashMessage(
+          redirectUrl,
+          "error",
+          "At least one checklist item sign-off entry is required.",
+        );
+
+        return Response.redirect(redirectUrl, 303);
+      }
+
+      const signoff =
+        await createRunrootApiClient().setAuditCatalogChecklistItemSignoff(
+          catalogEntryId,
+          {
+            ...(typeof signoffNoteValue === "string"
+              ? { signoffNote: signoffNoteValue }
+              : {}),
+            items: signoffItems,
+          },
+        );
+
+      appendFlashMessage(
+        redirectUrl,
+        "notice",
+        `Checklist item sign-offs for ${signoff.acknowledgment.attestation.evidence.verification.resolution.blocker.progress.checklist.assignment.review.visibility.catalogEntry.entry.name} updated.`,
+      );
+
+      return Response.redirect(redirectUrl, 303);
+    }
+
     if (intent === "clear-review") {
       const catalogEntryId = readTrimmedFormValue(formData, "catalogEntryId");
 
@@ -762,6 +809,33 @@ export async function POST(request: Request) {
         redirectUrl,
         "notice",
         `Checklist item acknowledgments for ${acknowledgment.attestation.evidence.verification.resolution.blocker.progress.checklist.assignment.review.visibility.catalogEntry.entry.name} cleared.`,
+      );
+
+      return Response.redirect(redirectUrl, 303);
+    }
+
+    if (intent === "clear-sign-off") {
+      const catalogEntryId = readTrimmedFormValue(formData, "catalogEntryId");
+
+      if (!catalogEntryId) {
+        appendFlashMessage(
+          redirectUrl,
+          "error",
+          "A catalog entry id is required to clear checklist item sign-off metadata.",
+        );
+
+        return Response.redirect(redirectUrl, 303);
+      }
+
+      const signoff =
+        await createRunrootApiClient().clearAuditCatalogChecklistItemSignoff(
+          catalogEntryId,
+        );
+
+      appendFlashMessage(
+        redirectUrl,
+        "notice",
+        `Checklist item sign-offs for ${signoff.acknowledgment.attestation.evidence.verification.resolution.blocker.progress.checklist.assignment.review.visibility.catalogEntry.entry.name} cleared.`,
       );
 
       return Response.redirect(redirectUrl, 303);
@@ -1207,6 +1281,52 @@ function readChecklistItemAcknowledgmentItems(
       if (rawState !== "acknowledged" && rawState !== "unacknowledged") {
         throw new Error(
           `Checklist item acknowledgment state must be acknowledged or unacknowledged for "${item}".`,
+        );
+      }
+
+      return {
+        item,
+        state: rawState,
+      };
+    });
+}
+
+function readChecklistItemSignoffItems(
+  value: FormDataEntryValue | null,
+): readonly {
+  readonly item: string;
+  readonly state: "signed-off" | "unsigned";
+}[] {
+  if (typeof value !== "string") {
+    return [];
+  }
+
+  return value
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .map((line) => {
+      const separatorIndex = line.indexOf(":");
+
+      if (separatorIndex < 0) {
+        return {
+          item: line,
+          state: "unsigned" as const,
+        };
+      }
+
+      const rawState = line.slice(0, separatorIndex).trim();
+      const item = line.slice(separatorIndex + 1).trim();
+
+      if (item.length === 0) {
+        throw new Error(
+          "Checklist item sign-off lines require a non-empty item.",
+        );
+      }
+
+      if (rawState !== "signed-off" && rawState !== "unsigned") {
+        throw new Error(
+          `Checklist item sign-off state must be signed-off or unsigned for "${item}".`,
         );
       }
 

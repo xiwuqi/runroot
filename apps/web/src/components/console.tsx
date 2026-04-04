@@ -22,6 +22,9 @@ import type {
   ApiAuditCatalogChecklistItemResolutionCollection,
   ApiAuditCatalogChecklistItemResolutionItem,
   ApiAuditCatalogChecklistItemResolutionView,
+  ApiAuditCatalogChecklistItemSignoffCollection,
+  ApiAuditCatalogChecklistItemSignoffItem,
+  ApiAuditCatalogChecklistItemSignoffView,
   ApiAuditCatalogChecklistItemVerificationCollection,
   ApiAuditCatalogChecklistItemVerificationItem,
   ApiAuditCatalogChecklistItemVerificationView,
@@ -1378,6 +1381,157 @@ export function ChecklistItemAcknowledgmentsView({
   );
 }
 
+export function ChecklistItemSignoffsView({
+  activeCatalogChecklistItemSignoff,
+  signedOffEntries,
+}: Readonly<{
+  activeCatalogChecklistItemSignoff?: ApiAuditCatalogChecklistItemSignoffView;
+  signedOffEntries: ApiAuditCatalogChecklistItemSignoffCollection;
+}>) {
+  return (
+    <section className="card">
+      <div className="row spread">
+        <div>
+          <div className="card-eyebrow">
+            Phase 28 / Checklist Item Sign-Offs
+          </div>
+          <h2>Checklist item sign-offs</h2>
+          <p className="empty-copy">
+            Track thin per-item sign-offs and a single sign-off note on
+            acknowledged presets without turning the console into an approval
+            product, workflow engine, or collaboration surface.
+          </p>
+        </div>
+        <div className="timeline-count">
+          {signedOffEntries.totalCount} signed-off preset(s)
+        </div>
+      </div>
+
+      {activeCatalogChecklistItemSignoff ? (
+        <div className="inline-note">
+          Active sign-offs:{" "}
+          <strong>
+            {
+              activeCatalogChecklistItemSignoff.acknowledgment.attestation
+                .evidence.verification.resolution.blocker.progress.checklist
+                .assignment.review.visibility.catalogEntry.entry.name
+            }
+          </strong>
+          {" · "}
+          {formatSignoffSummary(
+            activeCatalogChecklistItemSignoff.signoff.items,
+          )}
+          {activeCatalogChecklistItemSignoff.signoff.signoffNote
+            ? ` · ${activeCatalogChecklistItemSignoff.signoff.signoffNote}`
+            : ""}
+        </div>
+      ) : null}
+
+      {signedOffEntries.items.length === 0 ? (
+        <p className="empty-copy">
+          No checklist item sign-offs yet. Record acknowledgments first, then
+          save thin sign-off metadata through the shared operator seam.
+        </p>
+      ) : (
+        <ol className="timeline-list">
+          {signedOffEntries.items.map((signoffView) => (
+            <li
+              className="timeline-entry"
+              key={
+                signoffView.acknowledgment.attestation.evidence.verification
+                  .resolution.blocker.progress.checklist.assignment.review
+                  .visibility.catalogEntry.entry.id
+              }
+            >
+              <div className="row spread">
+                <div>
+                  <strong>
+                    {
+                      signoffView.acknowledgment.attestation.evidence
+                        .verification.resolution.blocker.progress.checklist
+                        .assignment.review.visibility.catalogEntry.entry.name
+                    }
+                  </strong>
+                  <div className="timeline-meta">
+                    {formatSignoffSummary(signoffView.signoff.items)}
+                    {" · "}
+                    {formatAcknowledgmentSummary(
+                      signoffView.acknowledgment.acknowledgment.items,
+                    )}
+                    {" · "}
+                    {formatAttestationSummary(
+                      signoffView.acknowledgment.attestation.attestation.items,
+                    )}
+                  </div>
+                </div>
+                <span>{formatTimestamp(signoffView.signoff.updatedAt)}</span>
+              </div>
+              <ul className="approval-history">
+                {signoffView.signoff.items.map((item) => (
+                  <li
+                    key={`${signoffView.signoff.catalogEntryId}:${item.item}`}
+                  >
+                    <strong>{item.state}</strong>: {item.item}
+                  </li>
+                ))}
+              </ul>
+              {signoffView.signoff.signoffNote ? (
+                <p className="empty-copy">{signoffView.signoff.signoffNote}</p>
+              ) : null}
+              <div className="timeline-meta">
+                operator {signoffView.signoff.operatorId} · scope{" "}
+                {signoffView.signoff.scopeId}
+              </div>
+              <div className="row spread">
+                <a
+                  className="link-button"
+                  href={buildCatalogEntryHref(
+                    signoffView.acknowledgment.attestation.evidence.verification
+                      .resolution.blocker.progress.checklist.assignment.review
+                      .visibility.catalogEntry.entry.id,
+                  )}
+                >
+                  Apply signed-off preset
+                </a>
+                <form
+                  action="/runs/catalog"
+                  className="action-form"
+                  method="post"
+                >
+                  <input
+                    name="returnTo"
+                    type="hidden"
+                    value={buildCatalogEntryHref(
+                      signoffView.acknowledgment.attestation.evidence
+                        .verification.resolution.blocker.progress.checklist
+                        .assignment.review.visibility.catalogEntry.entry.id,
+                    )}
+                  />
+                  <input name="intent" type="hidden" value="clear-sign-off" />
+                  <input
+                    name="catalogEntryId"
+                    type="hidden"
+                    value={
+                      signoffView.acknowledgment.attestation.evidence
+                        .verification.resolution.blocker.progress.checklist
+                        .assignment.review.visibility.catalogEntry.entry.id
+                    }
+                  />
+                  <button type="submit">Clear sign-offs</button>
+                </form>
+              </div>
+              {activeCatalogChecklistItemSignoff?.signoff.catalogEntryId ===
+              signoffView.signoff.catalogEntryId ? (
+                <div className="timeline-meta">Active sign-offs selected</div>
+              ) : null}
+            </li>
+          ))}
+        </ol>
+      )}
+    </section>
+  );
+}
+
 export function CatalogReviewAssignmentsView({
   activeCatalogReviewAssignment,
   assignedEntries,
@@ -1613,6 +1767,7 @@ export function CatalogReviewSignalsView({
 export function AuditViewCatalogsView({
   activeCatalogEntry,
   activeCatalogChecklistItemBlocker,
+  activeCatalogChecklistItemSignoff,
   activeCatalogChecklistItemAcknowledgment,
   activeCatalogChecklistItemAttestation,
   activeCatalogChecklistItemEvidence,
@@ -1620,6 +1775,7 @@ export function AuditViewCatalogsView({
   activeCatalogChecklistItemVerification,
   activeCatalogChecklistItemProgress,
   assignedEntries,
+  signedOffEntries,
   acknowledgedEntries,
   attestedEntries,
   blockedEntries,
@@ -1633,6 +1789,7 @@ export function AuditViewCatalogsView({
 }: Readonly<{
   activeCatalogEntry?: ApiAuditCatalogVisibilityView;
   activeCatalogChecklistItemBlocker?: ApiAuditCatalogChecklistItemBlockerView;
+  activeCatalogChecklistItemSignoff?: ApiAuditCatalogChecklistItemSignoffView;
   activeCatalogChecklistItemAcknowledgment?: ApiAuditCatalogChecklistItemAcknowledgmentView;
   activeCatalogChecklistItemAttestation?: ApiAuditCatalogChecklistItemAttestationView;
   activeCatalogChecklistItemEvidence?: ApiAuditCatalogChecklistItemEvidenceView;
@@ -1640,6 +1797,7 @@ export function AuditViewCatalogsView({
   activeCatalogChecklistItemVerification?: ApiAuditCatalogChecklistItemVerificationView;
   activeCatalogChecklistItemProgress?: ApiAuditCatalogChecklistItemProgressView;
   assignedEntries: ApiAuditCatalogReviewAssignmentCollection;
+  signedOffEntries: ApiAuditCatalogChecklistItemSignoffCollection;
   acknowledgedEntries: ApiAuditCatalogChecklistItemAcknowledgmentCollection;
   attestedEntries: ApiAuditCatalogChecklistItemAttestationCollection;
   blockedEntries: ApiAuditCatalogChecklistItemBlockerCollection;
@@ -1739,6 +1897,17 @@ export function AuditViewCatalogsView({
         ] as const,
     ),
   );
+  const signoffsByCatalogEntryId = new Map(
+    signedOffEntries.items.map(
+      (item) =>
+        [
+          item.acknowledgment.attestation.evidence.verification.resolution
+            .blocker.progress.checklist.assignment.review.visibility
+            .catalogEntry.entry.id,
+          item,
+        ] as const,
+    ),
+  );
 
   return (
     <section className="card">
@@ -1825,6 +1994,15 @@ export function AuditViewCatalogsView({
                     : acknowledgmentsByCatalogEntryId.get(
                         catalogEntry.catalogEntry.entry.id,
                       );
+                const signoff =
+                  activeCatalogChecklistItemSignoff?.acknowledgment.attestation
+                    .evidence.verification.resolution.blocker.progress.checklist
+                    .assignment.review.visibility.catalogEntry.entry.id ===
+                  catalogEntry.catalogEntry.entry.id
+                    ? activeCatalogChecklistItemSignoff
+                    : signoffsByCatalogEntryId.get(
+                        catalogEntry.catalogEntry.entry.id,
+                      );
                 const reviewSignal = reviewSignalsByCatalogEntryId.get(
                   catalogEntry.catalogEntry.entry.id,
                 );
@@ -1866,6 +2044,14 @@ export function AuditViewCatalogsView({
                             ? ` · ${formatAttestationSummary(
                                 attestation.attestation.items,
                               )}`
+                            : ""}
+                          {acknowledgment
+                            ? ` · ${formatAcknowledgmentSummary(
+                                acknowledgment.acknowledgment.items,
+                              )}`
+                            : ""}
+                          {signoff
+                            ? ` · ${formatSignoffSummary(signoff.signoff.items)}`
                             : ""}
                         </div>
                       </div>
@@ -2577,6 +2763,57 @@ export function AuditViewCatalogsView({
                             {acknowledgment
                               ? "Update acknowledgments"
                               : "Save acknowledgments"}
+                          </button>
+                        </div>
+                      </form>
+                    ) : null}
+                    {acknowledgment ? (
+                      <form
+                        action="/runs/catalog"
+                        className="decision-form"
+                        method="post"
+                      >
+                        <input
+                          name="returnTo"
+                          type="hidden"
+                          value={buildCatalogEntryHref(
+                            catalogEntry.catalogEntry.entry.id,
+                          )}
+                        />
+                        <input name="intent" type="hidden" value="sign-off" />
+                        <input
+                          name="catalogEntryId"
+                          type="hidden"
+                          value={catalogEntry.catalogEntry.entry.id}
+                        />
+                        <div className="data-grid">
+                          <label>
+                            <span>Checklist item sign-offs</span>
+                            <textarea
+                              className="note-input"
+                              defaultValue={formatChecklistItemSignoffLines(
+                                acknowledgment.acknowledgment.items,
+                                signoff?.signoff.items,
+                              )}
+                              name="signoffItems"
+                              placeholder="signed-off: Validate queued follow-up"
+                              rows={4}
+                            />
+                          </label>
+                          <label>
+                            <span>Sign-off note</span>
+                            <input
+                              defaultValue={signoff?.signoff.signoffNote ?? ""}
+                              name="signoffNote"
+                              placeholder="Optional thin sign-off note"
+                              type="text"
+                            />
+                          </label>
+                        </div>
+                        <div className="row spread">
+                          <div />
+                          <button type="submit">
+                            {signoff ? "Update sign-offs" : "Save sign-offs"}
                           </button>
                         </div>
                       </form>
@@ -4321,6 +4558,16 @@ function formatAcknowledgmentSummary(
   return `${acknowledgedCount}/${items.length} acknowledged`;
 }
 
+function formatSignoffSummary(
+  items: readonly ApiAuditCatalogChecklistItemSignoffItem[],
+): string {
+  const signedOffCount = items.filter(
+    (item) => item.state === "signed-off",
+  ).length;
+
+  return `${signedOffCount}/${items.length} signed off`;
+}
+
 function formatChecklistItemProgressLines(
   checklistItems: readonly string[],
   progressItems:
@@ -4436,6 +4683,23 @@ function formatChecklistItemAcknowledgmentLines(
     .map(
       (item) =>
         `${acknowledgmentByItem.get(item.item) ?? "unacknowledged"}: ${item.item}`,
+    )
+    .join("\n");
+}
+
+function formatChecklistItemSignoffLines(
+  acknowledgmentItems:
+    | readonly ApiAuditCatalogChecklistItemAcknowledgmentItem[]
+    | undefined,
+  signoffItems: readonly ApiAuditCatalogChecklistItemSignoffItem[] | undefined,
+): string {
+  const signoffByItem = new Map(
+    (signoffItems ?? []).map((item) => [item.item, item.state] as const),
+  );
+
+  return (acknowledgmentItems ?? [])
+    .map(
+      (item) => `${signoffByItem.get(item.item) ?? "unsigned"}: ${item.item}`,
     )
     .join("\n");
 }

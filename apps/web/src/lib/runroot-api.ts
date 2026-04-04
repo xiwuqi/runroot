@@ -584,6 +584,32 @@ export interface ApiAuditCatalogChecklistItemAcknowledgmentCollection {
   readonly totalCount: number;
 }
 
+export interface ApiAuditCatalogChecklistItemSignoffItem {
+  readonly item: string;
+  readonly state: "signed-off" | "unsigned";
+}
+
+export interface ApiAuditCatalogChecklistItemSignoff {
+  readonly catalogEntryId: string;
+  readonly createdAt: string;
+  readonly items: readonly ApiAuditCatalogChecklistItemSignoffItem[];
+  readonly kind: "catalog-checklist-item-signoff";
+  readonly operatorId: string;
+  readonly scopeId: string;
+  readonly signoffNote?: string;
+  readonly updatedAt: string;
+}
+
+export interface ApiAuditCatalogChecklistItemSignoffView {
+  readonly acknowledgment: ApiAuditCatalogChecklistItemAcknowledgmentView;
+  readonly signoff: ApiAuditCatalogChecklistItemSignoff;
+}
+
+export interface ApiAuditCatalogChecklistItemSignoffCollection {
+  readonly items: readonly ApiAuditCatalogChecklistItemSignoffView[];
+  readonly totalCount: number;
+}
+
 export interface ApiAuditCatalogChecklistItemAttestationItem {
   readonly item: string;
   readonly state: "attested" | "unattested";
@@ -656,6 +682,11 @@ export interface UpdateApiAuditCatalogChecklistItemAcknowledgmentInput {
   readonly items: readonly ApiAuditCatalogChecklistItemAcknowledgmentItem[];
 }
 
+export interface UpdateApiAuditCatalogChecklistItemSignoffInput {
+  readonly items: readonly ApiAuditCatalogChecklistItemSignoffItem[];
+  readonly signoffNote?: string;
+}
+
 export interface UpdateApiAuditCatalogReviewAssignmentInput {
   readonly assigneeId: string;
   readonly handoffNote?: string;
@@ -704,6 +735,9 @@ export interface RunrootApiClient {
   clearAuditCatalogChecklistItemEvidence(
     catalogEntryId: string,
   ): Promise<ApiAuditCatalogChecklistItemEvidenceView>;
+  clearAuditCatalogChecklistItemSignoff(
+    catalogEntryId: string,
+  ): Promise<ApiAuditCatalogChecklistItemSignoffView>;
   clearAuditCatalogChecklistItemAcknowledgment(
     catalogEntryId: string,
   ): Promise<ApiAuditCatalogChecklistItemAcknowledgmentView>;
@@ -737,6 +771,9 @@ export interface RunrootApiClient {
   getAuditCatalogChecklistItemEvidence(
     catalogEntryId: string,
   ): Promise<ApiAuditCatalogChecklistItemEvidenceView>;
+  getAuditCatalogChecklistItemSignoff(
+    catalogEntryId: string,
+  ): Promise<ApiAuditCatalogChecklistItemSignoffView>;
   getAuditCatalogChecklistItemAcknowledgment(
     catalogEntryId: string,
   ): Promise<ApiAuditCatalogChecklistItemAcknowledgmentView>;
@@ -775,6 +812,7 @@ export interface RunrootApiClient {
   getSavedAuditView(savedViewId: string): Promise<ApiAuditSavedView>;
   listAssignedAuditCatalogEntries(): Promise<ApiAuditCatalogReviewAssignmentCollection>;
   listBlockedAuditCatalogEntries(): Promise<ApiAuditCatalogChecklistItemBlockerCollection>;
+  listSignedOffAuditCatalogEntries(): Promise<ApiAuditCatalogChecklistItemSignoffCollection>;
   listAcknowledgedAuditCatalogEntries(): Promise<ApiAuditCatalogChecklistItemAcknowledgmentCollection>;
   listEvidencedAuditCatalogEntries(): Promise<ApiAuditCatalogChecklistItemEvidenceCollection>;
   listAttestedAuditCatalogEntries(): Promise<ApiAuditCatalogChecklistItemAttestationCollection>;
@@ -811,6 +849,10 @@ export interface RunrootApiClient {
     catalogEntryId: string,
     input: UpdateApiAuditCatalogChecklistItemEvidenceInput,
   ): Promise<ApiAuditCatalogChecklistItemEvidenceView>;
+  setAuditCatalogChecklistItemSignoff(
+    catalogEntryId: string,
+    input: UpdateApiAuditCatalogChecklistItemSignoffInput,
+  ): Promise<ApiAuditCatalogChecklistItemSignoffView>;
   setAuditCatalogChecklistItemAcknowledgment(
     catalogEntryId: string,
     input: UpdateApiAuditCatalogChecklistItemAcknowledgmentInput,
@@ -1055,6 +1097,18 @@ export function createRunrootApiClient(
       return payload.evidence;
     },
 
+    async clearAuditCatalogChecklistItemSignoff(catalogEntryId) {
+      const payload = await requestJson<{
+        signoff: ApiAuditCatalogChecklistItemSignoffView;
+      }>(
+        `/audit/catalog/${catalogEntryId}/sign-off/clear`,
+        { method: "POST" },
+        "web.api.clearAuditCatalogChecklistItemSignoff",
+      );
+
+      return payload.signoff;
+    },
+
     async clearAuditCatalogChecklistItemAcknowledgment(catalogEntryId) {
       const payload = await requestJson<{
         acknowledgment: ApiAuditCatalogChecklistItemAcknowledgmentView;
@@ -1185,6 +1239,18 @@ export function createRunrootApiClient(
       );
 
       return payload.evidence;
+    },
+
+    async getAuditCatalogChecklistItemSignoff(catalogEntryId) {
+      const payload = await requestJson<{
+        signoff: ApiAuditCatalogChecklistItemSignoffView;
+      }>(
+        `/audit/catalog/${catalogEntryId}/sign-off`,
+        { method: "GET" },
+        "web.api.getAuditCatalogChecklistItemSignoff",
+      );
+
+      return payload.signoff;
     },
 
     async getAuditCatalogChecklistItemAcknowledgment(catalogEntryId) {
@@ -1397,6 +1463,18 @@ export function createRunrootApiClient(
       );
 
       return payload.blocked;
+    },
+
+    async listSignedOffAuditCatalogEntries() {
+      const payload = await requestJson<{
+        signedOff: ApiAuditCatalogChecklistItemSignoffCollection;
+      }>(
+        "/audit/catalog/signed-off",
+        { method: "GET" },
+        "web.api.listSignedOffAuditCatalogEntries",
+      );
+
+      return payload.signedOff;
     },
 
     async listResolvedAuditCatalogEntries() {
@@ -1637,6 +1715,24 @@ export function createRunrootApiClient(
       );
 
       return payload.evidence;
+    },
+
+    async setAuditCatalogChecklistItemSignoff(catalogEntryId, input) {
+      const payload = await requestJson<{
+        signoff: ApiAuditCatalogChecklistItemSignoffView;
+      }>(
+        `/audit/catalog/${catalogEntryId}/sign-off`,
+        {
+          body: JSON.stringify(input),
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "POST",
+        },
+        "web.api.setAuditCatalogChecklistItemSignoff",
+      );
+
+      return payload.signoff;
     },
 
     async setAuditCatalogChecklistItemAttestation(catalogEntryId, input) {

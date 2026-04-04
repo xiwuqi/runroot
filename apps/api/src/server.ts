@@ -285,6 +285,12 @@ export function buildServer(options: BuildServerOptions = {}) {
     })),
   );
 
+  app.get("/audit/catalog/signed-off", async (_request, reply) =>
+    handleOperatorResponse(reply, async () => ({
+      signedOff: await operator.listSignedOffCatalogEntries(),
+    })),
+  );
+
   app.post("/audit/saved-views", async (request, reply) =>
     handleOperatorResponse(reply, async () => {
       const body = request.body as {
@@ -532,6 +538,20 @@ export function buildServer(options: BuildServerOptions = {}) {
           ),
         };
       }),
+  );
+
+  app.get("/audit/catalog/:catalogEntryId/sign-off", async (request, reply) =>
+    handleOperatorResponse(reply, async () => {
+      const params = request.params as {
+        readonly catalogEntryId: string;
+      };
+
+      return {
+        signoff: await operator.getCatalogChecklistItemSignoff(
+          params.catalogEntryId,
+        ),
+      };
+    }),
   );
 
   app.get("/audit/catalog/:catalogEntryId", async (request, reply) =>
@@ -870,6 +890,34 @@ export function buildServer(options: BuildServerOptions = {}) {
       }),
   );
 
+  app.post("/audit/catalog/:catalogEntryId/sign-off", async (request, reply) =>
+    handleOperatorResponse(reply, async () => {
+      const params = request.params as {
+        readonly catalogEntryId: string;
+      };
+      const body = request.body as {
+        readonly signoffNote?: string;
+        readonly items?: unknown;
+      };
+      const items = readChecklistItemSignoffItems(body?.items, "items");
+
+      if (items.length === 0) {
+        throw new OperatorInputError(
+          "items must include at least one checklist item signoff entry.",
+        );
+      }
+
+      return {
+        signoff: await operator.signOffCatalogEntry(params.catalogEntryId, {
+          ...(body?.signoffNote !== undefined
+            ? { signoffNote: body.signoffNote }
+            : {}),
+          items,
+        }),
+      };
+    }),
+  );
+
   app.post(
     "/audit/catalog/:catalogEntryId/review/clear",
     async (request, reply) =>
@@ -1027,6 +1075,22 @@ export function buildServer(options: BuildServerOptions = {}) {
             await operator.clearCatalogChecklistItemAcknowledgment(
               params.catalogEntryId,
             ),
+        };
+      }),
+  );
+
+  app.post(
+    "/audit/catalog/:catalogEntryId/sign-off/clear",
+    async (request, reply) =>
+      handleOperatorResponse(reply, async () => {
+        const params = request.params as {
+          readonly catalogEntryId: string;
+        };
+
+        return {
+          signoff: await operator.clearCatalogChecklistItemSignoff(
+            params.catalogEntryId,
+          ),
         };
       }),
   );
@@ -1593,6 +1657,33 @@ function readChecklistItemAcknowledgmentItems(
   ) {
     throw new OperatorInputError(
       `${fieldName} must be an array of { item, state } objects with state acknowledged|unacknowledged.`,
+    );
+  }
+
+  return value;
+}
+
+function readChecklistItemSignoffItems(
+  value: unknown,
+  fieldName: string,
+): readonly {
+  readonly item: string;
+  readonly state: "signed-off" | "unsigned";
+}[] {
+  if (
+    !Array.isArray(value) ||
+    !value.every(
+      (entry) =>
+        typeof entry === "object" &&
+        entry !== null &&
+        "item" in entry &&
+        typeof entry.item === "string" &&
+        "state" in entry &&
+        (entry.state === "signed-off" || entry.state === "unsigned"),
+    )
+  ) {
+    throw new OperatorInputError(
+      `${fieldName} must be an array of { item, state } objects with state signed-off|unsigned.`,
     );
   }
 
