@@ -70,6 +70,17 @@ import {
   type UpdateCrossRunAuditCatalogChecklistItemEvidenceInput,
 } from "./checklist-item-evidence";
 import {
+  type CrossRunAuditCatalogChecklistItemException,
+  type CrossRunAuditCatalogChecklistItemExceptionApplication,
+  type CrossRunAuditCatalogChecklistItemExceptionCollection,
+  type CrossRunAuditCatalogChecklistItemExceptionStore,
+  type CrossRunAuditCatalogChecklistItemExceptionView,
+  compareCrossRunAuditCatalogChecklistItemException,
+  createCrossRunAuditCatalogChecklistItemException,
+  normalizeChecklistItemExceptionItems,
+  type UpdateCrossRunAuditCatalogChecklistItemExceptionInput,
+} from "./checklist-item-exception";
+import {
   type CrossRunAuditCatalogChecklistItemProgress,
   type CrossRunAuditCatalogChecklistItemProgressApplication,
   type CrossRunAuditCatalogChecklistItemProgressCollection,
@@ -503,6 +514,30 @@ export interface CrossRunAuditCatalogChecklistItemSignoffQuery {
     input: UpdateCrossRunAuditCatalogChecklistItemSignoffInput,
     timestamp: string,
   ): Promise<CrossRunAuditCatalogChecklistItemSignoffView>;
+}
+
+export interface CrossRunAuditCatalogChecklistItemExceptionQuery {
+  applyCatalogEntry(
+    id: string,
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+  ): Promise<CrossRunAuditCatalogChecklistItemExceptionApplication | undefined>;
+  clearCatalogChecklistItemException(
+    id: string,
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+  ): Promise<CrossRunAuditCatalogChecklistItemExceptionView | undefined>;
+  getCatalogChecklistItemException(
+    id: string,
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+  ): Promise<CrossRunAuditCatalogChecklistItemExceptionView | undefined>;
+  listExceptedCatalogEntries(
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+  ): Promise<CrossRunAuditCatalogChecklistItemExceptionCollection>;
+  setCatalogChecklistItemException(
+    id: string,
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+    input: UpdateCrossRunAuditCatalogChecklistItemExceptionInput,
+    timestamp: string,
+  ): Promise<CrossRunAuditCatalogChecklistItemExceptionView>;
 }
 
 export interface CrossRunAuditCatalogChecklistItemAttestationQuery {
@@ -2477,6 +2512,153 @@ export function createCrossRunAuditCatalogChecklistItemSignoffQuery(
   };
 }
 
+export function createCrossRunAuditCatalogChecklistItemExceptionQuery(
+  store: CrossRunAuditCatalogChecklistItemExceptionStore,
+  signoffEntries: CrossRunAuditCatalogChecklistItemSignoffQuery,
+): CrossRunAuditCatalogChecklistItemExceptionQuery {
+  return {
+    async applyCatalogEntry(id, viewer) {
+      const exception = await resolveCatalogChecklistItemExceptionView(
+        store,
+        signoffEntries,
+        id,
+        viewer,
+      );
+
+      if (!exception) {
+        return undefined;
+      }
+
+      const application = await signoffEntries.applyCatalogEntry(id, viewer);
+
+      if (!application) {
+        return undefined;
+      }
+
+      return {
+        application,
+        exception,
+      };
+    },
+
+    async clearCatalogChecklistItemException(id, viewer) {
+      const exception = await resolveCatalogChecklistItemExceptionView(
+        store,
+        signoffEntries,
+        id,
+        viewer,
+      );
+
+      if (!exception) {
+        return undefined;
+      }
+
+      await store.deleteCatalogChecklistItemException(id);
+
+      return exception;
+    },
+
+    async getCatalogChecklistItemException(id, viewer) {
+      return resolveCatalogChecklistItemExceptionView(
+        store,
+        signoffEntries,
+        id,
+        viewer,
+      );
+    },
+
+    async listExceptedCatalogEntries(viewer) {
+      const exceptionEntries = [
+        ...(await store.listCatalogChecklistItemExceptions()),
+      ].sort(compareCrossRunAuditCatalogChecklistItemException);
+      const items = (
+        await Promise.all(
+          exceptionEntries.map(async (exception) =>
+            resolveCatalogChecklistItemExceptionFromValue(
+              signoffEntries,
+              exception,
+              viewer,
+            ),
+          ),
+        )
+      ).filter(
+        (
+          exception,
+        ): exception is CrossRunAuditCatalogChecklistItemExceptionView =>
+          exception !== undefined,
+      );
+
+      return {
+        items,
+        totalCount: items.length,
+      };
+    },
+
+    async setCatalogChecklistItemException(id, viewer, input, timestamp) {
+      const signoff = await signoffEntries.getCatalogChecklistItemSignoff(
+        id,
+        viewer,
+      );
+
+      if (!signoff) {
+        throw new Error(
+          `Catalog entry "${id}" is not signed off and visible to operator "${viewer.operatorId}".`,
+        );
+      }
+
+      const allowedItems = signoff.signoff.items.map((item) => item.item);
+      const normalizedItems = normalizeChecklistItemExceptionItems(
+        input.items,
+        allowedItems,
+      );
+
+      if (normalizedItems.length === 0) {
+        throw new Error(
+          "Catalog checklist item exceptions require at least one checklist item exception entry.",
+        );
+      }
+
+      const existingException =
+        await store.getCatalogChecklistItemException(id);
+      const normalizedExceptionNote = input.exceptionNote?.trim();
+      const exception = existingException
+        ? {
+            ...(input.exceptionNote === undefined
+              ? existingException.exceptionNote
+                ? { exceptionNote: existingException.exceptionNote }
+                : {}
+              : normalizedExceptionNote
+                ? { exceptionNote: normalizedExceptionNote }
+                : {}),
+            catalogEntryId: id,
+            createdAt: existingException.createdAt,
+            items: normalizedItems,
+            kind: existingException.kind,
+            operatorId: viewer.operatorId,
+            scopeId: viewer.scopeId,
+            updatedAt: timestamp,
+          }
+        : createCrossRunAuditCatalogChecklistItemException({
+            ...(normalizedExceptionNote
+              ? { exceptionNote: normalizedExceptionNote }
+              : {}),
+            catalogEntryId: id,
+            items: normalizedItems,
+            operatorId: viewer.operatorId,
+            scopeId: viewer.scopeId,
+            timestamp,
+          });
+
+      await store.saveCatalogChecklistItemException(exception);
+
+      return {
+        exception,
+        signoff,
+      };
+    },
+  };
+}
+
 async function resolveCatalogEntryView(
   store: CrossRunAuditCatalogStore,
   savedViews: CrossRunAuditSavedViewQuery,
@@ -3057,5 +3239,58 @@ async function resolveCatalogChecklistItemSignoffFromValue(
       ...signoff,
       items: normalizedItems,
     },
+  };
+}
+
+async function resolveCatalogChecklistItemExceptionView(
+  store: CrossRunAuditCatalogChecklistItemExceptionStore,
+  signoffQuery: CrossRunAuditCatalogChecklistItemSignoffQuery,
+  id: string,
+  viewer: CrossRunAuditCatalogVisibilityViewer,
+): Promise<CrossRunAuditCatalogChecklistItemExceptionView | undefined> {
+  const exception = await store.getCatalogChecklistItemException(id);
+
+  return exception
+    ? resolveCatalogChecklistItemExceptionFromValue(
+        signoffQuery,
+        exception,
+        viewer,
+      )
+    : undefined;
+}
+
+async function resolveCatalogChecklistItemExceptionFromValue(
+  signoffQuery: CrossRunAuditCatalogChecklistItemSignoffQuery,
+  exception: CrossRunAuditCatalogChecklistItemException,
+  viewer: CrossRunAuditCatalogVisibilityViewer,
+): Promise<CrossRunAuditCatalogChecklistItemExceptionView | undefined> {
+  if (exception.scopeId !== viewer.scopeId) {
+    return undefined;
+  }
+
+  const signoff = await signoffQuery.getCatalogChecklistItemSignoff(
+    exception.catalogEntryId,
+    viewer,
+  );
+
+  if (!signoff) {
+    return undefined;
+  }
+
+  const normalizedItems = normalizeChecklistItemExceptionItems(
+    exception.items,
+    signoff.signoff.items.map((item) => item.item),
+  );
+
+  if (normalizedItems.length === 0) {
+    return undefined;
+  }
+
+  return {
+    exception: {
+      ...exception,
+      items: normalizedItems,
+    },
+    signoff,
   };
 }

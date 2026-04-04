@@ -2727,7 +2727,7 @@ describe("@runroot/web integration", () => {
     }
   });
 
-  it("renders, records, clears, and reapplies checklist item acknowledgments and sign-offs through the existing API surface", async () => {
+  it("renders, records, clears, and reapplies checklist item acknowledgments, sign-offs, and exceptions through the existing API surface", async () => {
     const workspaceRoot = await mkdtemp(
       join(tmpdir(), "runroot-web-checklist-acknowledgment-"),
     );
@@ -3111,6 +3111,31 @@ describe("@runroot/web integration", () => {
 
       expect(signoffResponse.status).toBe(303);
 
+      const exceptionForm = new FormData();
+      exceptionForm.set("catalogEntryId", "catalog_entry_acknowledgment_web");
+      exceptionForm.set("intent", "record-exception");
+      exceptionForm.set(
+        "exceptionItems",
+        "excepted: Validate queued follow-up\nnot-excepted: Close backup handoff",
+      );
+      exceptionForm.set(
+        "exceptionNote",
+        "Backup marked the signed-off follow-up for manual review",
+      );
+      exceptionForm.set(
+        "returnTo",
+        "/runs?catalogEntryId=catalog_entry_acknowledgment_web",
+      );
+
+      const exceptionResponse = await mutateCatalog(
+        new Request("http://localhost/runs/catalog", {
+          body: exceptionForm,
+          method: "POST",
+        }),
+      );
+
+      expect(exceptionResponse.status).toBe(303);
+
       process.env.RUNROOT_API_BASE_URL = peerAddress;
 
       const signedOffMarkup = renderToStaticMarkup(
@@ -3141,6 +3166,53 @@ describe("@runroot/web integration", () => {
       );
       expect(signedOffMarkup).toContain("Apply signed-off preset");
       expect(signedOffMarkup).toContain("Active sign-offs selected");
+      expect(signedOffMarkup).toContain("Checklist item exceptions");
+      expect(signedOffMarkup).toContain("1/2 excepted");
+      expect(signedOffMarkup).toContain(
+        "Backup marked the signed-off follow-up for manual review",
+      );
+      expect(signedOffMarkup).toContain("Apply excepted preset");
+      expect(signedOffMarkup).toContain("Active exceptions selected");
+
+      process.env.RUNROOT_API_BASE_URL = ownerAddress;
+
+      const clearExceptionForm = new FormData();
+      clearExceptionForm.set(
+        "catalogEntryId",
+        "catalog_entry_acknowledgment_web",
+      );
+      clearExceptionForm.set("intent", "clear-exception");
+      clearExceptionForm.set(
+        "returnTo",
+        "/runs?catalogEntryId=catalog_entry_acknowledgment_web",
+      );
+
+      const clearExceptionResponse = await mutateCatalog(
+        new Request("http://localhost/runs/catalog", {
+          body: clearExceptionForm,
+          method: "POST",
+        }),
+      );
+
+      expect(clearExceptionResponse.status).toBe(303);
+
+      process.env.RUNROOT_API_BASE_URL = peerAddress;
+
+      const clearedExceptionMarkup = renderToStaticMarkup(
+        await RunsPage({
+          searchParams: Promise.resolve({
+            catalogEntryId: "catalog_entry_acknowledgment_web",
+          }),
+        }),
+      );
+
+      expect(clearedExceptionMarkup).toContain("Checklist item exceptions");
+      expect(clearedExceptionMarkup).toContain(
+        "No checklist item exceptions yet",
+      );
+      expect(clearedExceptionMarkup).not.toContain(
+        "Backup marked the signed-off follow-up for manual review",
+      );
 
       process.env.RUNROOT_API_BASE_URL = ownerAddress;
 

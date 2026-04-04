@@ -598,6 +598,53 @@ export async function POST(request: Request) {
       return Response.redirect(redirectUrl, 303);
     }
 
+    if (intent === "record-exception") {
+      const catalogEntryId = readTrimmedFormValue(formData, "catalogEntryId");
+      const exceptionItems = readChecklistItemExceptionItems(
+        formData.get("exceptionItems"),
+      );
+      const exceptionNoteValue = formData.get("exceptionNote");
+
+      if (!catalogEntryId) {
+        appendFlashMessage(
+          redirectUrl,
+          "error",
+          "A catalog entry id is required to update checklist item exception metadata.",
+        );
+
+        return Response.redirect(redirectUrl, 303);
+      }
+
+      if (exceptionItems.length === 0) {
+        appendFlashMessage(
+          redirectUrl,
+          "error",
+          "At least one checklist item exception entry is required.",
+        );
+
+        return Response.redirect(redirectUrl, 303);
+      }
+
+      const exception =
+        await createRunrootApiClient().setAuditCatalogChecklistItemException(
+          catalogEntryId,
+          {
+            ...(typeof exceptionNoteValue === "string"
+              ? { exceptionNote: exceptionNoteValue }
+              : {}),
+            items: exceptionItems,
+          },
+        );
+
+      appendFlashMessage(
+        redirectUrl,
+        "notice",
+        `Checklist item exceptions for ${exception.signoff.acknowledgment.attestation.evidence.verification.resolution.blocker.progress.checklist.assignment.review.visibility.catalogEntry.entry.name} updated.`,
+      );
+
+      return Response.redirect(redirectUrl, 303);
+    }
+
     if (intent === "clear-review") {
       const catalogEntryId = readTrimmedFormValue(formData, "catalogEntryId");
 
@@ -836,6 +883,33 @@ export async function POST(request: Request) {
         redirectUrl,
         "notice",
         `Checklist item sign-offs for ${signoff.acknowledgment.attestation.evidence.verification.resolution.blocker.progress.checklist.assignment.review.visibility.catalogEntry.entry.name} cleared.`,
+      );
+
+      return Response.redirect(redirectUrl, 303);
+    }
+
+    if (intent === "clear-exception") {
+      const catalogEntryId = readTrimmedFormValue(formData, "catalogEntryId");
+
+      if (!catalogEntryId) {
+        appendFlashMessage(
+          redirectUrl,
+          "error",
+          "A catalog entry id is required to clear checklist item exception metadata.",
+        );
+
+        return Response.redirect(redirectUrl, 303);
+      }
+
+      const exception =
+        await createRunrootApiClient().clearAuditCatalogChecklistItemException(
+          catalogEntryId,
+        );
+
+      appendFlashMessage(
+        redirectUrl,
+        "notice",
+        `Checklist item exceptions for ${exception.signoff.acknowledgment.attestation.evidence.verification.resolution.blocker.progress.checklist.assignment.review.visibility.catalogEntry.entry.name} cleared.`,
       );
 
       return Response.redirect(redirectUrl, 303);
@@ -1327,6 +1401,52 @@ function readChecklistItemSignoffItems(
       if (rawState !== "signed-off" && rawState !== "unsigned") {
         throw new Error(
           `Checklist item sign-off state must be signed-off or unsigned for "${item}".`,
+        );
+      }
+
+      return {
+        item,
+        state: rawState,
+      };
+    });
+}
+
+function readChecklistItemExceptionItems(
+  value: FormDataEntryValue | null,
+): readonly {
+  readonly item: string;
+  readonly state: "excepted" | "not-excepted";
+}[] {
+  if (typeof value !== "string") {
+    return [];
+  }
+
+  return value
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .map((line) => {
+      const separatorIndex = line.indexOf(":");
+
+      if (separatorIndex < 0) {
+        return {
+          item: line,
+          state: "not-excepted" as const,
+        };
+      }
+
+      const rawState = line.slice(0, separatorIndex).trim();
+      const item = line.slice(separatorIndex + 1).trim();
+
+      if (item.length === 0) {
+        throw new Error(
+          "Checklist item exception lines require a non-empty item.",
+        );
+      }
+
+      if (rawState !== "excepted" && rawState !== "not-excepted") {
+        throw new Error(
+          `Checklist item exception state must be excepted or not-excepted for "${item}".`,
         );
       }
 

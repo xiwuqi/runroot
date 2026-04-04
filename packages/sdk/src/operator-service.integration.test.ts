@@ -2595,7 +2595,7 @@ describe("@runroot/sdk operator service integration", () => {
     expect(peerAttestationsAfterClear.totalCount).toBe(0);
   });
 
-  it("acknowledges, lists-acknowledged, inspects, clears, and reapplies attested presets for inline and queued runs through the operator seam", async () => {
+  it("acknowledges, signs off, records exceptions, lists, inspects, clears, and reapplies attested presets for inline and queued runs through the operator seam", async () => {
     const workspaceRoot = await mkdtemp(
       join(tmpdir(), "runroot-sdk-checklist-acknowledgment-"),
     );
@@ -2897,7 +2897,50 @@ describe("@runroot/sdk operator service integration", () => {
         },
       ],
     });
+    await ownerService.recordCatalogEntryException(
+      inlineCatalogEntry.entry.id,
+      {
+        items: [
+          {
+            item: "Confirm inline owner follow-up",
+            state: "excepted",
+          },
+        ],
+      },
+    );
+    await ownerService.recordCatalogEntryException(
+      queuedCatalogEntry.entry.id,
+      {
+        exceptionNote:
+          "Backup marked the signed-off follow-up for manual review",
+        items: [
+          {
+            item: "Validate queued follow-up",
+            state: "excepted",
+          },
+          {
+            item: "Close backup handoff",
+            state: "not-excepted",
+          },
+        ],
+      },
+    );
 
+    const ownerExceptions = await ownerService.listExceptedCatalogEntries();
+    const peerExceptions = await peerService.listExceptedCatalogEntries();
+    const inspectedException =
+      await ownerService.getCatalogChecklistItemException(
+        queuedCatalogEntry.entry.id,
+      );
+    const appliedException = await peerService.applyCatalogEntry(
+      queuedCatalogEntry.entry.id,
+    );
+    const clearedException =
+      await ownerService.clearCatalogChecklistItemException(
+        queuedCatalogEntry.entry.id,
+      );
+    const peerExceptionsAfterClear =
+      await peerService.listExceptedCatalogEntries();
     const ownerSignoffs = await ownerService.listSignedOffCatalogEntries();
     const peerSignoffs = await peerService.listSignedOffCatalogEntries();
     const inspectedSignoff = await ownerService.getCatalogChecklistItemSignoff(
@@ -2929,6 +2972,50 @@ describe("@runroot/sdk operator service integration", () => {
     const peerAcknowledgmentsAfterClear =
       await peerService.listAcknowledgedCatalogEntries();
 
+    expect(
+      ownerExceptions.items.map(
+        (item) =>
+          item.signoff.acknowledgment.attestation.evidence.verification
+            .resolution.blocker.progress.checklist.assignment.review.visibility
+            .catalogEntry.entry.id,
+      ),
+    ).toEqual([queuedCatalogEntry.entry.id, inlineCatalogEntry.entry.id]);
+    expect(
+      peerExceptions.items.map(
+        (item) =>
+          item.signoff.acknowledgment.attestation.evidence.verification
+            .resolution.blocker.progress.checklist.assignment.review.visibility
+            .catalogEntry.entry.id,
+      ),
+    ).toEqual([queuedCatalogEntry.entry.id]);
+    expect(inspectedException.exception).toMatchObject({
+      catalogEntryId: queuedCatalogEntry.entry.id,
+      exceptionNote: "Backup marked the signed-off follow-up for manual review",
+      operatorId: "ops_oncall",
+      scopeId: "ops",
+    });
+    expect(inspectedException.exception.items).toEqual([
+      {
+        item: "Validate queued follow-up",
+        state: "excepted",
+      },
+      {
+        item: "Close backup handoff",
+        state: "not-excepted",
+      },
+    ]);
+    expect(appliedException.catalogEntry.entry.id).toBe(
+      queuedCatalogEntry.entry.id,
+    );
+    expect(appliedException.application.savedView.id).toBe(queuedSavedView.id);
+    expect(appliedException.application.navigation.totalSummaryCount).toBe(1);
+    expect(
+      appliedException.application.navigation.drilldowns[0]?.result.runId,
+    ).toBe(queuedRun.id);
+    expect(clearedException.exception.catalogEntryId).toBe(
+      queuedCatalogEntry.entry.id,
+    );
+    expect(peerExceptionsAfterClear.totalCount).toBe(0);
     expect(
       ownerSignoffs.items.map(
         (item) =>
@@ -3019,5 +3106,5 @@ describe("@runroot/sdk operator service integration", () => {
       queuedCatalogEntry.entry.id,
     );
     expect(peerAcknowledgmentsAfterClear.totalCount).toBe(0);
-  });
+  }, 15_000);
 });

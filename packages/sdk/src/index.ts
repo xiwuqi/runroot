@@ -19,6 +19,7 @@ export {
   type ProgressAuditCatalogEntryInput,
   type PublishAuditViewCatalogEntryInput,
   type RecordAuditCatalogEntryEvidenceInput,
+  type RecordExceptionAuditCatalogEntryInput,
   type ResolveAuditCatalogEntryInput,
   type ReviewAuditCatalogEntryInput,
   type RunrootOperatorService,
