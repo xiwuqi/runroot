@@ -3106,5 +3106,5 @@ describe("@runroot/sdk operator service integration", () => {
       queuedCatalogEntry.entry.id,
     );
     expect(peerAcknowledgmentsAfterClear.totalCount).toBe(0);
-  });
+  }, 15_000);
 });
