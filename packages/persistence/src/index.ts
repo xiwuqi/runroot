@@ -66,6 +66,19 @@ export {
   type SqliteAuditCatalogChecklistItemEvidenceStoreOptions,
 } from "./catalog-checklist-item-evidence-store";
 export {
+  type ConfiguredAuditCatalogChecklistItemExceptionStoreOptions,
+  createConfiguredAuditCatalogChecklistItemExceptionStore,
+  createFileAuditCatalogChecklistItemExceptionStore,
+  createInMemoryAuditCatalogChecklistItemExceptionStore,
+  createPostgresAuditCatalogChecklistItemExceptionStore,
+  createSqliteAuditCatalogChecklistItemExceptionStore,
+  type FileAuditCatalogChecklistItemExceptionStoreOptions,
+  type InMemoryAuditCatalogChecklistItemExceptionStoreOptions,
+  type PostgresAuditCatalogChecklistItemExceptionStoreOptions,
+  resolveAuditCatalogChecklistItemExceptionFilePath,
+  type SqliteAuditCatalogChecklistItemExceptionStoreOptions,
+} from "./catalog-checklist-item-exception-store";
+export {
   type ConfiguredAuditCatalogChecklistItemProgressStoreOptions,
   createConfiguredAuditCatalogChecklistItemProgressStore,
   createFileAuditCatalogChecklistItemProgressStore,
@@ -238,7 +251,7 @@ export const persistencePackageBoundary = {
   kind: "package",
   phaseOwned: 2,
   responsibility:
-    "Repository contracts, checkpoint storage, database adapters, dispatch queue persistence seams, tool-history storage adapters, additive saved-audit-view adapters, additive audit-view-catalog adapters, additive catalog-visibility adapters, additive catalog-review-signal adapters, additive catalog-review-assignment adapters, additive catalog-assignment-checklist adapters, additive checklist-item-progress adapters, additive checklist-item-blocker adapters, additive checklist-item-resolution adapters, additive checklist-item-verification adapters, additive checklist-item-evidence adapters, additive checklist-item-attestation adapters, and additive checklist-item-acknowledgment adapters.",
+    "Repository contracts, checkpoint storage, database adapters, dispatch queue persistence seams, tool-history storage adapters, additive saved-audit-view adapters, additive audit-view-catalog adapters, additive catalog-visibility adapters, additive catalog-review-signal adapters, additive catalog-review-assignment adapters, additive catalog-assignment-checklist adapters, additive checklist-item-progress adapters, additive checklist-item-blocker adapters, additive checklist-item-resolution adapters, additive checklist-item-verification adapters, additive checklist-item-evidence adapters, additive checklist-item-attestation adapters, additive checklist-item-acknowledgment adapters, additive checklist-item-signoff adapters, and additive checklist-item-exception adapters.",
   publicSurface: [
     "repository interfaces",
     "storage adapters",
@@ -257,5 +270,8 @@ export const persistencePackageBoundary = {
     "checklist item verification adapters",
     "checklist item evidence adapters",
     "checklist item attestation adapters",
+    "checklist item acknowledgment adapters",
+    "checklist item signoff adapters",
+    "checklist item exception adapters",
   ],
 } as const satisfies PackageBoundary;
