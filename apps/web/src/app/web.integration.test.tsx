@@ -2727,7 +2727,7 @@ describe("@runroot/web integration", () => {
     }
   });
 
-  it("renders, records, clears, and reapplies checklist item acknowledgments through the existing API surface", async () => {
+  it("renders, records, clears, and reapplies checklist item acknowledgments and sign-offs through the existing API surface", async () => {
     const workspaceRoot = await mkdtemp(
       join(tmpdir(), "runroot-web-checklist-acknowledgment-"),
     );
@@ -3086,9 +3086,34 @@ describe("@runroot/web integration", () => {
 
       expect(acknowledgmentResponse.status).toBe(303);
 
+      const signoffForm = new FormData();
+      signoffForm.set("catalogEntryId", "catalog_entry_acknowledgment_web");
+      signoffForm.set("intent", "sign-off");
+      signoffForm.set(
+        "signoffItems",
+        "signed-off: Validate queued follow-up\nunsigned: Close backup handoff",
+      );
+      signoffForm.set(
+        "signoffNote",
+        "Backup signed off the acknowledged follow-up",
+      );
+      signoffForm.set(
+        "returnTo",
+        "/runs?catalogEntryId=catalog_entry_acknowledgment_web",
+      );
+
+      const signoffResponse = await mutateCatalog(
+        new Request("http://localhost/runs/catalog", {
+          body: signoffForm,
+          method: "POST",
+        }),
+      );
+
+      expect(signoffResponse.status).toBe(303);
+
       process.env.RUNROOT_API_BASE_URL = peerAddress;
 
-      const acknowledgedMarkup = renderToStaticMarkup(
+      const signedOffMarkup = renderToStaticMarkup(
         await RunsPage({
           searchParams: Promise.resolve({
             catalogEntryId: "catalog_entry_acknowledgment_web",
@@ -3096,19 +3121,64 @@ describe("@runroot/web integration", () => {
         }),
       );
 
-      expect(acknowledgedMarkup).toContain("Checklist item acknowledgments");
-      expect(acknowledgedMarkup).toContain("Queued acknowledgment preset");
-      expect(acknowledgedMarkup).toContain("1/2 acknowledged");
-      expect(acknowledgedMarkup).toContain("Validate queued follow-up");
-      expect(acknowledgedMarkup).toContain("Close backup handoff");
-      expect(acknowledgedMarkup).toContain(
+      expect(signedOffMarkup).toContain("Checklist item acknowledgments");
+      expect(signedOffMarkup).toContain("Queued acknowledgment preset");
+      expect(signedOffMarkup).toContain("1/2 acknowledged");
+      expect(signedOffMarkup).toContain("Validate queued follow-up");
+      expect(signedOffMarkup).toContain("Close backup handoff");
+      expect(signedOffMarkup).toContain(
         "Backup acknowledged the attested follow-up",
       );
-      expect(acknowledgedMarkup).toContain("Apply acknowledged preset");
-      expect(acknowledgedMarkup).toContain(
+      expect(signedOffMarkup).toContain("Apply acknowledged preset");
+      expect(signedOffMarkup).toContain(
         `Queued worker ${queuedRun.id} handed to backup`,
       );
-      expect(acknowledgedMarkup).toContain("Active acknowledgments selected");
+      expect(signedOffMarkup).toContain("Active acknowledgments selected");
+      expect(signedOffMarkup).toContain("Checklist item sign-offs");
+      expect(signedOffMarkup).toContain("1/2 signed off");
+      expect(signedOffMarkup).toContain(
+        "Backup signed off the acknowledged follow-up",
+      );
+      expect(signedOffMarkup).toContain("Apply signed-off preset");
+      expect(signedOffMarkup).toContain("Active sign-offs selected");
+
+      process.env.RUNROOT_API_BASE_URL = ownerAddress;
+
+      const clearSignoffForm = new FormData();
+      clearSignoffForm.set(
+        "catalogEntryId",
+        "catalog_entry_acknowledgment_web",
+      );
+      clearSignoffForm.set("intent", "clear-sign-off");
+      clearSignoffForm.set(
+        "returnTo",
+        "/runs?catalogEntryId=catalog_entry_acknowledgment_web",
+      );
+
+      const clearSignoffResponse = await mutateCatalog(
+        new Request("http://localhost/runs/catalog", {
+          body: clearSignoffForm,
+          method: "POST",
+        }),
+      );
+
+      expect(clearSignoffResponse.status).toBe(303);
+
+      process.env.RUNROOT_API_BASE_URL = peerAddress;
+
+      const clearedSignoffMarkup = renderToStaticMarkup(
+        await RunsPage({
+          searchParams: Promise.resolve({
+            catalogEntryId: "catalog_entry_acknowledgment_web",
+          }),
+        }),
+      );
+
+      expect(clearedSignoffMarkup).toContain("Checklist item sign-offs");
+      expect(clearedSignoffMarkup).toContain("No checklist item sign-offs yet");
+      expect(clearedSignoffMarkup).not.toContain(
+        "Backup signed off the acknowledged follow-up",
+      );
 
       process.env.RUNROOT_API_BASE_URL = ownerAddress;
 
