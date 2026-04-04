@@ -610,6 +610,32 @@ export interface ApiAuditCatalogChecklistItemSignoffCollection {
   readonly totalCount: number;
 }
 
+export interface ApiAuditCatalogChecklistItemExceptionItem {
+  readonly item: string;
+  readonly state: "excepted" | "not-excepted";
+}
+
+export interface ApiAuditCatalogChecklistItemException {
+  readonly catalogEntryId: string;
+  readonly createdAt: string;
+  readonly exceptionNote?: string;
+  readonly items: readonly ApiAuditCatalogChecklistItemExceptionItem[];
+  readonly kind: "catalog-checklist-item-exception";
+  readonly operatorId: string;
+  readonly scopeId: string;
+  readonly updatedAt: string;
+}
+
+export interface ApiAuditCatalogChecklistItemExceptionView {
+  readonly exception: ApiAuditCatalogChecklistItemException;
+  readonly signoff: ApiAuditCatalogChecklistItemSignoffView;
+}
+
+export interface ApiAuditCatalogChecklistItemExceptionCollection {
+  readonly items: readonly ApiAuditCatalogChecklistItemExceptionView[];
+  readonly totalCount: number;
+}
+
 export interface ApiAuditCatalogChecklistItemAttestationItem {
   readonly item: string;
   readonly state: "attested" | "unattested";
@@ -687,6 +713,11 @@ export interface UpdateApiAuditCatalogChecklistItemSignoffInput {
   readonly signoffNote?: string;
 }
 
+export interface UpdateApiAuditCatalogChecklistItemExceptionInput {
+  readonly exceptionNote?: string;
+  readonly items: readonly ApiAuditCatalogChecklistItemExceptionItem[];
+}
+
 export interface UpdateApiAuditCatalogReviewAssignmentInput {
   readonly assigneeId: string;
   readonly handoffNote?: string;
@@ -738,6 +769,9 @@ export interface RunrootApiClient {
   clearAuditCatalogChecklistItemSignoff(
     catalogEntryId: string,
   ): Promise<ApiAuditCatalogChecklistItemSignoffView>;
+  clearAuditCatalogChecklistItemException(
+    catalogEntryId: string,
+  ): Promise<ApiAuditCatalogChecklistItemExceptionView>;
   clearAuditCatalogChecklistItemAcknowledgment(
     catalogEntryId: string,
   ): Promise<ApiAuditCatalogChecklistItemAcknowledgmentView>;
@@ -774,6 +808,9 @@ export interface RunrootApiClient {
   getAuditCatalogChecklistItemSignoff(
     catalogEntryId: string,
   ): Promise<ApiAuditCatalogChecklistItemSignoffView>;
+  getAuditCatalogChecklistItemException(
+    catalogEntryId: string,
+  ): Promise<ApiAuditCatalogChecklistItemExceptionView>;
   getAuditCatalogChecklistItemAcknowledgment(
     catalogEntryId: string,
   ): Promise<ApiAuditCatalogChecklistItemAcknowledgmentView>;
@@ -812,6 +849,7 @@ export interface RunrootApiClient {
   getSavedAuditView(savedViewId: string): Promise<ApiAuditSavedView>;
   listAssignedAuditCatalogEntries(): Promise<ApiAuditCatalogReviewAssignmentCollection>;
   listBlockedAuditCatalogEntries(): Promise<ApiAuditCatalogChecklistItemBlockerCollection>;
+  listExceptedAuditCatalogEntries(): Promise<ApiAuditCatalogChecklistItemExceptionCollection>;
   listSignedOffAuditCatalogEntries(): Promise<ApiAuditCatalogChecklistItemSignoffCollection>;
   listAcknowledgedAuditCatalogEntries(): Promise<ApiAuditCatalogChecklistItemAcknowledgmentCollection>;
   listEvidencedAuditCatalogEntries(): Promise<ApiAuditCatalogChecklistItemEvidenceCollection>;
@@ -853,6 +891,10 @@ export interface RunrootApiClient {
     catalogEntryId: string,
     input: UpdateApiAuditCatalogChecklistItemSignoffInput,
   ): Promise<ApiAuditCatalogChecklistItemSignoffView>;
+  setAuditCatalogChecklistItemException(
+    catalogEntryId: string,
+    input: UpdateApiAuditCatalogChecklistItemExceptionInput,
+  ): Promise<ApiAuditCatalogChecklistItemExceptionView>;
   setAuditCatalogChecklistItemAcknowledgment(
     catalogEntryId: string,
     input: UpdateApiAuditCatalogChecklistItemAcknowledgmentInput,
@@ -1253,6 +1295,18 @@ export function createRunrootApiClient(
       return payload.signoff;
     },
 
+    async getAuditCatalogChecklistItemException(catalogEntryId) {
+      const payload = await requestJson<{
+        exception: ApiAuditCatalogChecklistItemExceptionView;
+      }>(
+        `/audit/catalog/${catalogEntryId}/exception`,
+        { method: "GET" },
+        "web.api.getAuditCatalogChecklistItemException",
+      );
+
+      return payload.exception;
+    },
+
     async getAuditCatalogChecklistItemAcknowledgment(catalogEntryId) {
       const payload = await requestJson<{
         acknowledgment: ApiAuditCatalogChecklistItemAcknowledgmentView;
@@ -1475,6 +1529,18 @@ export function createRunrootApiClient(
       );
 
       return payload.signedOff;
+    },
+
+    async listExceptedAuditCatalogEntries() {
+      const payload = await requestJson<{
+        excepted: ApiAuditCatalogChecklistItemExceptionCollection;
+      }>(
+        "/audit/catalog/excepted",
+        { method: "GET" },
+        "web.api.listExceptedAuditCatalogEntries",
+      );
+
+      return payload.excepted;
     },
 
     async listResolvedAuditCatalogEntries() {
@@ -1735,6 +1801,24 @@ export function createRunrootApiClient(
       return payload.signoff;
     },
 
+    async setAuditCatalogChecklistItemException(catalogEntryId, input) {
+      const payload = await requestJson<{
+        exception: ApiAuditCatalogChecklistItemExceptionView;
+      }>(
+        `/audit/catalog/${catalogEntryId}/exception`,
+        {
+          body: JSON.stringify(input),
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "POST",
+        },
+        "web.api.setAuditCatalogChecklistItemException",
+      );
+
+      return payload.exception;
+    },
+
     async setAuditCatalogChecklistItemAttestation(catalogEntryId, input) {
       const payload = await requestJson<{
         attestation: ApiAuditCatalogChecklistItemAttestationView;
@@ -1769,6 +1853,18 @@ export function createRunrootApiClient(
       );
 
       return payload.acknowledgment;
+    },
+
+    async clearAuditCatalogChecklistItemException(catalogEntryId) {
+      const payload = await requestJson<{
+        exception: ApiAuditCatalogChecklistItemExceptionView;
+      }>(
+        `/audit/catalog/${catalogEntryId}/exception/clear`,
+        { method: "POST" },
+        "web.api.clearAuditCatalogChecklistItemException",
+      );
+
+      return payload.exception;
     },
 
     async setAuditCatalogAssignmentChecklist(catalogEntryId, input) {

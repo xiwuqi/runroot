@@ -16,6 +16,9 @@ import type {
   ApiAuditCatalogChecklistItemEvidenceCollection,
   ApiAuditCatalogChecklistItemEvidenceItem,
   ApiAuditCatalogChecklistItemEvidenceView,
+  ApiAuditCatalogChecklistItemExceptionCollection,
+  ApiAuditCatalogChecklistItemExceptionItem,
+  ApiAuditCatalogChecklistItemExceptionView,
   ApiAuditCatalogChecklistItemProgressCollection,
   ApiAuditCatalogChecklistItemProgressItem,
   ApiAuditCatalogChecklistItemProgressView,
@@ -1381,6 +1384,159 @@ export function ChecklistItemAcknowledgmentsView({
   );
 }
 
+export function ChecklistItemExceptionsView({
+  activeCatalogChecklistItemException,
+  exceptedEntries,
+}: Readonly<{
+  activeCatalogChecklistItemException?: ApiAuditCatalogChecklistItemExceptionView;
+  exceptedEntries: ApiAuditCatalogChecklistItemExceptionCollection;
+}>) {
+  return (
+    <section className="card">
+      <div className="row spread">
+        <div>
+          <div className="card-eyebrow">
+            Phase 29 / Checklist Item Exceptions
+          </div>
+          <h2>Checklist item exceptions</h2>
+          <p className="empty-copy">
+            Track thin per-item exceptions and a single exception note on
+            signed-off presets without turning the console into an approval
+            product, workflow engine, or collaboration surface.
+          </p>
+        </div>
+        <div className="timeline-count">
+          {exceptedEntries.totalCount} excepted preset(s)
+        </div>
+      </div>
+
+      {activeCatalogChecklistItemException ? (
+        <div className="inline-note">
+          Active exceptions:{" "}
+          <strong>
+            {
+              activeCatalogChecklistItemException.signoff.acknowledgment
+                .attestation.evidence.verification.resolution.blocker.progress
+                .checklist.assignment.review.visibility.catalogEntry.entry.name
+            }
+          </strong>
+          {" · "}
+          {formatExceptionSummary(
+            activeCatalogChecklistItemException.exception.items,
+          )}
+          {activeCatalogChecklistItemException.exception.exceptionNote
+            ? ` · ${activeCatalogChecklistItemException.exception.exceptionNote}`
+            : ""}
+        </div>
+      ) : null}
+
+      {exceptedEntries.items.length === 0 ? (
+        <p className="empty-copy">
+          No checklist item exceptions yet. Record sign-offs first, then save
+          thin exception metadata through the shared operator seam.
+        </p>
+      ) : (
+        <ol className="timeline-list">
+          {exceptedEntries.items.map((exceptionView) => (
+            <li
+              className="timeline-entry"
+              key={
+                exceptionView.signoff.acknowledgment.attestation.evidence
+                  .verification.resolution.blocker.progress.checklist.assignment
+                  .review.visibility.catalogEntry.entry.id
+              }
+            >
+              <div className="row spread">
+                <div>
+                  <strong>
+                    {
+                      exceptionView.signoff.acknowledgment.attestation.evidence
+                        .verification.resolution.blocker.progress.checklist
+                        .assignment.review.visibility.catalogEntry.entry.name
+                    }
+                  </strong>
+                  <div className="timeline-meta">
+                    {formatExceptionSummary(exceptionView.exception.items)}
+                    {" · "}
+                    {formatSignoffSummary(exceptionView.signoff.signoff.items)}
+                    {" · "}
+                    {formatAcknowledgmentSummary(
+                      exceptionView.signoff.acknowledgment.acknowledgment.items,
+                    )}
+                  </div>
+                </div>
+                <span>
+                  {formatTimestamp(exceptionView.exception.updatedAt)}
+                </span>
+              </div>
+              <ul className="approval-history">
+                {exceptionView.exception.items.map((item) => (
+                  <li
+                    key={`${exceptionView.exception.catalogEntryId}:${item.item}`}
+                  >
+                    <strong>{item.state}</strong>: {item.item}
+                  </li>
+                ))}
+              </ul>
+              {exceptionView.exception.exceptionNote ? (
+                <p className="empty-copy">
+                  {exceptionView.exception.exceptionNote}
+                </p>
+              ) : null}
+              <div className="timeline-meta">
+                operator {exceptionView.exception.operatorId} · scope{" "}
+                {exceptionView.exception.scopeId}
+              </div>
+              <div className="row spread">
+                <a
+                  className="link-button"
+                  href={buildCatalogEntryHref(
+                    exceptionView.signoff.acknowledgment.attestation.evidence
+                      .verification.resolution.blocker.progress.checklist
+                      .assignment.review.visibility.catalogEntry.entry.id,
+                  )}
+                >
+                  Apply excepted preset
+                </a>
+                <form
+                  action="/runs/catalog"
+                  className="action-form"
+                  method="post"
+                >
+                  <input
+                    name="returnTo"
+                    type="hidden"
+                    value={buildCatalogEntryHref(
+                      exceptionView.signoff.acknowledgment.attestation.evidence
+                        .verification.resolution.blocker.progress.checklist
+                        .assignment.review.visibility.catalogEntry.entry.id,
+                    )}
+                  />
+                  <input name="intent" type="hidden" value="clear-exception" />
+                  <input
+                    name="catalogEntryId"
+                    type="hidden"
+                    value={
+                      exceptionView.signoff.acknowledgment.attestation.evidence
+                        .verification.resolution.blocker.progress.checklist
+                        .assignment.review.visibility.catalogEntry.entry.id
+                    }
+                  />
+                  <button type="submit">Clear exceptions</button>
+                </form>
+              </div>
+              {activeCatalogChecklistItemException?.exception.catalogEntryId ===
+              exceptionView.exception.catalogEntryId ? (
+                <div className="timeline-meta">Active exceptions selected</div>
+              ) : null}
+            </li>
+          ))}
+        </ol>
+      )}
+    </section>
+  );
+}
+
 export function ChecklistItemSignoffsView({
   activeCatalogChecklistItemSignoff,
   signedOffEntries,
@@ -1767,6 +1923,7 @@ export function CatalogReviewSignalsView({
 export function AuditViewCatalogsView({
   activeCatalogEntry,
   activeCatalogChecklistItemBlocker,
+  activeCatalogChecklistItemException,
   activeCatalogChecklistItemSignoff,
   activeCatalogChecklistItemAcknowledgment,
   activeCatalogChecklistItemAttestation,
@@ -1775,6 +1932,7 @@ export function AuditViewCatalogsView({
   activeCatalogChecklistItemVerification,
   activeCatalogChecklistItemProgress,
   assignedEntries,
+  exceptedEntries,
   signedOffEntries,
   acknowledgedEntries,
   attestedEntries,
@@ -1789,6 +1947,7 @@ export function AuditViewCatalogsView({
 }: Readonly<{
   activeCatalogEntry?: ApiAuditCatalogVisibilityView;
   activeCatalogChecklistItemBlocker?: ApiAuditCatalogChecklistItemBlockerView;
+  activeCatalogChecklistItemException?: ApiAuditCatalogChecklistItemExceptionView;
   activeCatalogChecklistItemSignoff?: ApiAuditCatalogChecklistItemSignoffView;
   activeCatalogChecklistItemAcknowledgment?: ApiAuditCatalogChecklistItemAcknowledgmentView;
   activeCatalogChecklistItemAttestation?: ApiAuditCatalogChecklistItemAttestationView;
@@ -1797,6 +1956,7 @@ export function AuditViewCatalogsView({
   activeCatalogChecklistItemVerification?: ApiAuditCatalogChecklistItemVerificationView;
   activeCatalogChecklistItemProgress?: ApiAuditCatalogChecklistItemProgressView;
   assignedEntries: ApiAuditCatalogReviewAssignmentCollection;
+  exceptedEntries: ApiAuditCatalogChecklistItemExceptionCollection;
   signedOffEntries: ApiAuditCatalogChecklistItemSignoffCollection;
   acknowledgedEntries: ApiAuditCatalogChecklistItemAcknowledgmentCollection;
   attestedEntries: ApiAuditCatalogChecklistItemAttestationCollection;
@@ -1908,6 +2068,17 @@ export function AuditViewCatalogsView({
         ] as const,
     ),
   );
+  const exceptionsByCatalogEntryId = new Map(
+    exceptedEntries.items.map(
+      (item) =>
+        [
+          item.signoff.acknowledgment.attestation.evidence.verification
+            .resolution.blocker.progress.checklist.assignment.review.visibility
+            .catalogEntry.entry.id,
+          item,
+        ] as const,
+    ),
+  );
 
   return (
     <section className="card">
@@ -2003,6 +2174,16 @@ export function AuditViewCatalogsView({
                     : signoffsByCatalogEntryId.get(
                         catalogEntry.catalogEntry.entry.id,
                       );
+                const exception =
+                  activeCatalogChecklistItemException?.signoff.acknowledgment
+                    .attestation.evidence.verification.resolution.blocker
+                    .progress.checklist.assignment.review.visibility
+                    .catalogEntry.entry.id ===
+                  catalogEntry.catalogEntry.entry.id
+                    ? activeCatalogChecklistItemException
+                    : exceptionsByCatalogEntryId.get(
+                        catalogEntry.catalogEntry.entry.id,
+                      );
                 const reviewSignal = reviewSignalsByCatalogEntryId.get(
                   catalogEntry.catalogEntry.entry.id,
                 );
@@ -2052,6 +2233,11 @@ export function AuditViewCatalogsView({
                             : ""}
                           {signoff
                             ? ` · ${formatSignoffSummary(signoff.signoff.items)}`
+                            : ""}
+                          {exception
+                            ? ` · ${formatExceptionSummary(
+                                exception.exception.items,
+                              )}`
                             : ""}
                         </div>
                       </div>
@@ -2814,6 +3000,65 @@ export function AuditViewCatalogsView({
                           <div />
                           <button type="submit">
                             {signoff ? "Update sign-offs" : "Save sign-offs"}
+                          </button>
+                        </div>
+                      </form>
+                    ) : null}
+                    {signoff ? (
+                      <form
+                        action="/runs/catalog"
+                        className="decision-form"
+                        method="post"
+                      >
+                        <input
+                          name="returnTo"
+                          type="hidden"
+                          value={buildCatalogEntryHref(
+                            catalogEntry.catalogEntry.entry.id,
+                          )}
+                        />
+                        <input
+                          name="intent"
+                          type="hidden"
+                          value="record-exception"
+                        />
+                        <input
+                          name="catalogEntryId"
+                          type="hidden"
+                          value={catalogEntry.catalogEntry.entry.id}
+                        />
+                        <div className="data-grid">
+                          <label>
+                            <span>Checklist item exceptions</span>
+                            <textarea
+                              className="note-input"
+                              defaultValue={formatChecklistItemExceptionLines(
+                                signoff.signoff.items,
+                                exception?.exception.items,
+                              )}
+                              name="exceptionItems"
+                              placeholder="excepted: Validate queued follow-up"
+                              rows={4}
+                            />
+                          </label>
+                          <label>
+                            <span>Exception note</span>
+                            <input
+                              defaultValue={
+                                exception?.exception.exceptionNote ?? ""
+                              }
+                              name="exceptionNote"
+                              placeholder="Optional thin exception note"
+                              type="text"
+                            />
+                          </label>
+                        </div>
+                        <div className="row spread">
+                          <div />
+                          <button type="submit">
+                            {exception
+                              ? "Update exceptions"
+                              : "Save exceptions"}
                           </button>
                         </div>
                       </form>
@@ -4568,6 +4813,16 @@ function formatSignoffSummary(
   return `${signedOffCount}/${items.length} signed off`;
 }
 
+function formatExceptionSummary(
+  items: readonly ApiAuditCatalogChecklistItemExceptionItem[],
+): string {
+  const exceptedCount = items.filter(
+    (item) => item.state === "excepted",
+  ).length;
+
+  return `${exceptedCount}/${items.length} excepted`;
+}
+
 function formatChecklistItemProgressLines(
   checklistItems: readonly string[],
   progressItems:
@@ -4700,6 +4955,24 @@ function formatChecklistItemSignoffLines(
   return (acknowledgmentItems ?? [])
     .map(
       (item) => `${signoffByItem.get(item.item) ?? "unsigned"}: ${item.item}`,
+    )
+    .join("\n");
+}
+
+function formatChecklistItemExceptionLines(
+  signoffItems: readonly ApiAuditCatalogChecklistItemSignoffItem[] | undefined,
+  exceptionItems:
+    | readonly ApiAuditCatalogChecklistItemExceptionItem[]
+    | undefined,
+): string {
+  const exceptionByItem = new Map(
+    (exceptionItems ?? []).map((item) => [item.item, item.state] as const),
+  );
+
+  return (signoffItems ?? [])
+    .map(
+      (item) =>
+        `${exceptionByItem.get(item.item) ?? "not-excepted"}: ${item.item}`,
     )
     .join("\n");
 }

@@ -291,6 +291,12 @@ export function buildServer(options: BuildServerOptions = {}) {
     })),
   );
 
+  app.get("/audit/catalog/excepted", async (_request, reply) =>
+    handleOperatorResponse(reply, async () => ({
+      excepted: await operator.listExceptedCatalogEntries(),
+    })),
+  );
+
   app.post("/audit/saved-views", async (request, reply) =>
     handleOperatorResponse(reply, async () => {
       const body = request.body as {
@@ -548,6 +554,20 @@ export function buildServer(options: BuildServerOptions = {}) {
 
       return {
         signoff: await operator.getCatalogChecklistItemSignoff(
+          params.catalogEntryId,
+        ),
+      };
+    }),
+  );
+
+  app.get("/audit/catalog/:catalogEntryId/exception", async (request, reply) =>
+    handleOperatorResponse(reply, async () => {
+      const params = request.params as {
+        readonly catalogEntryId: string;
+      };
+
+      return {
+        exception: await operator.getCatalogChecklistItemException(
           params.catalogEntryId,
         ),
       };
@@ -918,6 +938,37 @@ export function buildServer(options: BuildServerOptions = {}) {
     }),
   );
 
+  app.post("/audit/catalog/:catalogEntryId/exception", async (request, reply) =>
+    handleOperatorResponse(reply, async () => {
+      const params = request.params as {
+        readonly catalogEntryId: string;
+      };
+      const body = request.body as {
+        readonly exceptionNote?: string;
+        readonly items?: unknown;
+      };
+      const items = readChecklistItemExceptionItems(body?.items, "items");
+
+      if (items.length === 0) {
+        throw new OperatorInputError(
+          "items must include at least one checklist item exception entry.",
+        );
+      }
+
+      return {
+        exception: await operator.recordCatalogEntryException(
+          params.catalogEntryId,
+          {
+            ...(body?.exceptionNote !== undefined
+              ? { exceptionNote: body.exceptionNote }
+              : {}),
+            items,
+          },
+        ),
+      };
+    }),
+  );
+
   app.post(
     "/audit/catalog/:catalogEntryId/review/clear",
     async (request, reply) =>
@@ -1089,6 +1140,22 @@ export function buildServer(options: BuildServerOptions = {}) {
 
         return {
           signoff: await operator.clearCatalogChecklistItemSignoff(
+            params.catalogEntryId,
+          ),
+        };
+      }),
+  );
+
+  app.post(
+    "/audit/catalog/:catalogEntryId/exception/clear",
+    async (request, reply) =>
+      handleOperatorResponse(reply, async () => {
+        const params = request.params as {
+          readonly catalogEntryId: string;
+        };
+
+        return {
+          exception: await operator.clearCatalogChecklistItemException(
             params.catalogEntryId,
           ),
         };
@@ -1684,6 +1751,33 @@ function readChecklistItemSignoffItems(
   ) {
     throw new OperatorInputError(
       `${fieldName} must be an array of { item, state } objects with state signed-off|unsigned.`,
+    );
+  }
+
+  return value;
+}
+
+function readChecklistItemExceptionItems(
+  value: unknown,
+  fieldName: string,
+): readonly {
+  readonly item: string;
+  readonly state: "excepted" | "not-excepted";
+}[] {
+  if (
+    !Array.isArray(value) ||
+    !value.every(
+      (entry) =>
+        typeof entry === "object" &&
+        entry !== null &&
+        "item" in entry &&
+        typeof entry.item === "string" &&
+        "state" in entry &&
+        (entry.state === "excepted" || entry.state === "not-excepted"),
+    )
+  ) {
+    throw new OperatorInputError(
+      `${fieldName} must be an array of { item, state } objects with state excepted|not-excepted.`,
     );
   }
 

@@ -15,6 +15,7 @@ import {
   type ProgressAuditCatalogEntryInput,
   type PublishAuditViewCatalogEntryInput,
   type RecordAuditCatalogEntryEvidenceInput,
+  type RecordExceptionAuditCatalogEntryInput,
   type ResolveAuditCatalogEntryInput,
   resolveWorkspacePath,
   type SaveAuditSavedViewInput,
@@ -217,6 +218,19 @@ export async function runCli(
               resolveSignOffAuditCatalogEntryInput(flags),
             ),
           });
+        case "record-exception":
+          if (!detail) {
+            throw new Error(
+              "audit catalog record-exception requires a catalog entry id.",
+            );
+          }
+
+          return writeJson(io.stdout.write, {
+            exception: await service.recordCatalogEntryException(
+              detail,
+              resolveRecordExceptionAuditCatalogEntryInput(flags),
+            ),
+          });
         case "record-evidence":
           if (!detail) {
             throw new Error(
@@ -261,6 +275,10 @@ export async function runCli(
         case "signed-off":
           return writeJson(io.stdout.write, {
             signedOff: await service.listSignedOffCatalogEntries(),
+          });
+        case "excepted":
+          return writeJson(io.stdout.write, {
+            excepted: await service.listExceptedCatalogEntries(),
           });
         case "checklist":
           if (!detail) {
@@ -362,6 +380,16 @@ export async function runCli(
 
           return writeJson(io.stdout.write, {
             signoff: await service.clearCatalogChecklistItemSignoff(detail),
+          });
+        case "clear-exception":
+          if (!detail) {
+            throw new Error(
+              "audit catalog clear-exception requires a catalog entry id.",
+            );
+          }
+
+          return writeJson(io.stdout.write, {
+            exception: await service.clearCatalogChecklistItemException(detail),
           });
         case "clear-assignment":
           if (!detail) {
@@ -505,6 +533,16 @@ export async function runCli(
 
           return writeJson(io.stdout.write, {
             signoff: await service.getCatalogChecklistItemSignoff(detail),
+          });
+        case "inspect-exception":
+          if (!detail) {
+            throw new Error(
+              "audit catalog inspect-exception requires a catalog entry id.",
+            );
+          }
+
+          return writeJson(io.stdout.write, {
+            exception: await service.getCatalogChecklistItemException(detail),
           });
         case "inspect-review":
           if (!detail) {
@@ -1050,6 +1088,24 @@ function resolveSignOffAuditCatalogEntryInput(
   };
 }
 
+function resolveRecordExceptionAuditCatalogEntryInput(
+  flags: ReadonlyMap<string, string | boolean>,
+): RecordExceptionAuditCatalogEntryInput {
+  const itemsJson = getStringFlag(flags, "items-json");
+  const exceptionNote = getStringFlag(flags, "exception-note");
+
+  if (!itemsJson) {
+    throw new Error(
+      "audit catalog record-exception requires --items-json <json-array>.",
+    );
+  }
+
+  return {
+    ...(exceptionNote !== undefined ? { exceptionNote } : {}),
+    items: resolveChecklistItemExceptionItems(itemsJson),
+  };
+}
+
 function resolveRecordAuditCatalogEntryEvidenceInput(
   flags: ReadonlyMap<string, string | boolean>,
 ): RecordAuditCatalogEntryEvidenceInput {
@@ -1292,6 +1348,32 @@ function resolveChecklistItemSignoffItems(itemsJson: string): readonly {
   return parsedItems;
 }
 
+function resolveChecklistItemExceptionItems(itemsJson: string): readonly {
+  readonly item: string;
+  readonly state: "excepted" | "not-excepted";
+}[] {
+  const parsedItems = JSON.parse(itemsJson) as unknown;
+
+  if (
+    !Array.isArray(parsedItems) ||
+    !parsedItems.every(
+      (item) =>
+        typeof item === "object" &&
+        item !== null &&
+        "item" in item &&
+        typeof item.item === "string" &&
+        "state" in item &&
+        (item.state === "excepted" || item.state === "not-excepted"),
+    )
+  ) {
+    throw new Error(
+      "--items-json must decode to an array of { item, state } objects with state excepted|not-excepted.",
+    );
+  }
+
+  return parsedItems;
+}
+
 function getStringFlag(
   flags: ReadonlyMap<string, string | boolean>,
   name: string,
@@ -1405,6 +1487,7 @@ Commands:
   audit catalog attested
   audit catalog acknowledged
   audit catalog signed-off
+  audit catalog excepted
   audit catalog checklisted
   audit catalog progressed
   audit catalog publish <saved-view-id> [--name <name>] [--description <text>]
@@ -1418,6 +1501,7 @@ Commands:
   audit catalog inspect-attestation <catalog-entry-id>
   audit catalog inspect-acknowledgment <catalog-entry-id>
   audit catalog inspect-sign-off <catalog-entry-id>
+  audit catalog inspect-exception <catalog-entry-id>
   audit catalog inspect-checklist <catalog-entry-id>
   audit catalog inspect-progress <catalog-entry-id>
   audit catalog inspect-review <catalog-entry-id>
@@ -1429,6 +1513,7 @@ Commands:
   audit catalog attest <catalog-entry-id> --items-json <json-array> [--attestation-note <text>]
   audit catalog acknowledge <catalog-entry-id> --items-json <json-array> [--acknowledgment-note <text>]
   audit catalog sign-off <catalog-entry-id> --items-json <json-array> [--signoff-note <text>]
+  audit catalog record-exception <catalog-entry-id> --items-json <json-array> [--exception-note <text>]
   audit catalog checklist <catalog-entry-id> --status <pending|completed> [--items-json <json-array>]
   audit catalog progress <catalog-entry-id> --items-json <json-array> [--completion-note <text>]
   audit catalog clear-blocker <catalog-entry-id>
@@ -1438,6 +1523,7 @@ Commands:
   audit catalog clear-attestation <catalog-entry-id>
   audit catalog clear-acknowledgment <catalog-entry-id>
   audit catalog clear-sign-off <catalog-entry-id>
+  audit catalog clear-exception <catalog-entry-id>
   audit catalog clear-assignment <catalog-entry-id>
   audit catalog clear-checklist <catalog-entry-id>
   audit catalog clear-progress <catalog-entry-id>
