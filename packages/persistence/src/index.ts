@@ -92,6 +92,19 @@ export {
   type SqliteAuditCatalogChecklistItemResolutionStoreOptions,
 } from "./catalog-checklist-item-resolution-store";
 export {
+  type ConfiguredAuditCatalogChecklistItemSignoffStoreOptions,
+  createConfiguredAuditCatalogChecklistItemSignoffStore,
+  createFileAuditCatalogChecklistItemSignoffStore,
+  createInMemoryAuditCatalogChecklistItemSignoffStore,
+  createPostgresAuditCatalogChecklistItemSignoffStore,
+  createSqliteAuditCatalogChecklistItemSignoffStore,
+  type FileAuditCatalogChecklistItemSignoffStoreOptions,
+  type InMemoryAuditCatalogChecklistItemSignoffStoreOptions,
+  type PostgresAuditCatalogChecklistItemSignoffStoreOptions,
+  resolveAuditCatalogChecklistItemSignoffFilePath,
+  type SqliteAuditCatalogChecklistItemSignoffStoreOptions,
+} from "./catalog-checklist-item-signoff-store";
+export {
   type ConfiguredAuditCatalogChecklistItemVerificationStoreOptions,
   createConfiguredAuditCatalogChecklistItemVerificationStore,
   createFileAuditCatalogChecklistItemVerificationStore,
