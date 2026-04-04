@@ -4989,7 +4989,7 @@ describe("@runroot/cli integration", () => {
     expect(attestedAfterClearPayload.attested.totalCount).toBe(0);
   });
 
-  it("records acknowledgments and sign-offs, lists, inspects, clears, and reapplies attested catalog entries through the CLI", async () => {
+  it("records acknowledgments, sign-offs, and exceptions, lists, inspects, clears, and reapplies attested catalog entries through the CLI", async () => {
     const workspaceRoot = await mkdtemp(
       join(tmpdir(), "runroot-cli-checklist-acknowledgment-"),
     );
@@ -5019,13 +5019,18 @@ describe("@runroot/cli integration", () => {
     const attestationIo = createIo();
     const acknowledgmentIo = createIo();
     const signoffIo = createIo();
+    const exceptionIo = createIo();
     const acknowledgedPeerIo = createIo();
     const signedOffPeerIo = createIo();
+    const exceptedPeerIo = createIo();
     const inspectAcknowledgmentIo = createIo();
     const inspectSignoffIo = createIo();
+    const inspectExceptionIo = createIo();
     const applyIo = createIo();
+    const clearExceptionIo = createIo();
     const clearSignoffIo = createIo();
     const clearAcknowledgmentIo = createIo();
+    const exceptedAfterClearIo = createIo();
     const signedOffAfterClearIo = createIo();
     const acknowledgedAfterClearIo = createIo();
 
@@ -5457,6 +5462,37 @@ describe("@runroot/cli integration", () => {
         io: signoffIo.io,
       },
     );
+    const exceptionExitCode = await runCli(
+      [
+        "audit",
+        "catalog",
+        "record-exception",
+        publishedPayload.catalogEntry.entry.id,
+        "--items-json",
+        JSON.stringify([
+          {
+            item: "Validate queued follow-up",
+            state: "excepted",
+          },
+          {
+            item: "Close backup handoff",
+            state: "not-excepted",
+          },
+        ]),
+        "--exception-note",
+        "Backup marked the signed-off follow-up for manual review",
+      ],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_oncall",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: exceptionIo.io,
+      },
+    );
     const acknowledgedPeerExitCode = await runCli(
       ["audit", "catalog", "acknowledged"],
       {
@@ -5481,6 +5517,19 @@ describe("@runroot/cli integration", () => {
           RUNROOT_SQLITE_PATH: sqlitePath,
         },
         io: signedOffPeerIo.io,
+      },
+    );
+    const exceptedPeerExitCode = await runCli(
+      ["audit", "catalog", "excepted"],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_backup",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: exceptedPeerIo.io,
       },
     );
     const inspectAcknowledgmentExitCode = await runCli(
@@ -5519,6 +5568,24 @@ describe("@runroot/cli integration", () => {
         io: inspectSignoffIo.io,
       },
     );
+    const inspectExceptionExitCode = await runCli(
+      [
+        "audit",
+        "catalog",
+        "inspect-exception",
+        publishedPayload.catalogEntry.entry.id,
+      ],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_oncall",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: inspectExceptionIo.io,
+      },
+    );
     const applyExitCode = await runCli(
       ["audit", "catalog", "apply", publishedPayload.catalogEntry.entry.id],
       {
@@ -5530,6 +5597,24 @@ describe("@runroot/cli integration", () => {
           RUNROOT_SQLITE_PATH: sqlitePath,
         },
         io: applyIo.io,
+      },
+    );
+    const clearExceptionExitCode = await runCli(
+      [
+        "audit",
+        "catalog",
+        "clear-exception",
+        publishedPayload.catalogEntry.entry.id,
+      ],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_oncall",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: clearExceptionIo.io,
       },
     );
     const clearSignoffExitCode = await runCli(
@@ -5566,6 +5651,19 @@ describe("@runroot/cli integration", () => {
           RUNROOT_SQLITE_PATH: sqlitePath,
         },
         io: clearAcknowledgmentIo.io,
+      },
+    );
+    const exceptedAfterClearExitCode = await runCli(
+      ["audit", "catalog", "excepted"],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_backup",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: exceptedAfterClearIo.io,
       },
     );
     const signedOffAfterClearExitCode = await runCli(
@@ -5640,6 +5738,22 @@ describe("@runroot/cli integration", () => {
             item: string;
             state: "signed-off" | "unsigned";
           }>;
+        };
+      };
+    };
+    const exceptionPayload = JSON.parse(exceptionIo.stdout.join("")) as {
+      exception: {
+        exception: {
+          exceptionNote?: string;
+          items: Array<{
+            item: string;
+            state: "excepted" | "not-excepted";
+          }>;
+        };
+        signoff: {
+          signoff: {
+            signoffNote?: string;
+          };
         };
       };
     };
@@ -5719,6 +5833,45 @@ describe("@runroot/cli integration", () => {
         totalCount: number;
       };
     };
+    const exceptedPeerPayload = JSON.parse(exceptedPeerIo.stdout.join("")) as {
+      excepted: {
+        items: Array<{
+          exception: {
+            exceptionNote?: string;
+          };
+          signoff: {
+            acknowledgment: {
+              attestation: {
+                evidence: {
+                  verification: {
+                    resolution: {
+                      blocker: {
+                        progress: {
+                          checklist: {
+                            assignment: {
+                              review: {
+                                visibility: {
+                                  catalogEntry: {
+                                    entry: {
+                                      id: string;
+                                    };
+                                  };
+                                };
+                              };
+                            };
+                          };
+                        };
+                      };
+                    };
+                  };
+                };
+              };
+            };
+          };
+        }>;
+        totalCount: number;
+      };
+    };
     const inspectAcknowledgmentPayload = JSON.parse(
       inspectAcknowledgmentIo.stdout.join(""),
     ) as {
@@ -5741,6 +5894,19 @@ describe("@runroot/cli integration", () => {
           items: Array<{
             item: string;
             state: "signed-off" | "unsigned";
+          }>;
+        };
+      };
+    };
+    const inspectExceptionPayload = JSON.parse(
+      inspectExceptionIo.stdout.join(""),
+    ) as {
+      exception: {
+        exception: {
+          exceptionNote?: string;
+          items: Array<{
+            item: string;
+            state: "excepted" | "not-excepted";
           }>;
         };
       };
@@ -5769,6 +5935,15 @@ describe("@runroot/cli integration", () => {
         };
       };
     };
+    const clearExceptionPayload = JSON.parse(
+      clearExceptionIo.stdout.join(""),
+    ) as {
+      exception: {
+        exception: {
+          exceptionNote?: string;
+        };
+      };
+    };
     const clearAcknowledgmentPayload = JSON.parse(
       clearAcknowledgmentIo.stdout.join(""),
     ) as {
@@ -5782,6 +5957,13 @@ describe("@runroot/cli integration", () => {
       signedOffAfterClearIo.stdout.join(""),
     ) as {
       signedOff: {
+        totalCount: number;
+      };
+    };
+    const exceptedAfterClearPayload = JSON.parse(
+      exceptedAfterClearIo.stdout.join(""),
+    ) as {
+      excepted: {
         totalCount: number;
       };
     };
@@ -5806,13 +5988,18 @@ describe("@runroot/cli integration", () => {
     expect(attestationExitCode).toBe(0);
     expect(acknowledgmentExitCode).toBe(0);
     expect(signoffExitCode).toBe(0);
+    expect(exceptionExitCode).toBe(0);
     expect(acknowledgedPeerExitCode).toBe(0);
     expect(signedOffPeerExitCode).toBe(0);
+    expect(exceptedPeerExitCode).toBe(0);
     expect(inspectAcknowledgmentExitCode).toBe(0);
     expect(inspectSignoffExitCode).toBe(0);
+    expect(inspectExceptionExitCode).toBe(0);
     expect(applyExitCode).toBe(0);
+    expect(clearExceptionExitCode).toBe(0);
     expect(clearSignoffExitCode).toBe(0);
     expect(clearAcknowledgmentExitCode).toBe(0);
+    expect(exceptedAfterClearExitCode).toBe(0);
     expect(signedOffAfterClearExitCode).toBe(0);
     expect(acknowledgedAfterClearExitCode).toBe(0);
     expect(
@@ -5860,6 +6047,22 @@ describe("@runroot/cli integration", () => {
         state: "unsigned",
       },
     ]);
+    expect(exceptionPayload.exception.signoff.signoff.signoffNote).toBe(
+      "Backup signed off the acknowledged follow-up",
+    );
+    expect(exceptionPayload.exception.exception.exceptionNote).toBe(
+      "Backup marked the signed-off follow-up for manual review",
+    );
+    expect(exceptionPayload.exception.exception.items).toEqual([
+      {
+        item: "Validate queued follow-up",
+        state: "excepted",
+      },
+      {
+        item: "Close backup handoff",
+        state: "not-excepted",
+      },
+    ]);
     expect(acknowledgedPeerPayload.acknowledged.totalCount).toBe(1);
     expect(
       acknowledgedPeerPayload.acknowledged.items[0]?.attestation.evidence
@@ -5874,6 +6077,15 @@ describe("@runroot/cli integration", () => {
     ).toBe(publishedPayload.catalogEntry.entry.id);
     expect(signedOffPeerPayload.signedOff.items[0]?.signoff.signoffNote).toBe(
       "Backup signed off the acknowledged follow-up",
+    );
+    expect(exceptedPeerPayload.excepted.totalCount).toBe(1);
+    expect(
+      exceptedPeerPayload.excepted.items[0]?.signoff.acknowledgment.attestation
+        .evidence.verification.resolution.blocker.progress.checklist.assignment
+        .review.visibility.catalogEntry.entry.id,
+    ).toBe(publishedPayload.catalogEntry.entry.id);
+    expect(exceptedPeerPayload.excepted.items[0]?.exception.exceptionNote).toBe(
+      "Backup marked the signed-off follow-up for manual review",
     );
     expect(
       inspectAcknowledgmentPayload.acknowledgment.acknowledgment
@@ -5892,6 +6104,19 @@ describe("@runroot/cli integration", () => {
         state: "unsigned",
       },
     ]);
+    expect(inspectExceptionPayload.exception.exception.exceptionNote).toBe(
+      "Backup marked the signed-off follow-up for manual review",
+    );
+    expect(inspectExceptionPayload.exception.exception.items).toEqual([
+      {
+        item: "Validate queued follow-up",
+        state: "excepted",
+      },
+      {
+        item: "Close backup handoff",
+        state: "not-excepted",
+      },
+    ]);
     expect(applyPayload.application.application.savedView.id).toBe(
       savedViewPayload.savedView.id,
     );
@@ -5903,6 +6128,10 @@ describe("@runroot/cli integration", () => {
       clearAcknowledgmentPayload.acknowledgment.acknowledgment
         .acknowledgmentNote,
     ).toBe("Backup acknowledged the attested follow-up");
+    expect(clearExceptionPayload.exception.exception.exceptionNote).toBe(
+      "Backup marked the signed-off follow-up for manual review",
+    );
+    expect(exceptedAfterClearPayload.excepted.totalCount).toBe(0);
     expect(clearSignoffPayload.signoff.signoff.signoffNote).toBe(
       "Backup signed off the acknowledged follow-up",
     );
