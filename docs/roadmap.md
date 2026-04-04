@@ -450,3 +450,27 @@ Status: completed
   observability and analytics platform work
 
 Status: completed
+
+## Phase 29: Cross-Run Audit Catalog Checklist Item Exceptions and Exception Notes
+
+- suggested freeze: add a shared audit-catalog checklist-item-exception
+  contract over the existing checklist-item-signoff and
+  checklist-item-acknowledgment paths rather than introducing approval
+  products, workflow gating, or a workflow engine
+- expose minimal record-exception, list-excepted, inspect-exception,
+  clear-exception, and apply paths through the existing seams in SDK, API,
+  CLI, and web
+- keep operator surfaces thin while allowing signed-off acknowledged attested
+  evidenced verified resolved blocked progressed assigned reviewed presets to
+  carry stable per-item exception state and a thin exception note without
+  expanding into threaded collaboration, fine-grained RBAC, multi-tenant
+  access, dashboards, search, analytics, approval products, workflow gating,
+  or attachment-upload products
+- execute against the formal handoff in
+  [docs/architecture/phase-29-handoff.md](./architecture/phase-29-handoff.md)
+- keep the phase focused on checklist item exceptions and exception notes
+  rather than broader checklist orchestration, broader review workflow
+  engines, broader multi-user curation, approval products, workflow gating,
+  or broad observability and analytics platform work
+
+Status: scope frozen
