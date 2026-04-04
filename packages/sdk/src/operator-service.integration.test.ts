@@ -2876,7 +2876,41 @@ describe("@runroot/sdk operator service integration", () => {
         },
       ],
     });
+    await ownerService.signOffCatalogEntry(inlineCatalogEntry.entry.id, {
+      items: [
+        {
+          item: "Confirm inline owner follow-up",
+          state: "signed-off",
+        },
+      ],
+    });
+    await ownerService.signOffCatalogEntry(queuedCatalogEntry.entry.id, {
+      signoffNote: "Backup signed off the acknowledged follow-up",
+      items: [
+        {
+          item: "Validate queued follow-up",
+          state: "signed-off",
+        },
+        {
+          item: "Close backup handoff",
+          state: "unsigned",
+        },
+      ],
+    });
 
+    const ownerSignoffs = await ownerService.listSignedOffCatalogEntries();
+    const peerSignoffs = await peerService.listSignedOffCatalogEntries();
+    const inspectedSignoff = await ownerService.getCatalogChecklistItemSignoff(
+      queuedCatalogEntry.entry.id,
+    );
+    const appliedSignoff = await peerService.applyCatalogEntry(
+      queuedCatalogEntry.entry.id,
+    );
+    const clearedSignoff = await ownerService.clearCatalogChecklistItemSignoff(
+      queuedCatalogEntry.entry.id,
+    );
+    const peerSignoffsAfterClear =
+      await peerService.listSignedOffCatalogEntries();
     const ownerAcknowledgments =
       await ownerService.listAcknowledgedCatalogEntries();
     const peerAcknowledgments =
@@ -2895,6 +2929,50 @@ describe("@runroot/sdk operator service integration", () => {
     const peerAcknowledgmentsAfterClear =
       await peerService.listAcknowledgedCatalogEntries();
 
+    expect(
+      ownerSignoffs.items.map(
+        (item) =>
+          item.acknowledgment.attestation.evidence.verification.resolution
+            .blocker.progress.checklist.assignment.review.visibility
+            .catalogEntry.entry.id,
+      ),
+    ).toEqual([queuedCatalogEntry.entry.id, inlineCatalogEntry.entry.id]);
+    expect(
+      peerSignoffs.items.map(
+        (item) =>
+          item.acknowledgment.attestation.evidence.verification.resolution
+            .blocker.progress.checklist.assignment.review.visibility
+            .catalogEntry.entry.id,
+      ),
+    ).toEqual([queuedCatalogEntry.entry.id]);
+    expect(inspectedSignoff.signoff).toMatchObject({
+      catalogEntryId: queuedCatalogEntry.entry.id,
+      operatorId: "ops_oncall",
+      scopeId: "ops",
+      signoffNote: "Backup signed off the acknowledged follow-up",
+    });
+    expect(inspectedSignoff.signoff.items).toEqual([
+      {
+        item: "Validate queued follow-up",
+        state: "signed-off",
+      },
+      {
+        item: "Close backup handoff",
+        state: "unsigned",
+      },
+    ]);
+    expect(appliedSignoff.catalogEntry.entry.id).toBe(
+      queuedCatalogEntry.entry.id,
+    );
+    expect(appliedSignoff.application.savedView.id).toBe(queuedSavedView.id);
+    expect(appliedSignoff.application.navigation.totalSummaryCount).toBe(1);
+    expect(
+      appliedSignoff.application.navigation.drilldowns[0]?.result.runId,
+    ).toBe(queuedRun.id);
+    expect(clearedSignoff.signoff.catalogEntryId).toBe(
+      queuedCatalogEntry.entry.id,
+    );
+    expect(peerSignoffsAfterClear.totalCount).toBe(0);
     expect(
       ownerAcknowledgments.items.map(
         (item) =>

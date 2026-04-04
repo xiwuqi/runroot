@@ -3843,7 +3843,7 @@ describe("@runroot/api integration", () => {
     }
   });
 
-  it("serves acknowledge, list-acknowledged, inspect-acknowledgment, clear-acknowledgment, and apply paths through the network API", async () => {
+  it("serves acknowledgment and sign-off list, inspect, clear, and apply paths through the network API", async () => {
     const workspaceRoot = await mkdtemp(
       join(tmpdir(), "runroot-api-checklist-acknowledgment-"),
     );
@@ -4158,20 +4158,57 @@ describe("@runroot/api integration", () => {
           method: "POST",
         },
       );
+      const signoffResponse = await fetch(
+        `${ownerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/sign-off`,
+        {
+          body: JSON.stringify({
+            signoffNote: "Backup signed off the acknowledged follow-up",
+            items: [
+              {
+                item: "Validate queued follow-up",
+                state: "signed-off",
+              },
+              {
+                item: "Close backup handoff",
+                state: "unsigned",
+              },
+            ],
+          }),
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "POST",
+        },
+      );
       const acknowledgedResponse = await fetch(
         `${peerAddress}/audit/catalog/acknowledged`,
+      );
+      const signedOffResponse = await fetch(
+        `${peerAddress}/audit/catalog/signed-off`,
       );
       const inspectResponse = await fetch(
         `${peerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/acknowledgment`,
       );
+      const inspectSignoffResponse = await fetch(
+        `${peerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/sign-off`,
+      );
       const applyResponse = await fetch(
         `${peerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/apply`,
+      );
+      const clearSignoffResponse = await fetch(
+        `${ownerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/sign-off/clear`,
+        {
+          method: "POST",
+        },
       );
       const clearResponse = await fetch(
         `${ownerAddress}/audit/catalog/${publishedPayload.catalogEntry.entry.id}/acknowledgment/clear`,
         {
           method: "POST",
         },
+      );
+      const signedOffAfterClearResponse = await fetch(
+        `${peerAddress}/audit/catalog/signed-off`,
       );
       const acknowledgedAfterClearResponse = await fetch(
         `${peerAddress}/audit/catalog/acknowledged`,
@@ -4199,6 +4236,27 @@ describe("@runroot/api integration", () => {
                 };
               };
             };
+          };
+        };
+      };
+      const signoffPayload = (await signoffResponse.json()) as {
+        signoff: {
+          acknowledgment: {
+            acknowledgment: {
+              acknowledgmentNote?: string;
+            };
+            attestation: {
+              attestation: {
+                attestationNote?: string;
+              };
+            };
+          };
+          signoff: {
+            signoffNote?: string;
+            items: Array<{
+              item: string;
+              state: "signed-off" | "unsigned";
+            }>;
           };
         };
       };
@@ -4237,6 +4295,43 @@ describe("@runroot/api integration", () => {
           totalCount: number;
         };
       };
+      const signedOffPayload = (await signedOffResponse.json()) as {
+        signedOff: {
+          items: Array<{
+            acknowledgment: {
+              attestation: {
+                evidence: {
+                  verification: {
+                    resolution: {
+                      blocker: {
+                        progress: {
+                          checklist: {
+                            assignment: {
+                              review: {
+                                visibility: {
+                                  catalogEntry: {
+                                    entry: {
+                                      id: string;
+                                    };
+                                  };
+                                };
+                              };
+                            };
+                          };
+                        };
+                      };
+                    };
+                  };
+                };
+              };
+            };
+            signoff: {
+              signoffNote?: string;
+            };
+          }>;
+          totalCount: number;
+        };
+      };
       const inspectPayload = (await inspectResponse.json()) as {
         acknowledgment: {
           acknowledgment: {
@@ -4244,6 +4339,17 @@ describe("@runroot/api integration", () => {
             items: Array<{
               item: string;
               state: "acknowledged" | "unacknowledged";
+            }>;
+          };
+        };
+      };
+      const inspectSignoffPayload = (await inspectSignoffResponse.json()) as {
+        signoff: {
+          signoff: {
+            signoffNote?: string;
+            items: Array<{
+              item: string;
+              state: "signed-off" | "unsigned";
             }>;
           };
         };
@@ -4265,6 +4371,13 @@ describe("@runroot/api integration", () => {
           };
         };
       };
+      const clearSignoffPayload = (await clearSignoffResponse.json()) as {
+        signoff: {
+          signoff: {
+            signoffNote?: string;
+          };
+        };
+      };
       const clearPayload = (await clearResponse.json()) as {
         acknowledgment: {
           acknowledgment: {
@@ -4272,6 +4385,12 @@ describe("@runroot/api integration", () => {
           };
         };
       };
+      const signedOffAfterClearPayload =
+        (await signedOffAfterClearResponse.json()) as {
+          signedOff: {
+            totalCount: number;
+          };
+        };
       const acknowledgedAfterClearPayload =
         (await acknowledgedAfterClearResponse.json()) as {
           acknowledged: {
@@ -4292,6 +4411,7 @@ describe("@runroot/api integration", () => {
       expect(evidenceResponse.status).toBe(200);
       expect(attestationResponse.status).toBe(200);
       expect(acknowledgmentResponse.status).toBe(200);
+      expect(signoffResponse.status).toBe(200);
       expect(
         acknowledgmentPayload.acknowledgment.attestation.evidence.verification
           .verification.verificationNote,
@@ -4319,6 +4439,26 @@ describe("@runroot/api integration", () => {
           },
         ],
       );
+      expect(
+        signoffPayload.signoff.acknowledgment.acknowledgment.acknowledgmentNote,
+      ).toBe("Backup acknowledged the attested follow-up");
+      expect(
+        signoffPayload.signoff.acknowledgment.attestation.attestation
+          .attestationNote,
+      ).toBe("Backup attested the stable follow-up evidence");
+      expect(signoffPayload.signoff.signoff.signoffNote).toBe(
+        "Backup signed off the acknowledged follow-up",
+      );
+      expect(signoffPayload.signoff.signoff.items).toEqual([
+        {
+          item: "Validate queued follow-up",
+          state: "signed-off",
+        },
+        {
+          item: "Close backup handoff",
+          state: "unsigned",
+        },
+      ]);
       expect(acknowledgedResponse.status).toBe(200);
       expect(acknowledgedPayload.acknowledged.totalCount).toBe(1);
       expect(
@@ -4326,10 +4466,34 @@ describe("@runroot/api integration", () => {
           .verification.resolution.blocker.progress.checklist.assignment.review
           .visibility.catalogEntry.entry.id,
       ).toBe("catalog_entry_acknowledgment_api");
+      expect(signedOffResponse.status).toBe(200);
+      expect(signedOffPayload.signedOff.totalCount).toBe(1);
+      expect(
+        signedOffPayload.signedOff.items[0]?.acknowledgment.attestation.evidence
+          .verification.resolution.blocker.progress.checklist.assignment.review
+          .visibility.catalogEntry.entry.id,
+      ).toBe("catalog_entry_acknowledgment_api");
+      expect(signedOffPayload.signedOff.items[0]?.signoff.signoffNote).toBe(
+        "Backup signed off the acknowledged follow-up",
+      );
       expect(inspectResponse.status).toBe(200);
       expect(
         inspectPayload.acknowledgment.acknowledgment.acknowledgmentNote,
       ).toBe("Backup acknowledged the attested follow-up");
+      expect(inspectSignoffResponse.status).toBe(200);
+      expect(inspectSignoffPayload.signoff.signoff.signoffNote).toBe(
+        "Backup signed off the acknowledged follow-up",
+      );
+      expect(inspectSignoffPayload.signoff.signoff.items).toEqual([
+        {
+          item: "Validate queued follow-up",
+          state: "signed-off",
+        },
+        {
+          item: "Close backup handoff",
+          state: "unsigned",
+        },
+      ]);
       expect(applyResponse.status).toBe(200);
       expect(applyPayload.application.application.savedView.id).toBe(
         "saved_view_acknowledgment_api",
@@ -4338,10 +4502,16 @@ describe("@runroot/api integration", () => {
         applyPayload.application.application.navigation.drilldowns[0]?.result
           .runId,
       ).toBe(queuedRun.id);
+      expect(clearSignoffResponse.status).toBe(200);
+      expect(clearSignoffPayload.signoff.signoff.signoffNote).toBe(
+        "Backup signed off the acknowledged follow-up",
+      );
       expect(clearResponse.status).toBe(200);
       expect(
         clearPayload.acknowledgment.acknowledgment.acknowledgmentNote,
       ).toBe("Backup acknowledged the attested follow-up");
+      expect(signedOffAfterClearResponse.status).toBe(200);
+      expect(signedOffAfterClearPayload.signedOff.totalCount).toBe(0);
       expect(acknowledgedAfterClearResponse.status).toBe(200);
       expect(acknowledgedAfterClearPayload.acknowledged.totalCount).toBe(0);
     } finally {

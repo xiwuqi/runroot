@@ -204,6 +204,19 @@ export async function runCli(
               resolveAcknowledgeAuditCatalogEntryInput(flags),
             ),
           });
+        case "sign-off":
+          if (!detail) {
+            throw new Error(
+              "audit catalog sign-off requires a catalog entry id.",
+            );
+          }
+
+          return writeJson(io.stdout.write, {
+            signoff: await service.signOffCatalogEntry(
+              detail,
+              resolveSignOffAuditCatalogEntryInput(flags),
+            ),
+          });
         case "record-evidence":
           if (!detail) {
             throw new Error(
@@ -244,6 +257,10 @@ export async function runCli(
         case "acknowledged":
           return writeJson(io.stdout.write, {
             acknowledged: await service.listAcknowledgedCatalogEntries(),
+          });
+        case "signed-off":
+          return writeJson(io.stdout.write, {
+            signedOff: await service.listSignedOffCatalogEntries(),
           });
         case "checklist":
           if (!detail) {
@@ -335,6 +352,16 @@ export async function runCli(
           return writeJson(io.stdout.write, {
             acknowledgment:
               await service.clearCatalogChecklistItemAcknowledgment(detail),
+          });
+        case "clear-sign-off":
+          if (!detail) {
+            throw new Error(
+              "audit catalog clear-sign-off requires a catalog entry id.",
+            );
+          }
+
+          return writeJson(io.stdout.write, {
+            signoff: await service.clearCatalogChecklistItemSignoff(detail),
           });
         case "clear-assignment":
           if (!detail) {
@@ -468,6 +495,16 @@ export async function runCli(
           return writeJson(io.stdout.write, {
             acknowledgment:
               await service.getCatalogChecklistItemAcknowledgment(detail),
+          });
+        case "inspect-sign-off":
+          if (!detail) {
+            throw new Error(
+              "audit catalog inspect-sign-off requires a catalog entry id.",
+            );
+          }
+
+          return writeJson(io.stdout.write, {
+            signoff: await service.getCatalogChecklistItemSignoff(detail),
           });
         case "inspect-review":
           if (!detail) {
@@ -989,6 +1026,30 @@ function resolveAcknowledgeAuditCatalogEntryInput(
   };
 }
 
+function resolveSignOffAuditCatalogEntryInput(
+  flags: ReadonlyMap<string, string | boolean>,
+): {
+  readonly items: readonly {
+    readonly item: string;
+    readonly state: "signed-off" | "unsigned";
+  }[];
+  readonly signoffNote?: string;
+} {
+  const itemsJson = getStringFlag(flags, "items-json");
+  const signoffNote = getStringFlag(flags, "signoff-note");
+
+  if (!itemsJson) {
+    throw new Error(
+      "audit catalog sign-off requires --items-json <json-array>.",
+    );
+  }
+
+  return {
+    ...(signoffNote !== undefined ? { signoffNote } : {}),
+    items: resolveChecklistItemSignoffItems(itemsJson),
+  };
+}
+
 function resolveRecordAuditCatalogEntryEvidenceInput(
   flags: ReadonlyMap<string, string | boolean>,
 ): RecordAuditCatalogEntryEvidenceInput {
@@ -1205,6 +1266,32 @@ function resolveChecklistItemAcknowledgmentItems(itemsJson: string): readonly {
   return parsedItems;
 }
 
+function resolveChecklistItemSignoffItems(itemsJson: string): readonly {
+  readonly item: string;
+  readonly state: "signed-off" | "unsigned";
+}[] {
+  const parsedItems = JSON.parse(itemsJson) as unknown;
+
+  if (
+    !Array.isArray(parsedItems) ||
+    !parsedItems.every(
+      (item) =>
+        typeof item === "object" &&
+        item !== null &&
+        "item" in item &&
+        typeof item.item === "string" &&
+        "state" in item &&
+        (item.state === "signed-off" || item.state === "unsigned"),
+    )
+  ) {
+    throw new Error(
+      "--items-json must decode to an array of { item, state } objects with state signed-off|unsigned.",
+    );
+  }
+
+  return parsedItems;
+}
+
 function getStringFlag(
   flags: ReadonlyMap<string, string | boolean>,
   name: string,
@@ -1317,6 +1404,7 @@ Commands:
   audit catalog evidenced
   audit catalog attested
   audit catalog acknowledged
+  audit catalog signed-off
   audit catalog checklisted
   audit catalog progressed
   audit catalog publish <saved-view-id> [--name <name>] [--description <text>]
@@ -1329,6 +1417,7 @@ Commands:
   audit catalog inspect-evidence <catalog-entry-id>
   audit catalog inspect-attestation <catalog-entry-id>
   audit catalog inspect-acknowledgment <catalog-entry-id>
+  audit catalog inspect-sign-off <catalog-entry-id>
   audit catalog inspect-checklist <catalog-entry-id>
   audit catalog inspect-progress <catalog-entry-id>
   audit catalog inspect-review <catalog-entry-id>
@@ -1339,6 +1428,7 @@ Commands:
   audit catalog record-evidence <catalog-entry-id> --items-json <json-array> [--evidence-note <text>]
   audit catalog attest <catalog-entry-id> --items-json <json-array> [--attestation-note <text>]
   audit catalog acknowledge <catalog-entry-id> --items-json <json-array> [--acknowledgment-note <text>]
+  audit catalog sign-off <catalog-entry-id> --items-json <json-array> [--signoff-note <text>]
   audit catalog checklist <catalog-entry-id> --status <pending|completed> [--items-json <json-array>]
   audit catalog progress <catalog-entry-id> --items-json <json-array> [--completion-note <text>]
   audit catalog clear-blocker <catalog-entry-id>
@@ -1347,6 +1437,7 @@ Commands:
   audit catalog clear-evidence <catalog-entry-id>
   audit catalog clear-attestation <catalog-entry-id>
   audit catalog clear-acknowledgment <catalog-entry-id>
+  audit catalog clear-sign-off <catalog-entry-id>
   audit catalog clear-assignment <catalog-entry-id>
   audit catalog clear-checklist <catalog-entry-id>
   audit catalog clear-progress <catalog-entry-id>

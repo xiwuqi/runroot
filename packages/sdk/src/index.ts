@@ -25,6 +25,7 @@ export {
   type RunrootOperatorServiceOptions,
   resolveWorkspacePath,
   type SaveAuditSavedViewInput,
+  type SignOffAuditCatalogEntryInput,
   type StartTemplateRunInput,
   type VerifyAuditCatalogEntryInput,
 } from "./operator-service";

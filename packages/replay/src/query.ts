@@ -92,6 +92,17 @@ import {
   type UpdateCrossRunAuditCatalogChecklistItemResolutionInput,
 } from "./checklist-item-resolution";
 import {
+  type CrossRunAuditCatalogChecklistItemSignoff,
+  type CrossRunAuditCatalogChecklistItemSignoffApplication,
+  type CrossRunAuditCatalogChecklistItemSignoffCollection,
+  type CrossRunAuditCatalogChecklistItemSignoffStore,
+  type CrossRunAuditCatalogChecklistItemSignoffView,
+  compareCrossRunAuditCatalogChecklistItemSignoff,
+  createCrossRunAuditCatalogChecklistItemSignoff,
+  normalizeChecklistItemSignoffItems,
+  type UpdateCrossRunAuditCatalogChecklistItemSignoffInput,
+} from "./checklist-item-signoff";
+import {
   type CrossRunAuditCatalogChecklistItemVerification,
   type CrossRunAuditCatalogChecklistItemVerificationApplication,
   type CrossRunAuditCatalogChecklistItemVerificationCollection,
@@ -468,6 +479,30 @@ export interface CrossRunAuditCatalogChecklistItemAcknowledgmentQuery {
     input: UpdateCrossRunAuditCatalogChecklistItemAcknowledgmentInput,
     timestamp: string,
   ): Promise<CrossRunAuditCatalogChecklistItemAcknowledgmentView>;
+}
+
+export interface CrossRunAuditCatalogChecklistItemSignoffQuery {
+  applyCatalogEntry(
+    id: string,
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+  ): Promise<CrossRunAuditCatalogChecklistItemSignoffApplication | undefined>;
+  clearCatalogChecklistItemSignoff(
+    id: string,
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+  ): Promise<CrossRunAuditCatalogChecklistItemSignoffView | undefined>;
+  getCatalogChecklistItemSignoff(
+    id: string,
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+  ): Promise<CrossRunAuditCatalogChecklistItemSignoffView | undefined>;
+  listSignedOffCatalogEntries(
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+  ): Promise<CrossRunAuditCatalogChecklistItemSignoffCollection>;
+  setCatalogChecklistItemSignoff(
+    id: string,
+    viewer: CrossRunAuditCatalogVisibilityViewer,
+    input: UpdateCrossRunAuditCatalogChecklistItemSignoffInput,
+    timestamp: string,
+  ): Promise<CrossRunAuditCatalogChecklistItemSignoffView>;
 }
 
 export interface CrossRunAuditCatalogChecklistItemAttestationQuery {
@@ -2292,6 +2327,156 @@ export function createCrossRunAuditCatalogChecklistItemAcknowledgmentQuery(
   };
 }
 
+export function createCrossRunAuditCatalogChecklistItemSignoffQuery(
+  store: CrossRunAuditCatalogChecklistItemSignoffStore,
+  acknowledgmentEntries: CrossRunAuditCatalogChecklistItemAcknowledgmentQuery,
+): CrossRunAuditCatalogChecklistItemSignoffQuery {
+  return {
+    async applyCatalogEntry(id, viewer) {
+      const signoff = await resolveCatalogChecklistItemSignoffView(
+        store,
+        acknowledgmentEntries,
+        id,
+        viewer,
+      );
+
+      if (!signoff) {
+        return undefined;
+      }
+
+      const application = await acknowledgmentEntries.applyCatalogEntry(
+        id,
+        viewer,
+      );
+
+      if (!application) {
+        return undefined;
+      }
+
+      return {
+        application,
+        signoff,
+      };
+    },
+
+    async clearCatalogChecklistItemSignoff(id, viewer) {
+      const signoff = await resolveCatalogChecklistItemSignoffView(
+        store,
+        acknowledgmentEntries,
+        id,
+        viewer,
+      );
+
+      if (!signoff) {
+        return undefined;
+      }
+
+      await store.deleteCatalogChecklistItemSignoff(id);
+
+      return signoff;
+    },
+
+    async getCatalogChecklistItemSignoff(id, viewer) {
+      return resolveCatalogChecklistItemSignoffView(
+        store,
+        acknowledgmentEntries,
+        id,
+        viewer,
+      );
+    },
+
+    async listSignedOffCatalogEntries(viewer) {
+      const signoffEntries = [
+        ...(await store.listCatalogChecklistItemSignoffs()),
+      ].sort(compareCrossRunAuditCatalogChecklistItemSignoff);
+      const items = (
+        await Promise.all(
+          signoffEntries.map(async (signoff) =>
+            resolveCatalogChecklistItemSignoffFromValue(
+              acknowledgmentEntries,
+              signoff,
+              viewer,
+            ),
+          ),
+        )
+      ).filter(
+        (signoff): signoff is CrossRunAuditCatalogChecklistItemSignoffView =>
+          signoff !== undefined,
+      );
+
+      return {
+        items,
+        totalCount: items.length,
+      };
+    },
+
+    async setCatalogChecklistItemSignoff(id, viewer, input, timestamp) {
+      const acknowledgment =
+        await acknowledgmentEntries.getCatalogChecklistItemAcknowledgment(
+          id,
+          viewer,
+        );
+
+      if (!acknowledgment) {
+        throw new Error(
+          `Catalog entry "${id}" is not acknowledged and visible to operator "${viewer.operatorId}".`,
+        );
+      }
+
+      const allowedItems = acknowledgment.acknowledgment.items.map(
+        (item) => item.item,
+      );
+      const normalizedItems = normalizeChecklistItemSignoffItems(
+        input.items,
+        allowedItems,
+      );
+
+      if (normalizedItems.length === 0) {
+        throw new Error(
+          "Catalog checklist item signoffs require at least one checklist item signoff entry.",
+        );
+      }
+
+      const existingSignoff = await store.getCatalogChecklistItemSignoff(id);
+      const normalizedSignoffNote = input.signoffNote?.trim();
+      const signoff = existingSignoff
+        ? {
+            ...(input.signoffNote === undefined
+              ? existingSignoff.signoffNote
+                ? { signoffNote: existingSignoff.signoffNote }
+                : {}
+              : normalizedSignoffNote
+                ? { signoffNote: normalizedSignoffNote }
+                : {}),
+            catalogEntryId: id,
+            createdAt: existingSignoff.createdAt,
+            items: normalizedItems,
+            kind: existingSignoff.kind,
+            operatorId: viewer.operatorId,
+            scopeId: viewer.scopeId,
+            updatedAt: timestamp,
+          }
+        : createCrossRunAuditCatalogChecklistItemSignoff({
+            ...(normalizedSignoffNote
+              ? { signoffNote: normalizedSignoffNote }
+              : {}),
+            catalogEntryId: id,
+            items: normalizedItems,
+            operatorId: viewer.operatorId,
+            scopeId: viewer.scopeId,
+            timestamp,
+          });
+
+      await store.saveCatalogChecklistItemSignoff(signoff);
+
+      return {
+        acknowledgment,
+        signoff,
+      };
+    },
+  };
+}
+
 async function resolveCatalogEntryView(
   store: CrossRunAuditCatalogStore,
   savedViews: CrossRunAuditSavedViewQuery,
@@ -2818,5 +3003,59 @@ async function resolveCatalogChecklistItemAcknowledgmentFromValue(
       items: normalizedItems,
     },
     attestation,
+  };
+}
+
+async function resolveCatalogChecklistItemSignoffView(
+  store: CrossRunAuditCatalogChecklistItemSignoffStore,
+  acknowledgmentQuery: CrossRunAuditCatalogChecklistItemAcknowledgmentQuery,
+  id: string,
+  viewer: CrossRunAuditCatalogVisibilityViewer,
+): Promise<CrossRunAuditCatalogChecklistItemSignoffView | undefined> {
+  const signoff = await store.getCatalogChecklistItemSignoff(id);
+
+  return signoff
+    ? resolveCatalogChecklistItemSignoffFromValue(
+        acknowledgmentQuery,
+        signoff,
+        viewer,
+      )
+    : undefined;
+}
+
+async function resolveCatalogChecklistItemSignoffFromValue(
+  acknowledgmentQuery: CrossRunAuditCatalogChecklistItemAcknowledgmentQuery,
+  signoff: CrossRunAuditCatalogChecklistItemSignoff,
+  viewer: CrossRunAuditCatalogVisibilityViewer,
+): Promise<CrossRunAuditCatalogChecklistItemSignoffView | undefined> {
+  if (signoff.scopeId !== viewer.scopeId) {
+    return undefined;
+  }
+
+  const acknowledgment =
+    await acknowledgmentQuery.getCatalogChecklistItemAcknowledgment(
+      signoff.catalogEntryId,
+      viewer,
+    );
+
+  if (!acknowledgment) {
+    return undefined;
+  }
+
+  const normalizedItems = normalizeChecklistItemSignoffItems(
+    signoff.items,
+    acknowledgment.acknowledgment.items.map((item) => item.item),
+  );
+
+  if (normalizedItems.length === 0) {
+    return undefined;
+  }
+
+  return {
+    acknowledgment,
+    signoff: {
+      ...signoff,
+      items: normalizedItems,
+    },
   };
 }

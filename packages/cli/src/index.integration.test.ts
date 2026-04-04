@@ -4989,7 +4989,7 @@ describe("@runroot/cli integration", () => {
     expect(attestedAfterClearPayload.attested.totalCount).toBe(0);
   });
 
-  it("records acknowledgments, lists-acknowledged, inspects, clears, and reapplies attested catalog entries through the CLI", async () => {
+  it("records acknowledgments and sign-offs, lists, inspects, clears, and reapplies attested catalog entries through the CLI", async () => {
     const workspaceRoot = await mkdtemp(
       join(tmpdir(), "runroot-cli-checklist-acknowledgment-"),
     );
@@ -5018,10 +5018,15 @@ describe("@runroot/cli integration", () => {
     const evidenceIo = createIo();
     const attestationIo = createIo();
     const acknowledgmentIo = createIo();
+    const signoffIo = createIo();
     const acknowledgedPeerIo = createIo();
+    const signedOffPeerIo = createIo();
     const inspectAcknowledgmentIo = createIo();
+    const inspectSignoffIo = createIo();
     const applyIo = createIo();
+    const clearSignoffIo = createIo();
     const clearAcknowledgmentIo = createIo();
+    const signedOffAfterClearIo = createIo();
     const acknowledgedAfterClearIo = createIo();
 
     await runCli(
@@ -5421,6 +5426,37 @@ describe("@runroot/cli integration", () => {
         io: acknowledgmentIo.io,
       },
     );
+    const signoffExitCode = await runCli(
+      [
+        "audit",
+        "catalog",
+        "sign-off",
+        publishedPayload.catalogEntry.entry.id,
+        "--items-json",
+        JSON.stringify([
+          {
+            item: "Validate queued follow-up",
+            state: "signed-off",
+          },
+          {
+            item: "Close backup handoff",
+            state: "unsigned",
+          },
+        ]),
+        "--signoff-note",
+        "Backup signed off the acknowledged follow-up",
+      ],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_oncall",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: signoffIo.io,
+      },
+    );
     const acknowledgedPeerExitCode = await runCli(
       ["audit", "catalog", "acknowledged"],
       {
@@ -5432,6 +5468,19 @@ describe("@runroot/cli integration", () => {
           RUNROOT_SQLITE_PATH: sqlitePath,
         },
         io: acknowledgedPeerIo.io,
+      },
+    );
+    const signedOffPeerExitCode = await runCli(
+      ["audit", "catalog", "signed-off"],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_backup",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: signedOffPeerIo.io,
       },
     );
     const inspectAcknowledgmentExitCode = await runCli(
@@ -5452,6 +5501,24 @@ describe("@runroot/cli integration", () => {
         io: inspectAcknowledgmentIo.io,
       },
     );
+    const inspectSignoffExitCode = await runCli(
+      [
+        "audit",
+        "catalog",
+        "inspect-sign-off",
+        publishedPayload.catalogEntry.entry.id,
+      ],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_oncall",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: inspectSignoffIo.io,
+      },
+    );
     const applyExitCode = await runCli(
       ["audit", "catalog", "apply", publishedPayload.catalogEntry.entry.id],
       {
@@ -5463,6 +5530,24 @@ describe("@runroot/cli integration", () => {
           RUNROOT_SQLITE_PATH: sqlitePath,
         },
         io: applyIo.io,
+      },
+    );
+    const clearSignoffExitCode = await runCli(
+      [
+        "audit",
+        "catalog",
+        "clear-sign-off",
+        publishedPayload.catalogEntry.entry.id,
+      ],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_oncall",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: clearSignoffIo.io,
       },
     );
     const clearAcknowledgmentExitCode = await runCli(
@@ -5481,6 +5566,19 @@ describe("@runroot/cli integration", () => {
           RUNROOT_SQLITE_PATH: sqlitePath,
         },
         io: clearAcknowledgmentIo.io,
+      },
+    );
+    const signedOffAfterClearExitCode = await runCli(
+      ["audit", "catalog", "signed-off"],
+      {
+        cwd: workspaceRoot,
+        env: {
+          RUNROOT_OPERATOR_ID: "ops_backup",
+          RUNROOT_OPERATOR_SCOPE: "ops",
+          RUNROOT_PERSISTENCE_DRIVER: "sqlite",
+          RUNROOT_SQLITE_PATH: sqlitePath,
+        },
+        io: signedOffAfterClearIo.io,
       },
     );
     const acknowledgedAfterClearExitCode = await runCli(
@@ -5524,6 +5622,27 @@ describe("@runroot/cli integration", () => {
         };
       };
     };
+    const signoffPayload = JSON.parse(signoffIo.stdout.join("")) as {
+      signoff: {
+        acknowledgment: {
+          acknowledgment: {
+            acknowledgmentNote?: string;
+          };
+          attestation: {
+            attestation: {
+              attestationNote?: string;
+            };
+          };
+        };
+        signoff: {
+          signoffNote?: string;
+          items: Array<{
+            item: string;
+            state: "signed-off" | "unsigned";
+          }>;
+        };
+      };
+    };
     const acknowledgedPeerPayload = JSON.parse(
       acknowledgedPeerIo.stdout.join(""),
     ) as {
@@ -5561,6 +5680,45 @@ describe("@runroot/cli integration", () => {
         totalCount: number;
       };
     };
+    const signedOffPeerPayload = JSON.parse(
+      signedOffPeerIo.stdout.join(""),
+    ) as {
+      signedOff: {
+        items: Array<{
+          acknowledgment: {
+            attestation: {
+              evidence: {
+                verification: {
+                  resolution: {
+                    blocker: {
+                      progress: {
+                        checklist: {
+                          assignment: {
+                            review: {
+                              visibility: {
+                                catalogEntry: {
+                                  entry: {
+                                    id: string;
+                                  };
+                                };
+                              };
+                            };
+                          };
+                        };
+                      };
+                    };
+                  };
+                };
+              };
+            };
+          };
+          signoff: {
+            signoffNote?: string;
+          };
+        }>;
+        totalCount: number;
+      };
+    };
     const inspectAcknowledgmentPayload = JSON.parse(
       inspectAcknowledgmentIo.stdout.join(""),
     ) as {
@@ -5570,6 +5728,19 @@ describe("@runroot/cli integration", () => {
           items: Array<{
             item: string;
             state: "acknowledged" | "unacknowledged";
+          }>;
+        };
+      };
+    };
+    const inspectSignoffPayload = JSON.parse(
+      inspectSignoffIo.stdout.join(""),
+    ) as {
+      signoff: {
+        signoff: {
+          signoffNote?: string;
+          items: Array<{
+            item: string;
+            state: "signed-off" | "unsigned";
           }>;
         };
       };
@@ -5591,6 +5762,13 @@ describe("@runroot/cli integration", () => {
         };
       };
     };
+    const clearSignoffPayload = JSON.parse(clearSignoffIo.stdout.join("")) as {
+      signoff: {
+        signoff: {
+          signoffNote?: string;
+        };
+      };
+    };
     const clearAcknowledgmentPayload = JSON.parse(
       clearAcknowledgmentIo.stdout.join(""),
     ) as {
@@ -5598,6 +5776,13 @@ describe("@runroot/cli integration", () => {
         acknowledgment: {
           acknowledgmentNote?: string;
         };
+      };
+    };
+    const signedOffAfterClearPayload = JSON.parse(
+      signedOffAfterClearIo.stdout.join(""),
+    ) as {
+      signedOff: {
+        totalCount: number;
       };
     };
     const acknowledgedAfterClearPayload = JSON.parse(
@@ -5620,10 +5805,15 @@ describe("@runroot/cli integration", () => {
     expect(evidenceExitCode).toBe(0);
     expect(attestationExitCode).toBe(0);
     expect(acknowledgmentExitCode).toBe(0);
+    expect(signoffExitCode).toBe(0);
     expect(acknowledgedPeerExitCode).toBe(0);
+    expect(signedOffPeerExitCode).toBe(0);
     expect(inspectAcknowledgmentExitCode).toBe(0);
+    expect(inspectSignoffExitCode).toBe(0);
     expect(applyExitCode).toBe(0);
+    expect(clearSignoffExitCode).toBe(0);
     expect(clearAcknowledgmentExitCode).toBe(0);
+    expect(signedOffAfterClearExitCode).toBe(0);
     expect(acknowledgedAfterClearExitCode).toBe(0);
     expect(
       acknowledgmentPayload.acknowledgment.attestation.evidence.verification
@@ -5650,16 +5840,58 @@ describe("@runroot/cli integration", () => {
         state: "unacknowledged",
       },
     ]);
+    expect(
+      signoffPayload.signoff.acknowledgment.acknowledgment.acknowledgmentNote,
+    ).toBe("Backup acknowledged the attested follow-up");
+    expect(
+      signoffPayload.signoff.acknowledgment.attestation.attestation
+        .attestationNote,
+    ).toBe("Backup attested the stable follow-up evidence");
+    expect(signoffPayload.signoff.signoff.signoffNote).toBe(
+      "Backup signed off the acknowledged follow-up",
+    );
+    expect(signoffPayload.signoff.signoff.items).toEqual([
+      {
+        item: "Validate queued follow-up",
+        state: "signed-off",
+      },
+      {
+        item: "Close backup handoff",
+        state: "unsigned",
+      },
+    ]);
     expect(acknowledgedPeerPayload.acknowledged.totalCount).toBe(1);
     expect(
       acknowledgedPeerPayload.acknowledged.items[0]?.attestation.evidence
         .verification.resolution.blocker.progress.checklist.assignment.review
         .visibility.catalogEntry.entry.id,
     ).toBe(publishedPayload.catalogEntry.entry.id);
+    expect(signedOffPeerPayload.signedOff.totalCount).toBe(1);
+    expect(
+      signedOffPeerPayload.signedOff.items[0]?.acknowledgment.attestation
+        .evidence.verification.resolution.blocker.progress.checklist.assignment
+        .review.visibility.catalogEntry.entry.id,
+    ).toBe(publishedPayload.catalogEntry.entry.id);
+    expect(signedOffPeerPayload.signedOff.items[0]?.signoff.signoffNote).toBe(
+      "Backup signed off the acknowledged follow-up",
+    );
     expect(
       inspectAcknowledgmentPayload.acknowledgment.acknowledgment
         .acknowledgmentNote,
     ).toBe("Backup acknowledged the attested follow-up");
+    expect(inspectSignoffPayload.signoff.signoff.signoffNote).toBe(
+      "Backup signed off the acknowledged follow-up",
+    );
+    expect(inspectSignoffPayload.signoff.signoff.items).toEqual([
+      {
+        item: "Validate queued follow-up",
+        state: "signed-off",
+      },
+      {
+        item: "Close backup handoff",
+        state: "unsigned",
+      },
+    ]);
     expect(applyPayload.application.application.savedView.id).toBe(
       savedViewPayload.savedView.id,
     );
@@ -5671,6 +5903,10 @@ describe("@runroot/cli integration", () => {
       clearAcknowledgmentPayload.acknowledgment.acknowledgment
         .acknowledgmentNote,
     ).toBe("Backup acknowledged the attested follow-up");
+    expect(clearSignoffPayload.signoff.signoff.signoffNote).toBe(
+      "Backup signed off the acknowledged follow-up",
+    );
+    expect(signedOffAfterClearPayload.signedOff.totalCount).toBe(0);
     expect(acknowledgedAfterClearPayload.acknowledged.totalCount).toBe(0);
   });
 });
